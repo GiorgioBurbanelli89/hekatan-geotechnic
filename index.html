@@ -25,6 +25,7 @@
     .sl input[type=range] { width: 100%; padding: 0; accent-color: var(--oro); }
     .sl .v { text-align: right; font: 12px Consolas, monospace; color: var(--txt); }
     .sl .n { color: var(--mut); }
+    textarea#hgeo { width: 100%; font: 11.5px Consolas, monospace; background: #0b0906; color: #f3ead0; border: 1px solid #4a3f28; border-radius: 6px; padding: 6px; resize: vertical; white-space: pre; overflow-x: auto; margin-top: 6px; }
     .fs { margin-top: 10px; font-size: 13px; }
     .fs table { width: 100%; border-collapse: collapse; } .fs td, .fs th { padding: 3px 4px; border-bottom: 1px solid #332b1b; text-align: right; } .fs th:first-child, .fs td:first-child { text-align: left; }
     .fs .ok { color: #7ee08a; font-weight: 600; }
@@ -47,7 +48,12 @@
     <aside class="panel">
       <h2>Modelo</h2>
       <label>Ejemplo</label>
-      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · talud 2 suelos, 3 etapas</option></select>
+      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option></select>
+      <div id="editor" hidden>
+        <textarea id="hgeo" spellcheck="false" rows="11"></textarea>
+        <div class="row"><button class="run" id="apply" style="margin-top:6px">✎ Aplicar (Ctrl+Enter)</button></div>
+        <div id="edmsg" class="mats"></div>
+      </div>
       <div class="mats" id="mats"></div>
       <label>Etapas a calcular</label>
       <select id="nstages"><option value="3">3 (peso propio · sobrecarga · ancla)</option><option value="2">2</option><option value="1">1 (solo peso propio)</option></select>

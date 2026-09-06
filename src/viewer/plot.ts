@@ -2,13 +2,14 @@
 // de suelos, rótulos de suelo, cargas de la etapa y barra de color. Calca talud_plot_lib.plot_stage.
 import { FIELD_LABEL, FieldKind, geo5Cmap, geo5Levels, gridField } from "./geo5scale";
 
-export type PlotModel = { X: number[]; Y: number[]; ELE: number[][]; EMAT: number[]; MAT: number[][]; Fs: number[]; Fa: number[] };
+export type PlotModel = { X: number[]; Y: number[]; ELE: number[][]; EMAT: number[]; MAT: number[][]; Fs: number[]; Fa: number[]; MATNAMES?: string[] };
 
 export type PlotOptions = {
   field: FieldKind;
   vals: Float64Array;       // campo nodal en mm (nodalField)
   title: string;
-  stage: number;            // 0,1,2 → qué cargas dibujar
+  stage: number;            // índice de etapa
+  Fst?: Float64Array;       // cargas de la etapa SIN gravedad (sobrecargas y anclas) para dibujarlas
   showMesh: boolean;
   deformScale?: number;     // 0 = sin deformada
   u?: Float64Array; uel?: Float64Array;
@@ -25,16 +26,7 @@ export class SlopePlot {
 
   constructor(private canvas: HTMLCanvasElement, private m: PlotModel) {
     this.ctx = canvas.getContext("2d")!;
-    const map = new Map<string, Edge>();
-    for (let e = 0; e < m.ELE.length; e++) {
-      const c = m.ELE[e];
-      for (const [p, q] of [[0, 1], [1, 2], [2, 0]]) {
-        const a = Math.min(c[p], c[q]), b = Math.max(c[p], c[q]), k = a + "," + b;
-        let ed = map.get(k); if (!ed) { ed = { a, b, count: 0, mats: new Set() }; map.set(k, ed); }
-        ed.count++; ed.mats.add(m.EMAT[e]);
-      }
-    }
-    this.edges = Array.from(map.values());
+    this.setMesh(m);
     canvas.addEventListener("mousemove", (ev) => {
       if (!this.last || !this.hover) return;
       const r = canvas.getBoundingClientRect();
@@ -46,6 +38,21 @@ export class SlopePlot {
       this.hover({ x, z, v: Number.isNaN(v) ? null : v });
     });
     canvas.addEventListener("mouseleave", () => this.hover?.({ x: 0, z: 0, v: null }));
+  }
+
+  /** Malla nueva (otro modelo del DSL): rehace las aristas. */
+  setMesh(m: PlotModel): void {
+    this.m = m;
+    const map = new Map<string, Edge>();
+    for (let e = 0; e < m.ELE.length; e++) {
+      const c = m.ELE[e];
+      for (const [p, q] of [[0, 1], [1, 2], [2, 0]]) {
+        const a = Math.min(c[p], c[q]), b = Math.max(c[p], c[q]), k = a + "," + b;
+        let ed = map.get(k); if (!ed) { ed = { a, b, count: 0, mats: new Set() }; map.set(k, ed); }
+        ed.count++; ed.mats.add(m.EMAT[e]);
+      }
+    }
+    this.edges = Array.from(map.values());
   }
 
   /** Sliders: materiales y cargas nuevas sin rehacer las aristas (misma malla). */
@@ -127,9 +134,12 @@ export class SlopePlot {
       ctx.fillRect(px - w / 2, py - h / 2, w, h); ctx.strokeRect(px - w / 2, py - h / 2, w, h);
       ctx.fillStyle = "#000"; lines.forEach((l, k) => ctx.fillText(l, px, py - h / 2 + 10 + k * 14));
     };
-    const [c1x, c1y] = cen(1), [c2x, c2y] = cen(2);
-    box(c1x, c1y, ["SUELO 1", `φ=${MAT[0][2].toFixed(1)}°  c=${MAT[0][3].toFixed(0)} kPa`, `γ=${MAT[0][4].toFixed(0)} kN/m³`]);
-    box(c2x, c2y - 2.5, ["SUELO 2", `φ=${MAT[1][2].toFixed(0)}°  c=${MAT[1][3].toFixed(0)} kPa`, `γ=${MAT[1][4].toFixed(0)} kN/m³`]);
+    for (let mi = 0; mi < MAT.length; mi++) {
+      if (!EMAT.includes(mi + 1)) continue;
+      const [cxm, cym] = cen(mi + 1);
+      const nm = this.m.MATNAMES?.[mi] ?? `SUELO ${mi + 1}`;
+      box(cxm, cym - (mi === 1 ? 2.5 : 0), [nm, `φ=${MAT[mi][2].toFixed(1)}°  c=${MAT[mi][3].toFixed(0)} kPa`, `γ=${MAT[mi][4].toFixed(0)} kN/m³`]);
+    }
     // cargas de la etapa
     const arrow = (xa: number, za: number, xb: number, zb: number, lw: number) => {
       const [p, q] = tf(xa, za), [r, s] = tf(xb, zb); const ang = Math.atan2(s - q, r - p), hl = 7;
@@ -138,17 +148,19 @@ export class SlopePlot {
       ctx.moveTo(r, s); ctx.lineTo(r - hl * Math.cos(ang + 0.45), s - hl * Math.sin(ang + 0.45)); ctx.stroke();
     };
     ctx.fillStyle = "#000"; ctx.font = "11px Segoe UI, Arial"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-    if (o.stage >= 1) {
-      const xs: number[] = []; let zq = 0;
-      for (let i = 0; i < X.length; i++) if (Fs[2 * i + 1] < -1e-9) { arrow(X[i], Y[i] + 1.6, X[i], Y[i], 0.9); xs.push(X[i]); zq = Y[i]; }
-      if (xs.length) { const [p, q] = tf(xs.reduce((a, b) => a + b, 0) / xs.length, zq + 2.0); ctx.fillText("q = 35 kPa", p, q); }
+    // cargas de la etapa (sin gravedad): verticales puras = sobrecarga (flechas hacia abajo); con Fx = ancla
+    const Fst = o.Fst ?? (() => { const f = new Float64Array(2 * X.length); if (o.stage >= 1) for (let d = 0; d < f.length; d++) f[d] += Fs[d]; if (o.stage >= 2) for (let d = 0; d < f.length; d++) f[d] += Fa[d]; return f; })();
+    const xs: number[] = []; let zq = 0, sumQ = 0, fx = 0, fy = 0, ia = -1, best = 0;
+    for (let i = 0; i < X.length; i++) {
+      const px = Fst[2 * i], py = Fst[2 * i + 1];
+      if (Math.abs(px) < 1e-9 && Math.abs(py) > 1e-9) { sumQ += py; if (py < 0) { arrow(X[i], Y[i] + 1.6, X[i], Y[i], 0.9); xs.push(X[i]); zq = Y[i]; } }   // el neto incluye los extremos positivos del reparto de GEO5
+      else if (Math.abs(px) > 1e-9) { fx += px; fy += py; const v = Math.hypot(px, py); if (v > best) { best = v; ia = i; } }
     }
-    if (o.stage >= 2) {
-      let ia = 0, best = -1; for (let i = 0; i < X.length; i++) { const v = Math.abs(Fa[2 * i]) + Math.abs(Fa[2 * i + 1]); if (v > best) { best = v; ia = i; } }
-      let fx = 0, fy = 0; for (let i = 0; i < X.length; i++) { fx += Fa[2 * i]; fy += Fa[2 * i + 1]; }
+    if (xs.length) { const [p, q] = tf(xs.reduce((a, b) => a + b, 0) / xs.length, zq + 2.0); ctx.fillText(`q · L = ${(-sumQ).toFixed(0)} kN`, p, q); }
+    if (ia >= 0) {
       const L = 4 / Math.hypot(fx, fy);
       arrow(X[ia], Y[ia], X[ia] + fx * L, Y[ia] + fy * L, 1.6);
-      const [p, q] = tf(X[ia] - 0.4, Y[ia] + 0.6); ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText("ancla 72 kN", p, q);   // en la cabeza del ancla (cara del talud), no sobre el rótulo del suelo
+      const [p, q] = tf(X[ia] - 0.4, Y[ia] + 0.6); ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText(`ancla ${Math.hypot(fx, fy).toFixed(0)} kN`, p, q);
     }
     // ejes
     ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.strokeRect(x0, y0, pw, ph);
@@ -171,7 +183,14 @@ export class SlopePlot {
     }
     ctx.strokeStyle = "#000"; ctx.lineWidth = 0.8; ctx.strokeRect(bx, by, bw, bh);
     ctx.font = "10px Segoe UI, Arial"; ctx.fillStyle = "#000"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    for (let b = 0; b <= nb; b++) { const t = (lv[b] - lv[0]) / (lv[nb] - lv[0]); const y = by + bh - t * bh; ctx.beginPath(); ctx.moveTo(bx + bw, y); ctx.lineTo(bx + bw + 3, y); ctx.stroke(); ctx.fillText(lv[b].toFixed(1), bx + bw + 5, y); }
+    let lastY = -1e9;
+    for (let b = 0; b <= nb; b++) {
+      const t = (lv[b] - lv[0]) / (lv[nb] - lv[0]); const y = by + bh - t * bh;
+      ctx.beginPath(); ctx.moveTo(bx + bw, y); ctx.lineTo(bx + bw + 3, y); ctx.stroke();
+      if (Math.abs(y - lastY) < 10 && b < nb) continue;                 // rótulos que se pisan: el extremo manda
+      if (b === nb && Math.abs(y - lastY) < 10) { ctx.clearRect(bx + bw + 4, lastY - 6, 40, 12); }
+      ctx.fillText(lv[b].toFixed(1), bx + bw + 5, y); lastY = y;
+    }
     ctx.save(); ctx.translate(bx + bw + 46, by + bh / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.font = "11px Segoe UI, Arial"; ctx.fillText(`${FIELD_LABEL[o.field]} [mm]`, 0, 0); ctx.restore();
     return { lv, vmin, vmax };
   }

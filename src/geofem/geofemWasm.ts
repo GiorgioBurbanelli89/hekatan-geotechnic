@@ -59,13 +59,13 @@ export class GeoFemWasm {
     mod.geoLog = this.log;
     const pMat = mod._geofem_alloc(6 * m.MAT.length); mod.HEAPF64.set(m.MAT.flat(), pMat >> 3); mod._geofem_set_mat(this.h, pMat); mod._geofem_free(pMat);
     const pF = mod._geofem_alloc(ndof), pU = mod._geofem_alloc(ndof), pUel = mod._geofem_alloc(ndof), pSrf = mod._geofem_alloc(MAXS), pSU = mod._geofem_alloc(MAXS * ndof);
-    const LOADS = { Fg: m.recomputeGravity ? Array.from(this.Fg2) : m.Fg, Fs: m.Fs, Fa: m.Fa };
+    const LOADS: Record<string, number[] | Float64Array> = { ...(m.loads || {}), Fg: m.recomputeGravity ? this.Fg2 : m.Fg, Fs: m.Fs, Fa: m.Fa };
     const t0 = performance.now();
     const results: StageResult[] = [];
     for (const si of stageIdx) {
       const st = m.stages[si];
       const F = new Float64Array(ndof);
-      for (const nm of st.loads) { const v = LOADS[nm]; for (let d = 0; d < ndof; d++) F[d] += v[d]; }
+      for (const nm of st.loads) { const v = LOADS[nm]; if (!v) throw new Error(`carga desconocida ${nm}`); for (let d = 0; d < ndof; d++) F[d] += v[d]; }
       mod.HEAPF64.set(F, pF >> 3);
       const ts = performance.now();
       this.log(""); this.log(`### ${st.name} ###`);
@@ -80,8 +80,8 @@ export class GeoFemWasm {
       results.push(res); onStage?.(res, si);
     }
     for (const p of [pF, pU, pUel, pSrf, pSU]) mod._geofem_free(p);
-    this.log(""); this.log("================ RESUMEN (Hekatan Geotechnic · WASM, malla exacta GEO5) ================");
-    for (const r of results) this.log(`  ${r.name.padEnd(22)} FS=${f4(r.fs)}  ${r.geo5 ? `(GEO5 ${r.geo5.toFixed(2)})  dif=${(100 * (r.fs / r.geo5 - 1)) >= 0 ? "+" : ""}${(100 * (r.fs / r.geo5 - 1)).toFixed(1)}%` : "(parámetros distintos de la Demo04: sin referencia GEO5)"}  t=${r.seconds.toFixed(1)} s`);
+    this.log(""); this.log("================ RESUMEN (Hekatan Geotechnic · WASM) ================");
+    for (const r of results) this.log(`  ${r.name.padEnd(22)} FS=${f4(r.fs)}  ${r.geo5 ? `(GEO5 ${r.geo5.toFixed(2)})  dif=${(100 * (r.fs / r.geo5 - 1)) >= 0 ? "+" : ""}${(100 * (r.fs / r.geo5 - 1)).toFixed(1)}%` : "(sin referencia GEO5)"}  t=${r.seconds.toFixed(1)} s`);
     this.log(`TOTAL ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     return results;
   }

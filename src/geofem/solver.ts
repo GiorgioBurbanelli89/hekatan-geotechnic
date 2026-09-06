@@ -22,7 +22,9 @@ export type GeoModel = {
   Fg: number[]; Fs: number[]; Fa: number[];
   MAT: number[][];          // [E nu phi c gamma psi]
   recomputeGravity?: boolean;   // true = Fg = gravedad recalculada de MAT[:,4] (sliders de γ)
-  stages: { name: string; loads: ("Fg" | "Fs" | "Fa")[]; geo5?: number }[];
+  loads?: Record<string, number[]>;   // vectores de carga con nombre (del mallador: L1, L2, …)
+  MATNAMES?: string[];       // nombres de los suelos (rótulos del visor)
+  stages: { name: string; loads: string[]; geo5?: number }[];
 };
 
 export type StageResult = {
@@ -360,11 +362,11 @@ export class GeoFem {
     const results: StageResult[] = [];
     // Con sliders de γ la gravedad de la fixture ya no vale: se usa la recalculada (N·ρ·detJ·w por
     // punto de Gauss, la misma cuenta que comprueba la fixture en el constructor).
-    const LOADS = { Fg: m.recomputeGravity ? Array.from(this.Fg2) : m.Fg, Fs: m.Fs, Fa: m.Fa };
+    const LOADS: Record<string, number[] | Float64Array> = { ...(m.loads || {}), Fg: m.recomputeGravity ? this.Fg2 : m.Fg, Fs: m.Fs, Fa: m.Fa };
     for (const si of stageIdx) {
       const st = m.stages[si];
       const F = new Float64Array(this.ndof);
-      for (const nm of st.loads) { const v = LOADS[nm]; for (let d = 0; d < this.ndof; d++) F[d] += v[d]; }
+      for (const nm of st.loads) { const v = LOADS[nm]; if (!v) throw new Error(`carga desconocida ${nm}`); for (let d = 0; d < this.ndof; d++) F[d] += v[d]; }
       const ts = performance.now();
       this.log(""); this.log(`### ${st.name} ###`);
       const r = this.srm(F);
@@ -374,8 +376,8 @@ export class GeoFem {
       const res: StageResult = { name: st.name, fs: r.fs, geo5: st.geo5, u: r.ulo, uel: r.uel, steps: r.steps, prog: r.prog, seconds: sec };
       results.push(res); onStage?.(res, si);
     }
-    this.log(""); this.log("================ RESUMEN (Hekatan Geotechnic, malla exacta GEO5) ================");
-    for (const r of results) this.log(`  ${r.name.padEnd(22)} FS=${f4(r.fs)}  ${r.geo5 ? `(GEO5 ${r.geo5.toFixed(2)})  dif=${(100 * (r.fs / r.geo5 - 1)) >= 0 ? "+" : ""}${(100 * (r.fs / r.geo5 - 1)).toFixed(1)}%` : "(parámetros distintos de la Demo04: sin referencia GEO5)"}  t=${r.seconds.toFixed(1)} s`);
+    this.log(""); this.log("================ RESUMEN (Hekatan Geotechnic · TS) ================");
+    for (const r of results) this.log(`  ${r.name.padEnd(22)} FS=${f4(r.fs)}  ${r.geo5 ? `(GEO5 ${r.geo5.toFixed(2)})  dif=${(100 * (r.fs / r.geo5 - 1)) >= 0 ? "+" : ""}${(100 * (r.fs / r.geo5 - 1)).toFixed(1)}%` : "(sin referencia GEO5)"}  t=${r.seconds.toFixed(1)} s`);
     this.log(`TOTAL ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     return results;
   }
