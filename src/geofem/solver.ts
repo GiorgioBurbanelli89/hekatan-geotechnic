@@ -21,6 +21,7 @@ export type GeoModel = {
   FIXED: number[];          // gdl fijos (2*nudo, 2*nudo+1)
   Fg: number[]; Fs: number[]; Fa: number[];
   MAT: number[][];          // [E nu phi c gamma psi]
+  recomputeGravity?: boolean;   // true = Fg = gravedad recalculada de MAT[:,4] (sliders de γ)
   stages: { name: string; loads: ("Fg" | "Fs" | "Fa")[]; geo5?: number }[];
 };
 
@@ -79,6 +80,7 @@ export class GeoFem {
   readonly hasDep: Uint8Array;
   readonly log: Log;
   readonly Fg2check: { sFg: number; sFg2: number; dmax: number };
+  readonly Fg2: Float64Array;              // gravedad recalculada (N·ρ·detJ·w)
 
   constructor(m: GeoModel, log: Log = () => {}) {
     this.log = log;
@@ -142,6 +144,7 @@ export class GeoFem {
       dmax = Math.max(dmax, Math.abs(Fg2[2 * i] - m.Fg[2 * i]), Math.abs(Fg2[2 * i + 1] - m.Fg[2 * i + 1]));
     }
     this.Fg2check = { sFg, sFg2, dmax };
+    this.Fg2 = Fg2;
     log(`cargas: gravedad Fy=${sFg.toFixed(3)} (recalculada ${sFg2.toFixed(3)}, dif max ${dmax.toExponential(2)}) | sobrecarga Fy=${sFs.toFixed(3)} | ancla Fx=${sFax.toFixed(3)} Fy=${sFay.toFixed(3)} kN`);
     // estado
     this.SIG = new Float64Array(ne * NG * 4); this.DEP = new Float64Array(ne * NG * 16); this.hasDep = new Uint8Array(ne * NG);
@@ -351,7 +354,9 @@ export class GeoFem {
   run(m: GeoModel, nstages = m.stages.length, onStage?: (r: StageResult) => void): StageResult[] {
     const t0 = performance.now();
     const results: StageResult[] = [];
-    const LOADS = { Fg: m.Fg, Fs: m.Fs, Fa: m.Fa };
+    // Con sliders de γ la gravedad de la fixture ya no vale: se usa la recalculada (N·ρ·detJ·w por
+    // punto de Gauss, la misma cuenta que comprueba la fixture en el constructor).
+    const LOADS = { Fg: m.recomputeGravity ? Array.from(this.Fg2) : m.Fg, Fs: m.Fs, Fa: m.Fa };
     for (let si = 0; si < nstages; si++) {
       const st = m.stages[si];
       const F = new Float64Array(this.ndof);
@@ -361,12 +366,12 @@ export class GeoFem {
       const r = this.srm(F);
       const sec = (performance.now() - ts) / 1000;
       this.log(`    progresion dx(mm) por SRF:${r.prog}`);
-      this.log(`  ${st.name.padEnd(22)} >>> FS=${f4(r.fs)}  (GEO5=${(st.geo5 ?? 0).toFixed(2)})  [${sec.toFixed(1)} s]`);
+      this.log(`  ${st.name.padEnd(22)} >>> FS=${f4(r.fs)}  ${st.geo5 ? `(GEO5=${st.geo5.toFixed(2)})` : "(sin referencia GEO5)"}  [${sec.toFixed(1)} s]`);
       const res: StageResult = { name: st.name, fs: r.fs, geo5: st.geo5, u: r.ulo, uel: r.uel, steps: r.steps, prog: r.prog, seconds: sec };
       results.push(res); onStage?.(res);
     }
     this.log(""); this.log("================ RESUMEN (Hekatan Geotechnic, malla exacta GEO5) ================");
-    for (const r of results) this.log(`  ${r.name.padEnd(22)} FS=${f4(r.fs)}  (GEO5 ${(r.geo5 ?? 0).toFixed(2)})  dif=${r.geo5 ? ((100 * (r.fs / r.geo5 - 1)) >= 0 ? "+" : "") + (100 * (r.fs / r.geo5 - 1)).toFixed(1) : "?"}%  t=${r.seconds.toFixed(1)} s`);
+    for (const r of results) this.log(`  ${r.name.padEnd(22)} FS=${f4(r.fs)}  ${r.geo5 ? `(GEO5 ${r.geo5.toFixed(2)})  dif=${(100 * (r.fs / r.geo5 - 1)) >= 0 ? "+" : ""}${(100 * (r.fs / r.geo5 - 1)).toFixed(1)}%` : "(parámetros distintos de la Demo04: sin referencia GEO5)"}  t=${r.seconds.toFixed(1)} s`);
     this.log(`TOTAL ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     return results;
   }

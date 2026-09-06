@@ -30,6 +30,15 @@ await page.screenshot({ path: `${out}/03_etapa2_dx.png` });
 await page.select("#stage", "2"); await page.select("#field", "dz");
 await new Promise((r) => setTimeout(r, 400));
 await page.screenshot({ path: `${out}/04_etapa3_dz.png` });
+// slider: φ₁ 22.7 → 18 con 1 etapa; debe recalcular solo y bajar el FS
+await page.select("#nstages", "1");
+const t1 = Date.now();
+await page.$eval("#sl_phi1", (e) => { e.value = "18"; e.dispatchEvent(new Event("input", { bubbles: true })); });
+await new Promise((r) => setTimeout(r, 600));
+await page.waitForFunction(() => document.getElementById("log").textContent.includes("TOTAL "), { timeout: 60000 });
+console.log(`slider φ1=18 recalculado en ${((Date.now() - t1) / 1000).toFixed(1)} s`);
+await new Promise((r) => setTimeout(r, 400));
+await page.screenshot({ path: `${out}/05_slider_phi18.png` });
 const fs = await page.$eval("#fs", (e) => e.innerText);
 const log = await page.$eval("#log", (e) => e.textContent);
 writeFileSync(`${out}/log.txt`, log);

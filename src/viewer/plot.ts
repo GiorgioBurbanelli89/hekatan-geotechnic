@@ -48,6 +48,9 @@ export class SlopePlot {
     canvas.addEventListener("mouseleave", () => this.hover?.({ x: 0, z: 0, v: null }));
   }
 
+  /** Sliders: materiales y cargas nuevas sin rehacer las aristas (misma malla). */
+  setModel(m: PlotModel): void { this.m = m; }
+
   draw(o: PlotOptions): { lv: number[]; vmin: number; vmax: number } {
     const { X, Y, ELE, EMAT, MAT, Fs, Fa } = this.m;
     const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;

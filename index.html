@@ -21,6 +21,10 @@
     button.run { margin-top: 10px; background: linear-gradient(#f2cf5e, #c9972f); color: #1b1408; font-weight: 700; border: 0; cursor: pointer; }
     button.run:disabled { opacity: .5; cursor: wait; }
     .row { display: flex; gap: 8px; } .row > * { flex: 1; }
+    .sl { display: grid; grid-template-columns: 78px 1fr 58px; gap: 6px; align-items: center; margin: 3px 0; font-size: 12px; }
+    .sl input[type=range] { width: 100%; padding: 0; accent-color: var(--oro); }
+    .sl .v { text-align: right; font: 12px Consolas, monospace; color: var(--txt); }
+    .sl .n { color: var(--mut); }
     .fs { margin-top: 10px; font-size: 13px; }
     .fs table { width: 100%; border-collapse: collapse; } .fs td, .fs th { padding: 3px 4px; border-bottom: 1px solid #332b1b; text-align: right; } .fs th:first-child, .fs td:first-child { text-align: left; }
     .fs .ok { color: #7ee08a; font-weight: 600; }
@@ -47,6 +51,9 @@
       <div class="mats" id="mats"></div>
       <label>Etapas a calcular</label>
       <select id="nstages"><option value="3">3 (peso propio · sobrecarga · ancla)</option><option value="2">2</option><option value="1">1 (solo peso propio)</option></select>
+      <h2 style="margin-top:12px">Parámetros <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(recalcula solo)</span></h2>
+      <div id="sliders"></div>
+      <label><input type="checkbox" id="auto" checked style="width:auto" /> recalcular al mover</label>
       <button class="run" id="run">▶ Calcular FS</button>
       <div class="fs" id="fs"></div>
       <h2 style="margin-top:14px">Vista</h2>
