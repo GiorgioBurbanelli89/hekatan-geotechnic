@@ -26,6 +26,17 @@
     .sl .v { text-align: right; font: 12px Consolas, monospace; color: var(--txt); }
     .sl .n { color: var(--mut); }
     textarea#hgeo { width: 100%; font: 11.5px Consolas, monospace; background: #0b0906; color: #f3ead0; border: 1px solid #4a3f28; border-radius: 6px; padding: 6px; resize: vertical; white-space: pre; overflow-x: auto; margin-top: 6px; }
+    .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 12px; }
+    .tools .tl { color: var(--oro); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; margin-right: 4px; }
+    .tools .tb { width: auto; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+    .tools .tb.on { background: linear-gradient(#f2cf5e, #c9972f); color: #1b1408; font-weight: 700; border-color: transparent; }
+    .tools .sep { width: 1px; height: 22px; background: #4a3f28; margin: 0 4px; }
+    .tools .il { display: inline-flex; align-items: center; gap: 4px; margin: 0; color: var(--mut); }
+    .tools .il input, .tools .il select { padding: 3px 5px; font-size: 12px; }
+    .tools .il input[type=checkbox] { width: auto; }
+    .stack { position: relative; }
+    .stack canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
+    #draw { position: absolute; left: 0; top: 0; background: transparent; cursor: crosshair; }
     .fs { margin-top: 10px; font-size: 13px; }
     .fs table { width: 100%; border-collapse: collapse; } .fs td, .fs th { padding: 3px 4px; border-bottom: 1px solid #332b1b; text-align: right; } .fs th:first-child, .fs td:first-child { text-align: left; }
     .fs .ok { color: #7ee08a; font-weight: 600; }
@@ -74,7 +85,32 @@
       <label><input type="checkbox" id="mesh" checked style="width:auto" /> malla T6</label>
     </aside>
     <section class="panel">
-      <canvas id="plot" width="1180" height="700"></canvas>
+      <div class="tools">
+        <span class="tl">Dibujar</span>
+        <button data-tool="ver" class="tb on" title="solo ver (hover con valores)">👁 ver</button>
+        <button data-tool="interfaz" class="tb" title="polilínea de margen a margen; la 1ª es el terreno. Enter/doble clic termina, Esc cancela">╱ interfaz</button>
+        <button data-tool="asignar" class="tb" title="clic dentro de una región → suelo">◉ asignar</button>
+        <button data-tool="sobrecarga" class="tb" title="dos clics sobre el terreno">⇊ sobrecarga</button>
+        <button data-tool="ancla" class="tb" title="clic en la cabeza del ancla">➶ ancla</button>
+        <button data-tool="mover" class="tb" title="arrastra un vértice">✥ mover</button>
+        <button data-tool="borrar" class="tb" title="clic en vértice o interfaz">✕ borrar</button>
+        <button id="undo" class="tb" title="Ctrl+Z">↶ deshacer</button>
+        <span class="sep"></span>
+        <label class="il">rejilla <input id="grid" type="number" value="1" min="0.1" step="0.5" style="width:56px"></label>
+        <label class="il"><input id="snap" type="checkbox" checked> snap F9</label>
+        <label class="il"><input id="ortho" type="checkbox"> orto F8/Shift</label>
+        <span class="sep"></span>
+        <label class="il">suelo <select id="dsoil" style="width:auto"></select></label>
+        <label class="il">q <input id="dq" type="number" value="35" style="width:56px"> kPa</label>
+        <label class="il">F <input id="dF" type="number" value="72" style="width:56px"> kN</label>
+        <label class="il">ang <input id="dang" type="number" value="-17" style="width:56px">°</label>
+        <label class="il">en etapa <select id="dstage" style="width:auto"></select></label>
+      </div>
+      <div class="stack">
+        <canvas id="plot" width="1180" height="700"></canvas>
+        <canvas id="draw" width="1180" height="700"></canvas>
+      </div>
+      <div id="dstatus" class="mats" style="margin-top:2px;min-height:16px"></div>
       <div id="hover">mueve el ratón sobre el talud para leer el valor</div>
       <div id="log">Pulsa «Calcular FS». El cálculo corre en tu navegador (Web Worker); el log es el mismo que imprime el driver de Hekatan Python y coincide iteración a iteración con GEO5.</div>
     </section>

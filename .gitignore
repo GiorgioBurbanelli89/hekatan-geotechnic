@@ -4,3 +4,5 @@ tests/out/
 tests/shots/
 *.log
 tests/shots_run/
+tests/gif/
+tests/gif_draw/

@@ -7,7 +7,7 @@
 // mallador es otro. Con la misma h las mallas se parecen (arista media 2.31 en la Demo04) pero no son
 // iguales, así que el FS puede moverse en el 2º-3º decimal: se compara contra GEO5, no se copia.
 import type { GeoModel } from "../geofem/solver";
-import type { Pt, SlopeDef } from "../model/dsl";
+import { interfaceY, spanInterface, type Pt, type SlopeDef } from "../model/dsl";
 
 type Tri = { a: number; b: number; c: number; dead?: boolean };
 export let meshDebug: (msg: string) => void = () => {};
@@ -47,6 +47,14 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   // polilíneas restringidas: contorno cerrado + interfaces recortadas al dominio
   const chains: Pt[][] = [outline.concat([outline[0]])];
   for (const L of def.layers) chains.push(clipPolyline(L.poly, outline));
+  // GEO5: las interfaces (salvo el terreno, que ya es contorno) son restricciones internas de margen a margen
+  const spans: Pt[][] = def.margins ? def.interfaces.map((it) => spanInterface(it, def.margins!.xmin, def.margins!.xmax)) : [];
+  for (let k = 1; k < spans.length; k++) chains.push(clipPolyline(spans[k], outline));
+  // región de GEO5 = nº de interfaces por encima del punto (el terreno cuenta): asignación por punto
+  const regionOf = (x: number, y: number) => spans.reduce((n, sp) => n + (interfaceY(sp, x) > y + 1e-9 ? 1 : 0), 0);
+  const regionSoil = new Map<number, number>();
+  const soilIdx = new Map(def.soils.map((s, i) => [s.name, i + 1]));
+  for (const a of def.assign) { const si = soilIdx.get(a.soil); if (si) regionSoil.set(regionOf(a.p[0], a.p[1]), si); }
   // pre-partición a h (partes iguales, ≥1)
   for (const ch of chains) for (let i = 0; i + 1 < ch.length; i++) {
     const a = ch[i], b = ch[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-9) continue;
@@ -177,12 +185,11 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   const midOf = new Map<string, number>();
   const mid = (u: number, v: number) => { const k = u < v ? u + "," + v : v + "," + u; let m = midOf.get(k); if (m === undefined) { m = X.length; X.push((X[u] + X[v]) / 2); Y.push((Y[u] + Y[v]) / 2); midOf.set(k, m); } return m; };
   const ELE: number[][] = [], EMAT: number[] = [];
-  const soilIdx = new Map(def.soils.map((s, i) => [s.name, i + 1]));
   for (const t of tris) {
     const a = ren(t.a), b = ren(t.b), c = ren(t.c);
     ELE.push([a, b, c, mid(a, b), mid(b, c), mid(c, a)]);
     const gx = (X[a] + X[b] + X[c]) / 3, gy = (Y[a] + Y[b] + Y[c]) / 3;
-    let m = 1;
+    let m = spans.length ? (regionSoil.get(regionOf(gx, gy)) ?? 1) : 1;
     for (const L of def.layers) { const yl = polyY(L.poly, gx); if ((L.side === "bajo" && gy < yl) || (L.side === "sobre" && gy > yl)) m = soilIdx.get(L.soil) ?? m; }
     EMAT.push(m);
   }

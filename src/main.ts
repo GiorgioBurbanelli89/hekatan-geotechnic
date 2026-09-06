@@ -1,13 +1,15 @@
 // Hekatan Geotechnic · página principal. Como Hekatan Struct: calcula AL ABRIR y al mover cualquier slider,
 // sin botón. Dos fuentes de modelo: la Demo04 con la MALLA EXACTA de GEO5 (referencia) y el editor .hgeo
-// (geometría + suelos + capas + etapas → mallador propio T6). Cada etapa es independiente (arranca de
-// cero con su carga total, como GEO5): un slider recalcula solo la etapa visible.
+// (márgenes + interfaces + asignación por punto, paradigma GEO5) con herramientas de dibujo sobre el
+// lienzo (draw.ts) que reescriben el texto y remallan. Cada etapa es independiente (arranca de cero con
+// su carga total, como GEO5): un slider recalcula solo la etapa visible.
 import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
 import { FieldKind, nodalField } from "./viewer/geo5scale";
-import { parseHgeo, DEMO04_HGEO, SlopeDef } from "./model/dsl";
+import { parseHgeo, serializeHgeo, DEMO04_HGEO, SlopeDef } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
+import { DrawTools, Tool } from "./viewer/draw";
 
 type Stage = { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean };
 
@@ -17,8 +19,9 @@ const selStage = $<HTMLSelectElement>("stage"), selField = $<HTMLSelectElement>(
 const inpDef = $<HTMLInputElement>("defscale"), chkMesh = $<HTMLInputElement>("mesh"), chkAuto = $<HTMLInputElement>("auto");
 const logEl = $<HTMLDivElement>("log"), fsEl = $<HTMLDivElement>("fs"), matsEl = $<HTMLDivElement>("mats"), hoverEl = $<HTMLDivElement>("hover");
 const slidersEl = $<HTMLDivElement>("sliders");
-const canvas = $<HTMLCanvasElement>("plot");
+const canvas = $<HTMLCanvasElement>("plot"), drawCanvas = $<HTMLCanvasElement>("draw");
 const edWrap = $<HTMLDivElement>("editor"), edText = $<HTMLTextAreaElement>("hgeo"), edApply = $<HTMLButtonElement>("apply"), edMsg = $<HTMLDivElement>("edmsg");
+const dStatus = $<HTMLDivElement>("dstatus"), dSoil = $<HTMLSelectElement>("dsoil"), dStage = $<HTMLSelectElement>("dstage");
 
 let base: GeoModel | null = null;      // modelo tal cual (fixture GEO5 o malla del DSL)
 let model: GeoModel | null = null;     // base + sliders
@@ -28,6 +31,7 @@ let stages: (Stage | undefined)[] = [];
 let worker: Worker | null = null;
 let timer: number | undefined;
 let busy = false;
+const draw = new DrawTools(drawCanvas);
 
 // ---- sliders ----
 type Slider = { id: string; label: string; min: number; max: number; step: number; value: number };
@@ -44,7 +48,7 @@ function buildSliders(m: GeoModel) {
     sliders.push({ id: `c${i}`, label: `c${sub} [kPa]`, min: 0, max: Math.max(60, 2 * M[3]), step: 0.5, value: M[3] });
     sliders.push({ id: `g${i}`, label: `γ${sub} [kN/m³]`, min: 14, max: 24, step: 0.1, value: M[4] });
   });
-  if (!def) {   // solo la fixture: q y ancla escalan Fs/Fa. En el DSL las cargas se escriben en el texto.
+  if (!def) {   // solo la fixture: q y ancla escalan Fs/Fa. En el DSL las cargas se dibujan/escriben.
     sliders.push({ id: "q", label: "q [kPa]", min: 0, max: 100, step: 1, value: Q0 });
     sliders.push({ id: "A", label: "ancla [kN]", min: 0, max: 200, step: 1, value: A0 });
   }
@@ -82,36 +86,44 @@ function currentModel(): GeoModel {
 function setBase(m: GeoModel) {
   base = m; model = m;
   if (!plot) plot = new SlopePlot(canvas, m); else plot.setMesh(m);
-  plot.hover = ({ x, z, v }) => { hoverEl.textContent = v === null ? "" : `x = ${x.toFixed(2)} m   z = ${z.toFixed(2)} m   valor = ${v.toFixed(2)} mm`; };
+  plot.hover = ({ x, z, v }) => { if (!draw.active) hoverEl.textContent = v === null ? "" : `x = ${x.toFixed(2)} m   z = ${z.toFixed(2)} m   valor = ${v.toFixed(2)} mm`; };
   buildSliders(m);
   stages = []; fsEl.innerHTML = "";
   selN.innerHTML = m.stages.map((_, i) => `<option value="${i + 1}">${i + 1}</option>`).reverse().join("");
   selN.value = String(m.stages.length);
   selStage.innerHTML = m.stages.map((s, i) => `<option value="${i}">${s.name}</option>`).join("");
   selStage.value = "0"; selStep.innerHTML = "";
+  dStage.innerHTML = m.stages.map((s, i) => `<option value="${i}">${s.name}</option>`).join("");
   plot.draw({ field: "dx", vals: new Float64Array(m.X.length), title: m.name || "", stage: 0, showMesh: true });
+  draw.setMap(plot.mapping());
   run(m.stages.map((_, i) => i));   // como Struct: calcula al abrir / al aplicar
 }
 
 async function loadFixture(url: string) {
   const baseUrl = import.meta.env.BASE_URL || "./";
   const m = (await (await fetch(baseUrl + url)).json()) as GeoModel;
-  def = null; edWrap.hidden = true;
+  def = null; edWrap.hidden = true; setTool("ver"); draw.setDef({ outline: [], soils: [], layers: [], h: 1, stages: [], interfaces: [], assign: [], comments: [] });
   setBase(m);
 }
 
-function applyHgeo() {
+function applyDef(d: SlopeDef, fromText: boolean) {
   try {
     const t0 = performance.now();
-    def = parseHgeo(edText.value);
+    def = d;
     const { model: m, stats } = meshSlope(def);
     m.MATNAMES = def.soils.map((s) => s.name);
     m.name = `Talud .hgeo`;
     edMsg.textContent = `malla: ${stats.elements} T6 · ${stats.nodes} nudos · ángulo mín ${stats.minAngle.toFixed(1)}° · arista media ${stats.meanEdge.toFixed(2)} m · área ${stats.area.toFixed(1)} m² · ${((performance.now() - t0) / 1000).toFixed(2)} s`;
     edMsg.style.color = "";
+    if (!fromText) edText.value = serializeHgeo(def);   // el dibujo escribe el texto
+    dSoil.innerHTML = def.soils.map((s) => `<option value="${s.name}">${s.name}</option>`).join("");
+    if (!draw.state.soil || !def.soils.some((s) => s.name === draw.state.soil)) draw.state.soil = def.soils[0]?.name ?? "";
+    dSoil.value = draw.state.soil;
+    draw.setDef(def);
     setBase(m);
   } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; }
 }
+function applyHgeo() { try { applyDef(parseHgeo(edText.value), true); } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; } }
 
 function appendLog(line: string) {
   const cls = line.startsWith("    SRM") ? "srm" : line.includes(">>> FS=") ? "fsl" : line.includes("DIVERGE") ? "div" : "";
@@ -136,7 +148,7 @@ function stageLoads(si: number): Float64Array {
 function redraw() {
   if (!model || !plot) return;
   const si = visibleStage(), st = stages[si];
-  if (!st) return;
+  if (!st) { draw.setMap(plot.mapping()); return; }
   const kind = selField.value as FieldKind;
   const stepIdx = parseInt(selStep.value || "-1");
   const u = stepIdx >= 0 && st.steps[stepIdx] ? st.steps[stepIdx].u : st.u;
@@ -148,6 +160,8 @@ function redraw() {
     title: `${model.name || "Talud"} · ${st.name} - ${lab} [mm]  SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
     deformScale: parseFloat(inpDef.value) || 0, u, uel: st.uel,
   });
+  draw.setMap(plot.mapping());
+  (window as unknown as { __geoMap: unknown }).__geoMap = plot.mapping();   // para el arnés puppeteer (clics en coordenadas del mundo)
 }
 
 function fillStepSelect() {
@@ -178,6 +192,28 @@ function run(idx: number[]) {
   worker.postMessage({ type: "run", model, stageIdx: idx });
 }
 
+// ---- herramientas de dibujo ----
+function setTool(t: Tool) {
+  draw.state.tool = t;
+  document.querySelectorAll<HTMLButtonElement>(".tb[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === t));
+  drawCanvas.style.pointerEvents = t === "ver" ? "none" : "auto";
+  if (t !== "ver" && selModel.value !== "hgeo") { selModel.value = "hgeo"; edWrap.hidden = false; if (!edText.value.trim()) edText.value = DEMO04_HGEO; applyHgeo(); }
+  dStatus.textContent = { ver: "", interfaz: "interfaz: clic a clic de margen a margen; Enter o doble clic termina, Esc cancela, Retroceso quita el último", asignar: "asignar: clic dentro de una región", sobrecarga: "sobrecarga: dos clics sobre el terreno", ancla: "ancla: clic en la cabeza", mover: "mover: arrastra un vértice", borrar: "borrar: clic en un vértice o en una interfaz" }[t];
+  draw.render();
+}
+document.querySelectorAll<HTMLButtonElement>(".tb[data-tool]").forEach((b) => b.addEventListener("click", () => setTool(b.dataset.tool as Tool)));
+$<HTMLButtonElement>("undo").addEventListener("click", () => draw.undo());
+$<HTMLInputElement>("grid").addEventListener("change", (e) => { draw.state.grid = parseFloat((e.target as HTMLInputElement).value) || 1; draw.render(); });
+$<HTMLInputElement>("snap").addEventListener("change", (e) => { draw.state.snap = (e.target as HTMLInputElement).checked; });
+$<HTMLInputElement>("ortho").addEventListener("change", (e) => { draw.state.ortho = (e.target as HTMLInputElement).checked; });
+dSoil.addEventListener("change", () => { draw.state.soil = dSoil.value; });
+$<HTMLInputElement>("dq").addEventListener("change", (e) => { draw.state.q = parseFloat((e.target as HTMLInputElement).value) || 0; });
+$<HTMLInputElement>("dF").addEventListener("change", (e) => { draw.state.F = parseFloat((e.target as HTMLInputElement).value) || 0; });
+$<HTMLInputElement>("dang").addEventListener("change", (e) => { draw.state.ang = parseFloat((e.target as HTMLInputElement).value) || 0; });
+dStage.addEventListener("change", () => { draw.state.stage = parseInt(dStage.value) || 0; });
+draw.onStatus = (m) => { dStatus.textContent = m; };
+draw.onChange = (d) => { $<HTMLInputElement>("snap").checked = draw.state.snap; $<HTMLInputElement>("ortho").checked = draw.state.ortho; applyDef(d, false); };
+
 btn.addEventListener("click", () => run(base!.stages.map((_, i) => i).slice(0, parseInt(selN.value))));
 selN.addEventListener("change", () => { const n = parseInt(selN.value); const falta = base!.stages.map((_, i) => i).slice(0, n).filter((i) => !stages[i] || stages[i]!.stale); if (falta.length) run(falta); });
 selModel.addEventListener("change", () => { if (selModel.value === "hgeo") { edWrap.hidden = false; if (!edText.value.trim()) edText.value = DEMO04_HGEO; applyHgeo(); } else loadFixture(selModel.value); });
@@ -187,4 +223,5 @@ selStage.addEventListener("change", () => { const i = visibleStage(); if (!stage
 for (const el of [selField, selStep, chkMesh, inpDef]) el.addEventListener("change", redraw);
 inpDef.addEventListener("input", redraw);
 edText.value = DEMO04_HGEO;
+setTool("ver");
 loadFixture(selModel.value);

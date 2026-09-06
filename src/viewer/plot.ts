@@ -55,6 +55,9 @@ export class SlopePlot {
     this.edges = Array.from(map.values());
   }
 
+  /** Transformación mundo↔píxel del último dibujo (para la capa de herramientas). */
+  mapping() { return this.last ? { tf: this.last.tf, inv: this.last.inv } : null; }
+
   /** Sliders: materiales y cargas nuevas sin rehacer las aristas (misma malla). */
   setModel(m: PlotModel): void { this.m = m; }
 
