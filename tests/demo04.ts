@@ -10,7 +10,7 @@ const lines: string[] = [];
 const t0 = performance.now();
 const fem = new GeoFem(model, (l) => { lines.push(l); if (l.startsWith("  ") && !l.startsWith("  RS=")) console.log(l); if (l.startsWith("###") || l.startsWith("TOTAL") || l.startsWith("    SRM")) console.log(l); });
 console.log(`banda=${fem.band} nfree=${fem.nfree}`);
-const res = fem.run(model, nst);
+const res = fem.run(model, Array.from({ length: nst }, (_, i) => i));
 console.log(`TS wall ${((performance.now() - t0) / 1000).toFixed(1)} s; FS = ${res.map((r) => r.fs.toFixed(4)).join(" / ")}`);
 mkdirSync(new URL("./out/", import.meta.url), { recursive: true });
 writeFileSync(new URL("./out/demo04_ts.log", import.meta.url), lines.join("\n") + "\n", "utf-8");

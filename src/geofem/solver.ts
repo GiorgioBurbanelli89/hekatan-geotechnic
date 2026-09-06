@@ -65,7 +65,7 @@ const pad02 = (n: number) => (n < 10 ? "0" + n : "" + n);
 
 export class GeoFem {
   readonly nn: number; readonly ne: number; readonly ndof: number;
-  readonly X: number[]; readonly Y: number[]; readonly ELE: number[][]; readonly EMAT: number[]; readonly MAT: number[][];
+  readonly X: number[]; readonly Y: number[]; readonly ELE: number[][]; readonly EMAT: number[]; MAT: number[][];
   readonly free: Int32Array; readonly nfree: number; readonly map: Int32Array;   // gdl -> índice libre (banda) o -1
   readonly D4: Float64Array[] = [];        // por material (índice 1..): 4x4 plano
   readonly Bc: Float64Array;               // (e*NG+q)*36 : B 3x12
@@ -78,7 +78,7 @@ export class GeoFem {
   readonly SIG: Float64Array;              // (e*NG+q)*4
   readonly DEP: Float64Array;              // (e*NG+q)*16
   readonly hasDep: Uint8Array;
-  readonly log: Log;
+  log: Log;
   readonly Fg2check: { sFg: number; sFg2: number; dmax: number };
   readonly Fg2: Float64Array;              // gravedad recalculada (N·ρ·detJ·w)
 
@@ -350,14 +350,18 @@ export class GeoFem {
     return { fs, prog, ulo, uel, steps };
   }
 
-  /** Corre las etapas del modelo (cargas acumuladas según `stages[i].loads`). */
-  run(m: GeoModel, nstages = m.stages.length, onStage?: (r: StageResult) => void): StageResult[] {
+  setLog(log: Log): void { this.log = log; }
+
+  /** Corre las etapas pedidas del modelo (cada una independiente: cargas según `stages[i].loads`).
+   *  φ y c se leen de m.MAT en cada corrida (sliders); E, ν y γ requieren un GeoFem nuevo. */
+  run(m: GeoModel, stageIdx: number[] = m.stages.map((_, i) => i), onStage?: (r: StageResult, index: number) => void): StageResult[] {
     const t0 = performance.now();
+    this.MAT = m.MAT;
     const results: StageResult[] = [];
     // Con sliders de γ la gravedad de la fixture ya no vale: se usa la recalculada (N·ρ·detJ·w por
     // punto de Gauss, la misma cuenta que comprueba la fixture en el constructor).
     const LOADS = { Fg: m.recomputeGravity ? Array.from(this.Fg2) : m.Fg, Fs: m.Fs, Fa: m.Fa };
-    for (let si = 0; si < nstages; si++) {
+    for (const si of stageIdx) {
       const st = m.stages[si];
       const F = new Float64Array(this.ndof);
       for (const nm of st.loads) { const v = LOADS[nm]; for (let d = 0; d < this.ndof; d++) F[d] += v[d]; }
@@ -368,7 +372,7 @@ export class GeoFem {
       this.log(`    progresion dx(mm) por SRF:${r.prog}`);
       this.log(`  ${st.name.padEnd(22)} >>> FS=${f4(r.fs)}  ${st.geo5 ? `(GEO5=${st.geo5.toFixed(2)})` : "(sin referencia GEO5)"}  [${sec.toFixed(1)} s]`);
       const res: StageResult = { name: st.name, fs: r.fs, geo5: st.geo5, u: r.ulo, uel: r.uel, steps: r.steps, prog: r.prog, seconds: sec };
-      results.push(res); onStage?.(res);
+      results.push(res); onStage?.(res, si);
     }
     this.log(""); this.log("================ RESUMEN (Hekatan Geotechnic, malla exacta GEO5) ================");
     for (const r of results) this.log(`  ${r.name.padEnd(22)} FS=${f4(r.fs)}  ${r.geo5 ? `(GEO5 ${r.geo5.toFixed(2)})  dif=${(100 * (r.fs / r.geo5 - 1)) >= 0 ? "+" : ""}${(100 * (r.fs / r.geo5 - 1)).toFixed(1)}%` : "(parámetros distintos de la Demo04: sin referencia GEO5)"}  t=${r.seconds.toFixed(1)} s`);
