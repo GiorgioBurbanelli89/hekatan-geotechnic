@@ -7,7 +7,7 @@
 // mallador es otro. Con la misma h las mallas se parecen (arista media 2.31 en la Demo04) pero no son
 // iguales, así que el FS puede moverse en el 2º-3º decimal: se compara contra GEO5, no se copia.
 import type { GeoModel } from "../geofem/solver";
-import { interfaceY, spanInterface, type Pt, type SlopeDef } from "../model/dsl";
+import { interfaceY, spanInterface, outlineFromInterfaces, type Pt, type SlopeDef } from "../model/dsl";
 
 type Tri = { a: number; b: number; c: number; dead?: boolean };
 export let meshDebug: (msg: string) => void = () => {};
@@ -36,6 +36,9 @@ export type MeshStats = { nodes: number; corners: number; elements: number; minA
 
 export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } {
   const h = def.h;
+  // el contorno DERIVA de las interfaces: si un slider o el ratón cambió el terreno, se rehace aquí
+  // (2026-09-06: el slider de H escribía el texto pero mallaba el contorno viejo)
+  if (def.interfaces.length && def.margins) def.outline = outlineFromInterfaces(def);
   const P: Pt[] = [];                       // puntos (esquinas de la malla)
   const S: [number, number][] = [];         // segmentos restringidos (índices en P)
   const addPt = (p: Pt): number => { for (let i = 0; i < P.length; i++) if (Math.abs(P[i][0] - p[0]) < 1e-7 && Math.abs(P[i][1] - p[1]) < 1e-7) return i; P.push([p[0], p[1]]); return P.length - 1; };

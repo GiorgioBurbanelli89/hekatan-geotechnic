@@ -91,6 +91,7 @@ function buildGeomSliders() {
       if (!def?.param) return;
       def.param[r.key] = parseFloat(inp.value);
       def.interfaces[0] = terrainFromParam(def.param, def.margins!.xmin, def.margins!.xmax);
+      for (const st of def.stages) delete st.geo5;   // geometría distinta de la escrita: la referencia GEO5 ya no vale
       draw.render();
       clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(def!, false, [visibleStage()]), 300);
     });
@@ -243,7 +244,7 @@ $<HTMLInputElement>("dF").addEventListener("change", (e) => { draw.state.F = par
 $<HTMLInputElement>("dang").addEventListener("change", (e) => { draw.state.ang = parseFloat((e.target as HTMLInputElement).value) || 0; });
 dStage.addEventListener("change", () => { draw.state.stage = parseInt(dStage.value) || 0; });
 draw.onStatus = (m) => { dStatus.textContent = m; };
-draw.onChange = (d) => { $<HTMLInputElement>("snap").checked = draw.state.snap; $<HTMLInputElement>("osnap").checked = draw.state.osnap; $<HTMLInputElement>("ortho").checked = draw.state.ortho; applyDef(d, false); };
+draw.onChange = (d) => { for (const st of d.stages) delete st.geo5; $<HTMLInputElement>("snap").checked = draw.state.snap; $<HTMLInputElement>("osnap").checked = draw.state.osnap; $<HTMLInputElement>("ortho").checked = draw.state.ortho; applyDef(d, false); };
 
 btn.addEventListener("click", () => run(base!.stages.map((_, i) => i).slice(0, parseInt(selN.value))));
 selN.addEventListener("change", () => { const n = parseInt(selN.value); const falta = base!.stages.map((_, i) => i).slice(0, n).filter((i) => !stages[i] || stages[i]!.stale); if (falta.length) run(falta); });

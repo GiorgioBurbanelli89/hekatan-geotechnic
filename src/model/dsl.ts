@@ -109,7 +109,7 @@ export function interfaceY(poly: Pt[], x: number): number {
   for (let i = 0; i + 1 < P.length; i++) if (x <= P[i + 1][0]) { const t = (x - P[i][0]) / (P[i + 1][0] - P[i][0] || 1); return P[i][1] + t * (P[i + 1][1] - P[i][1]); }
   return P[P.length - 1][1];
 }
-function outlineFromInterfaces(def: SlopeDef): Pt[] {
+export function outlineFromInterfaces(def: SlopeDef): Pt[] {
   const m = def.margins!;
   const terr = spanInterface(def.interfaces[0], m.xmin, m.xmax);
   return [[m.xmin, m.bottom], [m.xmax, m.bottom], ...terr.slice().reverse()];   // fondo → derecha → terreno de derecha a izquierda
