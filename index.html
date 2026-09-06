@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hekatan Geotechnic · GeoFEM</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 28 L2 14 L12 14 L22 4 L30 4 L30 28 Z' fill='%23d08a3e'/%3E%3C/svg%3E" />
+  <style>
+    :root { --oro: #d3a53c; --terra: #d08a3e; --bg: #14110a; --panel: #1e1a12; --txt: #f3ead0; --mut: #b9ad8c; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px "Segoe UI", Arial, sans-serif; background: radial-gradient(circle at 30% 0%, #241d10, #14110a 55%, #0b0906); color: var(--txt); min-height: 100vh; }
+    header { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #3a3020; background: rgba(0,0,0,.25); }
+    header h1 { margin: 0; font: 600 20px Georgia, serif; background: linear-gradient(#fff3c4, #f2cf5e 55%, #c9972f); -webkit-background-clip: text; background-clip: text; color: transparent; letter-spacing: .5px; }
+    header h1 span { color: var(--terra); -webkit-text-fill-color: var(--terra); }
+    header .sub { color: var(--mut); font-size: 12px; }
+    main { display: grid; grid-template-columns: 300px 1fr; gap: 12px; padding: 12px 18px; }
+    .panel { background: var(--panel); border: 1px solid #3a3020; border-radius: 8px; padding: 12px; }
+    .panel h2 { margin: 0 0 8px; font-size: 13px; color: var(--oro); text-transform: uppercase; letter-spacing: 1px; }
+    label { display: block; margin: 6px 0 2px; color: var(--mut); font-size: 12px; }
+    select, input, button { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid #4a3f28; background: #0f0c07; color: var(--txt); font: inherit; }
+    button.run { margin-top: 10px; background: linear-gradient(#f2cf5e, #c9972f); color: #1b1408; font-weight: 700; border: 0; cursor: pointer; }
+    button.run:disabled { opacity: .5; cursor: wait; }
+    .row { display: flex; gap: 8px; } .row > * { flex: 1; }
+    .fs { margin-top: 10px; font-size: 13px; }
+    .fs table { width: 100%; border-collapse: collapse; } .fs td, .fs th { padding: 3px 4px; border-bottom: 1px solid #332b1b; text-align: right; } .fs th:first-child, .fs td:first-child { text-align: left; }
+    .fs .ok { color: #7ee08a; font-weight: 600; }
+    #plot { width: 100%; height: auto; background: #fff; border-radius: 6px; display: block; }
+    #hover { font: 12px Consolas, monospace; color: var(--mut); margin-top: 6px; min-height: 16px; }
+    #log { font: 11.5px Consolas, monospace; white-space: pre; overflow: auto; height: 220px; background: #0b0906; border: 1px solid #3a3020; border-radius: 6px; padding: 8px; color: #cfc6a8; margin-top: 10px; }
+    #log .srm { color: #f2cf5e; } #log .fsl { color: #7ee08a; font-weight: 700; } #log .div { color: #e5382b; }
+    .mats { font-size: 12px; color: var(--mut); margin-top: 8px; line-height: 1.5; }
+    .mats b { color: var(--txt); }
+    footer { padding: 8px 18px; color: #7d7259; font-size: 11px; border-top: 1px solid #2a2316; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <svg width="34" height="34" viewBox="0 0 32 32"><path d="M2 28 L2 14 L12 14 L22 4 L30 4 L30 28 Z" fill="#d08a3e"/><path d="M12 14 L22 4" stroke="#fff3c4" stroke-width="1.5"/></svg>
+    <div><h1>Hekatan <span>Geotechnic</span></h1><div class="sub">GeoFEM · estabilidad de taludes por reducción de resistencia (T6 · Drucker-Prager · SRM) · réplica de GEO5 verificada a 12 cifras</div></div>
+  </header>
+  <main>
+    <aside class="panel">
+      <h2>Modelo</h2>
+      <label>Ejemplo</label>
+      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · talud 2 suelos, 3 etapas</option></select>
+      <div class="mats" id="mats"></div>
+      <label>Etapas a calcular</label>
+      <select id="nstages"><option value="3">3 (peso propio · sobrecarga · ancla)</option><option value="2">2</option><option value="1">1 (solo peso propio)</option></select>
+      <button class="run" id="run">▶ Calcular FS</button>
+      <div class="fs" id="fs"></div>
+      <h2 style="margin-top:14px">Vista</h2>
+      <div class="row">
+        <div><label>Etapa</label><select id="stage"></select></div>
+        <div><label>Campo</label><select id="field"><option value="dx">d_x [mm]</option><option value="dz">d_z [mm]</option><option value="d">resultante [mm]</option></select></div>
+      </div>
+      <div class="row">
+        <div><label>Peldaño (SRF)</label><select id="step"></select></div>
+        <div><label>Deformada ×</label><input id="defscale" type="number" value="0" min="0" step="10" /></div>
+      </div>
+      <label><input type="checkbox" id="mesh" checked style="width:auto" /> malla T6</label>
+    </aside>
+    <section class="panel">
+      <canvas id="plot" width="1180" height="700"></canvas>
+      <div id="hover">mueve el ratón sobre el talud para leer el valor</div>
+      <div id="log">Pulsa «Calcular FS». El cálculo corre en tu navegador (Web Worker); el log es el mismo que imprime el driver de Hekatan Python y coincide iteración a iteración con GEO5.</div>
+    </section>
+  </main>
+  <footer>Hekatan Engineers · Portoviejo, Ecuador · Todo lo que hay aquí está EXTRAÍDO del solver de GEO5 (FRGeoFEM) o MEDIDO en su course of analysis, nada es de libro.</footer>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
