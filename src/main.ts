@@ -134,6 +134,7 @@ function run(idx: number[]) {
   worker.onmessage = (ev: MessageEvent<WorkerOut>) => {
     const m = ev.data;
     if (m.type === "log") appendLog(m.line);
+    else if (m.type === "engine") appendLog(`(motor: ${m.engine === "wasm" ? "WASM · C++ compilado con emscripten" : "TypeScript"})`);
     else if (m.type === "stage") {
       stages[m.index] = { ...(m.result as Stage), stale: false };
       fsTable(); if (m.index === visibleStage()) { fillStepSelect(); redraw(); }
