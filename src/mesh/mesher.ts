@@ -141,13 +141,17 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   // ---- refinamiento de Ruppert: ángulo mínimo 25° y área ≤ 1.4·(√3/4)h² ----
   const amax = 1.4 * (Math.sqrt(3) / 4) * h * h;
   let steiner = 0;
-  enforce();
+  const tStart = performance.now();          // tope de tiempo: una geometría degenerada (dos interfaces que se
+  enforce();                                 // tocan) no puede colgar el navegador: se entrega lo que haya
   meshDebug(`tras enforce: interiores ${interior().length}, área ${interior().reduce((a, t) => a + triArea(t), 0).toFixed(2)} de ${domArea.toFixed(2)}`);
   for (let iter = 0; iter < 5000; iter++) {
     const live = interior();
     let worst: Tri | null = null, score = 0;
+    if (performance.now() - tStart > 2500) { meshDebug("refinamiento cortado por tiempo (2.5 s): geometría degenerada"); break; }
     for (const t of live) {
-      const mn = Math.min(...angles(t)), ar = triArea(t);
+      const ar = triArea(t);
+      if (ar < 2e-3 * amax) continue;          // astillas junto a interfaces que se tocan: no se refinan más
+      const mn = Math.min(...angles(t));
       const sc = (mn < 25 ? (25 - mn) / 25 : 0) + (ar > amax ? ar / amax - 1 : 0);
       if (sc > score) { score = sc; worst = t; }
     }

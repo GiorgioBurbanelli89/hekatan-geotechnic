@@ -6,3 +6,5 @@ tests/shots/
 tests/shots_run/
 tests/gif/
 tests/gif_draw/
+tests/video/
+tests/video_estado/

@@ -7,7 +7,7 @@ import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
 import { FieldKind, nodalField } from "./viewer/geo5scale";
-import { parseHgeo, serializeHgeo, DEMO04_HGEO, SlopeDef } from "./model/dsl";
+import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool } from "./viewer/draw";
 
@@ -66,6 +66,35 @@ function buildSliders(m: GeoModel) {
   }
   matsEl.innerHTML = names.map((n, i) => `<b>${n}</b>: E=${m.MAT[i][0]} kPa · ν=${m.MAT[i][1]}`).join(" · ")
     + `<br>${m.X.length} nudos · ${m.ELE.length} T6 · ${m.FIXED.length} gdl fijos`;
+  buildGeomSliders();
+}
+
+// ---- sliders GEOMÉTRICOS (terreno paramétrico `talud …`): cambian la geometría → remallan → recalculan ----
+let gtimer: number | undefined;
+function buildGeomSliders() {
+  const g = $<HTMLDivElement>("gsliders"); g.innerHTML = "";
+  if (!def?.param) return;
+  const pm = def.param;
+  const rows: { key: keyof typeof pm; label: string; min: number; max: number; step: number }[] = [
+    { key: "H", label: "altura H [m]", min: 1, max: 15, step: 0.1 },
+    { key: "beta", label: "talud β [°]", min: 10, max: 75, step: 0.5 },
+    { key: "corona", label: "corona [m]", min: 0, max: 20, step: 0.5 },
+    { key: "xpie", label: "x pie [m]", min: 2, max: 25, step: 0.5 },
+  ];
+  for (const r of rows) {
+    const row = document.createElement("div"); row.className = "sl";
+    row.innerHTML = `<span class="n">${r.label}</span><input type="range" id="gs_${r.key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${pm[r.key]}"><span class="v" id="gv_${r.key}">${pm[r.key]}</span>`;
+    g.appendChild(row);
+    const inp = row.querySelector("input") as HTMLInputElement;
+    inp.addEventListener("input", () => {
+      $<HTMLSpanElement>("gv_" + r.key).textContent = inp.value;
+      if (!def?.param) return;
+      def.param[r.key] = parseFloat(inp.value);
+      def.interfaces[0] = terrainFromParam(def.param, def.margins!.xmin, def.margins!.xmax);
+      draw.render();
+      clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(def!, false, [visibleStage()]), 300);
+    });
+  }
 }
 
 const visibleStage = () => Math.min(parseInt(selStage.value || "0"), parseInt(selN.value) - 1, (base?.stages.length ?? 1) - 1);
@@ -83,7 +112,7 @@ function currentModel(): GeoModel {
   return out;
 }
 
-function setBase(m: GeoModel) {
+function setBase(m: GeoModel, only?: number[]) {
   base = m; model = m;
   if (!plot) plot = new SlopePlot(canvas, m); else plot.setMesh(m);
   plot.hover = ({ x, z, v }) => { if (!draw.active) hoverEl.textContent = v === null ? "" : `x = ${x.toFixed(2)} m   z = ${z.toFixed(2)} m   valor = ${v.toFixed(2)} mm`; };
@@ -92,11 +121,12 @@ function setBase(m: GeoModel) {
   selN.innerHTML = m.stages.map((_, i) => `<option value="${i + 1}">${i + 1}</option>`).reverse().join("");
   selN.value = String(m.stages.length);
   selStage.innerHTML = m.stages.map((s, i) => `<option value="${i}">${s.name}</option>`).join("");
-  selStage.value = "0"; selStep.innerHTML = "";
+  if (!only) selStage.value = "0"; selStep.innerHTML = "";
   dStage.innerHTML = m.stages.map((s, i) => `<option value="${i}">${s.name}</option>`).join("");
   plot.draw({ field: "dx", vals: new Float64Array(m.X.length), title: m.name || "", stage: 0, showMesh: true });
   draw.setMap(plot.mapping());
-  run(m.stages.map((_, i) => i));   // como Struct: calcula al abrir / al aplicar
+  if (only) { selStage.value = String(only[0]); for (const i of m.stages.keys()) if (!only.includes(i)) stages[i] = undefined; }
+  run(only ?? m.stages.map((_, i) => i));   // como Struct: calcula al abrir / al aplicar (un slider geométrico: solo la etapa visible)
 }
 
 async function loadFixture(url: string) {
@@ -106,7 +136,7 @@ async function loadFixture(url: string) {
   setBase(m);
 }
 
-function applyDef(d: SlopeDef, fromText: boolean) {
+function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
   try {
     const t0 = performance.now();
     def = d;
@@ -120,7 +150,7 @@ function applyDef(d: SlopeDef, fromText: boolean) {
     if (!draw.state.soil || !def.soils.some((s) => s.name === draw.state.soil)) draw.state.soil = def.soils[0]?.name ?? "";
     dSoil.value = draw.state.soil;
     draw.setDef(def);
-    setBase(m);
+    setBase(m, only);
   } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; }
 }
 function applyHgeo() { try { applyDef(parseHgeo(edText.value), true); } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; } }
@@ -205,6 +235,7 @@ document.querySelectorAll<HTMLButtonElement>(".tb[data-tool]").forEach((b) => b.
 $<HTMLButtonElement>("undo").addEventListener("click", () => draw.undo());
 $<HTMLInputElement>("grid").addEventListener("change", (e) => { draw.state.grid = parseFloat((e.target as HTMLInputElement).value) || 1; draw.render(); });
 $<HTMLInputElement>("snap").addEventListener("change", (e) => { draw.state.snap = (e.target as HTMLInputElement).checked; });
+$<HTMLInputElement>("osnap").addEventListener("change", (e) => { draw.state.osnap = (e.target as HTMLInputElement).checked; });
 $<HTMLInputElement>("ortho").addEventListener("change", (e) => { draw.state.ortho = (e.target as HTMLInputElement).checked; });
 dSoil.addEventListener("change", () => { draw.state.soil = dSoil.value; });
 $<HTMLInputElement>("dq").addEventListener("change", (e) => { draw.state.q = parseFloat((e.target as HTMLInputElement).value) || 0; });
@@ -212,7 +243,7 @@ $<HTMLInputElement>("dF").addEventListener("change", (e) => { draw.state.F = par
 $<HTMLInputElement>("dang").addEventListener("change", (e) => { draw.state.ang = parseFloat((e.target as HTMLInputElement).value) || 0; });
 dStage.addEventListener("change", () => { draw.state.stage = parseInt(dStage.value) || 0; });
 draw.onStatus = (m) => { dStatus.textContent = m; };
-draw.onChange = (d) => { $<HTMLInputElement>("snap").checked = draw.state.snap; $<HTMLInputElement>("ortho").checked = draw.state.ortho; applyDef(d, false); };
+draw.onChange = (d) => { $<HTMLInputElement>("snap").checked = draw.state.snap; $<HTMLInputElement>("osnap").checked = draw.state.osnap; $<HTMLInputElement>("ortho").checked = draw.state.ortho; applyDef(d, false); };
 
 btn.addEventListener("click", () => run(base!.stages.map((_, i) => i).slice(0, parseInt(selN.value))));
 selN.addEventListener("change", () => { const n = parseInt(selN.value); const falta = base!.stages.map((_, i) => i).slice(0, n).filter((i) => !stages[i] || stages[i]!.stale); if (falta.length) run(falta); });
