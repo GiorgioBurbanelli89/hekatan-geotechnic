@@ -115,7 +115,7 @@ function currentModel(): GeoModel {
 
 function setBase(m: GeoModel, only?: number[]) {
   base = m; model = m;
-  if (!plot) plot = new SlopePlot(canvas, m); else plot.setMesh(m);
+  if (!plot) { plot = new SlopePlot(canvas, m); plot.dark = new URLSearchParams(location.search).get("tema") === "oscuro"; } else plot.setMesh(m);   // ?tema=oscuro → gráfica fondo negro (vídeos)
   plot.hover = ({ x, z, v }) => { if (!draw.active) hoverEl.textContent = v === null ? "" : `x = ${x.toFixed(2)} m   z = ${z.toFixed(2)} m   valor = ${v.toFixed(2)} mm`; };
   buildSliders(m);
   stages = []; fsEl.innerHTML = "";

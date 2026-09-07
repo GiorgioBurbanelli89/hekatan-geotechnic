@@ -18,6 +18,8 @@ export type PlotOptions = {
 type Edge = { a: number; b: number; count: number; mats: Set<number> };
 
 export class SlopePlot {
+  /** tema oscuro (vídeos de Hekatan School: fondo negro de borde a borde, texto claro, sin recuadro) */
+  dark = false;
   private edges: Edge[] = [];
   private ctx: CanvasRenderingContext2D;
   private cache: { key: string; img: ImageData; lv: number[]; cmap: [number, number, number][] } | null = null;
@@ -64,7 +66,8 @@ export class SlopePlot {
   draw(o: PlotOptions): { lv: number[]; vmin: number; vmax: number } {
     const { X, Y, ELE, EMAT, MAT, Fs, Fa } = this.m;
     const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
-    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+    const FG = this.dark ? "#f3ead0" : "#000", BG = this.dark ? "#000" : "#fff";
+    ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
     // extremos de la barra = nudos ESQUINA
     let vmin = Infinity, vmax = -Infinity;
     for (const el of ELE) for (let k = 0; k < 3; k++) { const v = o.vals[el[k]]; if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
@@ -87,6 +90,7 @@ export class SlopePlot {
       // escalones de celda); una celda con NaN parcial se interpola con las esquinas válidas.
       const img = ctx.createImageData(iw, ih);
       const d = img.data, NX = grid.NX, NZ = grid.NZ, Zg = grid.Z;
+      const bgR = this.dark ? 0 : 255, bgG = bgR, bgB = bgR;
       for (let py = 0; py < ih; py++) {
         const gz = (grid.zmax - (py + 0.5) / ih * (grid.zmax - grid.zmin) - grid.zmin) / (grid.zmax - grid.zmin) * (NZ - 1);
         const j = Math.min(NZ - 2, Math.max(0, Math.floor(gz))), tz = Math.min(1, Math.max(0, gz - j));
@@ -101,7 +105,7 @@ export class SlopePlot {
           if (!Number.isNaN(z10)) { vs += w10 * z10; ws += w10; }
           if (!Number.isNaN(z11)) { vs += w11 * z11; ws += w11; }
           const q = (py * iw + px) * 4;
-          if (ws <= 1e-12) { d[q + 3] = 0; continue; }
+          if (ws <= 1e-12) { d[q] = bgR; d[q + 1] = bgG; d[q + 2] = bgB; d[q + 3] = 255; continue; }   // fuera del talud: color de fondo del tema (alpha 0 dejaba ver el CSS blanco del canvas)
           const v = vs / ws;
           const vc = Math.min(Math.max(v, lv[0]), lv[lv.length - 1]);
           let b = 0; while (b < lv.length - 2 && vc >= lv[b + 1]) b++;
@@ -114,9 +118,9 @@ export class SlopePlot {
     ctx.strokeStyle = "rgba(50,50,50,0.35)"; ctx.lineWidth = 0.5;
     // malla T6, interfaz, contorno
     const line = (a: number, b: number) => { const [p, q] = tf(X[a], Y[a]), [r, s] = tf(X[b], Y[b]); ctx.moveTo(p, q); ctx.lineTo(r, s); };
-    if (o.showMesh) { ctx.beginPath(); ctx.strokeStyle = "rgba(60,60,60,0.45)"; ctx.lineWidth = 0.5; for (const e of this.edges) line(e.a, e.b); ctx.stroke(); }
-    ctx.beginPath(); ctx.strokeStyle = "#000"; ctx.lineWidth = 1.6; ctx.setLineDash([6, 4]); for (const e of this.edges) if (e.mats.size === 2) line(e.a, e.b); ctx.stroke(); ctx.setLineDash([]);
-    ctx.beginPath(); ctx.strokeStyle = "#000"; ctx.lineWidth = 1.4; for (const e of this.edges) if (e.count === 1) line(e.a, e.b); ctx.stroke();
+    if (o.showMesh) { ctx.beginPath(); ctx.strokeStyle = this.dark ? "rgba(255,255,255,0.35)" : "rgba(60,60,60,0.45)"; ctx.lineWidth = 0.5; for (const e of this.edges) line(e.a, e.b); ctx.stroke(); }
+    ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = 1.6; ctx.setLineDash([6, 4]); for (const e of this.edges) if (e.mats.size === 2) line(e.a, e.b); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = 1.4; for (const e of this.edges) if (e.count === 1) line(e.a, e.b); ctx.stroke();
     // deformada (opcional): contorno desplazado
     if (o.deformScale && o.u && o.uel) {
       ctx.beginPath(); ctx.strokeStyle = "#c0392b"; ctx.lineWidth = 1.2;
@@ -133,9 +137,9 @@ export class SlopePlot {
     const box = (x: number, z: number, lines: string[]) => {
       const [px, py] = tf(x, z); ctx.font = "11px Segoe UI, Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 12, h = lines.length * 14 + 6;
-      ctx.fillStyle = "rgba(255,255,255,0.88)"; ctx.strokeStyle = "#000"; ctx.lineWidth = 0.8;
+      ctx.fillStyle = this.dark ? "rgba(20,17,10,0.88)" : "rgba(255,255,255,0.88)"; ctx.strokeStyle = FG; ctx.lineWidth = 0.8;
       ctx.fillRect(px - w / 2, py - h / 2, w, h); ctx.strokeRect(px - w / 2, py - h / 2, w, h);
-      ctx.fillStyle = "#000"; lines.forEach((l, k) => ctx.fillText(l, px, py - h / 2 + 10 + k * 14));
+      ctx.fillStyle = FG; lines.forEach((l, k) => ctx.fillText(l, px, py - h / 2 + 10 + k * 14));
     };
     for (let mi = 0; mi < MAT.length; mi++) {
       if (!EMAT.includes(mi + 1)) continue;
@@ -146,11 +150,11 @@ export class SlopePlot {
     // cargas de la etapa
     const arrow = (xa: number, za: number, xb: number, zb: number, lw: number) => {
       const [p, q] = tf(xa, za), [r, s] = tf(xb, zb); const ang = Math.atan2(s - q, r - p), hl = 7;
-      ctx.beginPath(); ctx.strokeStyle = "#000"; ctx.lineWidth = lw; ctx.moveTo(p, q); ctx.lineTo(r, s);
+      ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = lw; ctx.moveTo(p, q); ctx.lineTo(r, s);
       ctx.moveTo(r, s); ctx.lineTo(r - hl * Math.cos(ang - 0.45), s - hl * Math.sin(ang - 0.45));
       ctx.moveTo(r, s); ctx.lineTo(r - hl * Math.cos(ang + 0.45), s - hl * Math.sin(ang + 0.45)); ctx.stroke();
     };
-    ctx.fillStyle = "#000"; ctx.font = "11px Segoe UI, Arial"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+    ctx.fillStyle = FG; ctx.font = "11px Segoe UI, Arial"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
     // cargas de la etapa (sin gravedad): verticales puras = sobrecarga (flechas hacia abajo); con Fx = ancla
     const Fst = o.Fst ?? (() => { const f = new Float64Array(2 * X.length); if (o.stage >= 1) for (let d = 0; d < f.length; d++) f[d] += Fs[d]; if (o.stage >= 2) for (let d = 0; d < f.length; d++) f[d] += Fa[d]; return f; })();
     const xs: number[] = []; let zq = 0, sumQ = 0, fx = 0, fy = 0, ia = -1, best = 0;
@@ -166,8 +170,8 @@ export class SlopePlot {
       const [p, q] = tf(X[ia] - 0.4, Y[ia] + 0.6); ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText(`ancla ${Math.hypot(fx, fy).toFixed(0)} kN`, p, q);
     }
     // ejes
-    ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.strokeRect(x0, y0, pw, ph);
-    ctx.fillStyle = "#000"; ctx.font = "11px Segoe UI, Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.strokeStyle = FG; ctx.lineWidth = 1; ctx.strokeRect(x0, y0, pw, ph);
+    ctx.fillStyle = FG; ctx.font = "11px Segoe UI, Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
     const xt0 = Math.ceil((grid.xmin - 1) / 5) * 5;
     for (let x = xt0; x <= grid.xmax + 1; x += 5) { const [p] = tf(x, 0); ctx.fillText(String(x), p, y0 + ph + 4); ctx.beginPath(); ctx.moveTo(p, y0 + ph); ctx.lineTo(p, y0 + ph - 4); ctx.stroke(); }
     ctx.textAlign = "right"; ctx.textBaseline = "middle";
@@ -184,14 +188,14 @@ export class SlopePlot {
       const c = cmap[b]; ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
       ctx.fillRect(bx, by + bh - t1 * bh, bw, (t1 - t0) * bh);
     }
-    ctx.strokeStyle = "#000"; ctx.lineWidth = 0.8; ctx.strokeRect(bx, by, bw, bh);
-    ctx.font = "10px Segoe UI, Arial"; ctx.fillStyle = "#000"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.strokeStyle = FG; ctx.lineWidth = 0.8; ctx.strokeRect(bx, by, bw, bh);
+    ctx.font = "10px Segoe UI, Arial"; ctx.fillStyle = FG; ctx.textAlign = "left"; ctx.textBaseline = "middle";
     let lastY = -1e9;
     for (let b = 0; b <= nb; b++) {
       const t = (lv[b] - lv[0]) / (lv[nb] - lv[0]); const y = by + bh - t * bh;
       ctx.beginPath(); ctx.moveTo(bx + bw, y); ctx.lineTo(bx + bw + 3, y); ctx.stroke();
       if (Math.abs(y - lastY) < 10 && b < nb) continue;                 // rótulos que se pisan: el extremo manda
-      if (b === nb && Math.abs(y - lastY) < 10) { ctx.clearRect(bx + bw + 4, lastY - 6, 40, 12); }
+      if (b === nb && Math.abs(y - lastY) < 10) { ctx.fillStyle = BG; ctx.fillRect(bx + bw + 4, lastY - 6, 40, 12); ctx.fillStyle = FG; }
       ctx.fillText(lv[b].toFixed(1), bx + bw + 5, y); lastY = y;
     }
     ctx.save(); ctx.translate(bx + bw + 46, by + bh / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.font = "11px Segoe UI, Arial"; ctx.fillText(`${FIELD_LABEL[o.field]} [mm]`, 0, 0); ctx.restore();
