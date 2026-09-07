@@ -72,9 +72,13 @@ function buildSliders(m: GeoModel) {
 
 // ---- sliders GEOMÉTRICOS (terreno paramétrico `talud …`): cambian la geometría → remallan → recalculan ----
 let gtimer: number | undefined;
+let geomSliding = false;   // mientras se arrastra un slider geométrico no se reconstruye el panel (el elemento bajo el ratón no se sustituye)
 function buildGeomSliders() {
-  const g = $<HTMLDivElement>("gsliders"); g.innerHTML = "";
-  if (!def?.param) return;
+  const g = $<HTMLDivElement>("gsliders");
+  if (geomSliding && g.children.length) return;
+  g.innerHTML = "";
+  if (!def) return;
+  if (!def.param) { buildDrawnSliders(g); return; }
   const pm = def.param;
   const rows: { key: keyof typeof pm; label: string; min: number; max: number; step: number }[] = [
     { key: "H", label: "altura H [m]", min: 1, max: 15, step: 0.1 },
@@ -96,6 +100,38 @@ function buildGeomSliders() {
       draw.render();
       clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(def!, false, [visibleStage()]), 300);
     });
+  }
+}
+/** Talud DIBUJADO (sin `talud …`): también tiene parámetros. Un slider por coordenada de cada vértice del terreno
+ *  (x acotada entre sus vecinos, z entre el fondo y el techo) y uno de subir/bajar cada capa. Mueven la geometría
+ *  → reescriben el .hgeo → remallan → recalculan la etapa visible, igual que los sliders del talud paramétrico. */
+function buildDrawnSliders(g: HTMLDivElement) {
+  if (!def?.margins || !def.interfaces[0]?.length) return;
+  const d = def, m = def.margins, ter = d.interfaces[0];
+  const zTop = Math.max(...ter.map((p) => p[1])) + 6, zBot = m.bottom + 0.5;
+  const head = (t: string) => { const h = document.createElement("div"); h.className = "sl"; h.style.display = "block"; h.style.color = "var(--oro)"; h.style.fontWeight = "600"; h.style.marginTop = "6px"; h.textContent = t; g.appendChild(h); };
+  const push = (key: string, label: string, min: number, max: number, step: number, val: number, onInput: (v: number) => void) => {
+    const row = document.createElement("div"); row.className = "sl";
+    row.innerHTML = `<span class="n">${label}</span><input type="range" id="gs_${key}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="v" id="gv_${key}">${val}</span>`;
+    g.appendChild(row);
+    const inp = row.querySelector("input") as HTMLInputElement;
+    inp.addEventListener("input", () => {
+      geomSliding = true; $<HTMLSpanElement>("gv_" + key).textContent = inp.value; onInput(parseFloat(inp.value));
+      for (const st of d.stages) delete st.geo5;
+      draw.render();
+      clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
+    });
+    inp.addEventListener("change", () => { geomSliding = false; window.setTimeout(buildGeomSliders, 350); });   // suelto el ratón: cotas nuevas
+  };
+  head("terreno (puntos)");
+  ter.forEach((p, k) => {
+    if (k > 0 && k < ter.length - 1) push(`x${k}`, `P${k + 1} x [m]`, ter[k - 1][0], ter[k + 1][0], 0.1, p[0], (v) => { ter[k][0] = v; });
+    push(`z${k}`, `P${k + 1} z [m]`, zBot, zTop, 0.1, p[1], (v) => { ter[k][1] = v; });
+  });
+  if (d.interfaces.length > 1) head("capas (subir / bajar)");
+  for (let i = 1; i < d.interfaces.length; i++) {
+    const base = d.interfaces[i].map((p) => [p[0], p[1]] as [number, number]);
+    push(`dz${i}`, `${d.soils[i]?.name ?? "capa " + (i + 1)} Δz [m]`, -5, 5, 0.1, 0, (v) => { d.interfaces[i].forEach((p, k) => { p[1] = base[k][1] + v; }); });
   }
 }
 
