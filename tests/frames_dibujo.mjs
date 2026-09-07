@@ -28,7 +28,11 @@ const clip = await page.evaluate(() => { const r = document.querySelector("main"
 console.log("clip:", clip);
 const beats = {}; let cur = null, k = 0;
 const start = (name) => { cur = name; k = 0; rmSync(`${SCHOOL}/frames_dib_${name}`, { recursive: true, force: true }); mkdirSync(`${SCHOOL}/frames_dib_${name}`, { recursive: true }); beats[name] = 0; };
-const frame = async () => { await page.screenshot({ path: `${SCHOOL}/frames_dib_${cur}/f${String(k).padStart(3, "0")}.png`, clip }); k++; beats[cur] = k; };
+const frame = async () => {   // la captura puede expirar mientras la página malla/calcula: un reintento
+  const path = `${SCHOOL}/frames_dib_${cur}/f${String(k).padStart(3, "0")}.png`;
+  try { await page.screenshot({ path, clip, timeout: 60000 }); } catch (e) { console.warn("captura reintentada:", String(e).slice(0, 80)); await wait(800); await page.screenshot({ path, clip, timeout: 60000 }); }
+  k++; beats[cur] = k;
+};
 const frames = async (n, ms = 120) => { for (let i = 0; i < n; i++) { await frame(); await wait(ms); } };
 // escribir en la línea de órdenes "a mano" y pulsar Enter
 const cmd = async (text, { chunk = 4, settle = true } = {}) => {
