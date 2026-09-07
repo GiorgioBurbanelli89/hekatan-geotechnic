@@ -118,7 +118,7 @@ function setBase(m: GeoModel, only?: number[]) {
   if (!plot) {
     plot = new SlopePlot(canvas, m);
     plot.dark = new URLSearchParams(location.search).get("tema") === "oscuro";   // ?tema=oscuro → gráfica fondo negro (vídeos)
-    if (plot.dark) { plot.k = 2; draw.k = 2; for (const c of [canvas, drawCanvas]) { c.width = 2360; c.height = 1400; } }   // lienzo 2x: fotogramas nítidos
+    if (plot.dark) { plot.k = 3; draw.k = 3; for (const c of [canvas, drawCanvas]) { c.width = 2360; c.height = 1400; } }   // lienzo 2x y textos 3x (=1.5x relativos): en el vídeo la gráfica baja a ~700 px de ancho
   } else plot.setMesh(m);
   plot.hover = ({ x, z, v }) => { if (!draw.active) hoverEl.textContent = v === null ? "" : `x = ${x.toFixed(2)} m   z = ${z.toFixed(2)} m   valor = ${v.toFixed(2)} mm`; };
   buildSliders(m);
