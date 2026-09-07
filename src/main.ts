@@ -218,7 +218,7 @@ function appendLog(line: string) {
 }
 
 function fsTable() {
-  const rows = stages.map((s) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok">${s.fs.toFixed(4)}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
+  const rows = stages.map((s) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok"${s.steps.length ? "" : ' style="color:#e5382b"'}>${s.steps.length ? s.fs.toFixed(4) : "< 1 ✖ falla"}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
   fsEl.innerHTML = `<table><tr><th>etapa</th><th>FS</th><th>GEO5</th><th>t</th></tr>${rows}</table>` + (busy ? `<div style="color:var(--oro);margin-top:4px">calculando…</div>` : "");
 }
 
@@ -242,7 +242,7 @@ function redraw() {
   const lab = { dx: "d_x", dz: "d_z", d: "d" }[kind];
   plot.draw({
     field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked,
-    title: `${model.name || "Talud"} · ${st.name} - ${lab} [mm]  SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
+    title: `${model.name || "Talud"} · ${st.name} - ${lab} [mm]  ${st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
     deformScale: parseFloat(inpDef.value) || 0, u, uel: st.uel,
   });
   draw.setMap(plot.mapping());

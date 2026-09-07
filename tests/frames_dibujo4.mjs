@@ -17,13 +17,27 @@ await page.goto(url, { waitUntil: "networkidle0" }); await waitTotal();
 await page.evaluate(() => {
   const css = document.createElement("style");
   css.textContent = `#log,footer,#hover,#dstatus{display:none!important} main{grid-template-columns:480px 1fr!important;padding:8px 14px!important;gap:10px!important}
-    aside.panel>*:not(#editor):not(#fs):not(h2:first-child){display:none!important}
     textarea#hgeo{font-size:13.5px!important;line-height:1.3!important;height:330px!important}
     #edmsg{font-size:12px!important} .fs table{font-size:13px!important}
     #cmd{font-size:17px!important} #cmdhist{min-height:5.4em!important;max-height:5.4em!important} #cmdin{font-size:17px!important}
     #dstatus{font-size:13px!important}`;
   document.head.appendChild(css); window.scrollTo(0, 0);
+  // flecha de ratón visible en las capturas (el puntero real no sale en el screenshot)
+  const cur = document.createElement("div"); cur.id = "__cur"; cur.style.cssText = "position:fixed;left:-100px;top:-100px;width:30px;height:38px;z-index:99999;pointer-events:none;filter:drop-shadow(0 0 3px #000)";
+  cur.innerHTML = '<svg viewBox="0 0 24 32" width="30" height="38"><path d="M2 2 L2 24 L8 18 L13 29 L17 27 L12 17 L20 17 Z" fill="#fff" stroke="#000" stroke-width="1.6"/></svg>';
+  document.body.appendChild(cur);
+  const ring = document.createElement("div"); ring.id = "__ring"; ring.style.cssText = "position:fixed;left:-100px;top:-100px;width:34px;height:34px;border:3px solid #ffb300;border-radius:50%;z-index:99998;pointer-events:none;transform:translate(-50%,-50%);display:none";
+  document.body.appendChild(ring);
+  // modo del panel izquierdo: "dibujo" (editor + FS) o "sliders" (parámetros del talud dibujado + FS)
+  const modo = document.createElement("style"); modo.id = "__modo"; document.head.appendChild(modo);
+  window.__modo = (m) => { modo.textContent = m === "sliders"
+    ? "aside.panel>*:not(#gsliders):not(#sliders):not(#fs):not(h2){display:none!important} #sliders .sl:nth-child(n+6){display:none!important} .sl{font-size:13px!important}"
+    : "aside.panel>*:not(#editor):not(#fs):not(h2:first-child){display:none!important}"; };
+  window.__modo("dibujo");
 });
+const showCursor = (px, py) => page.evaluate((x, y) => { const c = document.getElementById("__cur"); c.style.left = x + "px"; c.style.top = y + "px"; }, px, py);
+const flash = async () => { await page.evaluate(() => { const c = document.getElementById("__cur"), r = document.getElementById("__ring"); r.style.left = c.style.left; r.style.top = c.style.top; r.style.display = "block"; }); };
+const unflash = () => page.evaluate(() => { document.getElementById("__ring").style.display = "none"; });
 const clip = await page.evaluate(() => { const r = document.querySelector("main").getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(Math.min(r.height, r.width * 9 / 16)) }; });
 console.log("clip:", clip);
 const beats = {}; let cur = null, k = 0;
@@ -36,15 +50,28 @@ const frame = async () => {   // la captura puede expirar mientras la página ma
 const frames = async (n, ms = 120) => { for (let i = 0; i < n; i++) { await frame(); await wait(ms); } };
 // escribir en la línea de órdenes "a mano" y pulsar Enter
 const cmd = async (text, { chunk = 4, settle = true } = {}) => {
-  await page.focus("#cmdin");
+  await page.focus("#cmdin"); await moveToEl("#cmdin", 0.02);
   for (let i = chunk; i < text.length + chunk; i += chunk) { await page.$eval("#cmdin", (e, v) => { e.value = v; }, text.slice(0, i)); await frame(); }
   await page.keyboard.press("Enter"); if (settle) await waitIdle(); await frame();
 };
 const enter = async () => { await page.focus("#cmdin"); await page.keyboard.press("Enter"); await waitIdle(); await frames(2, 150); };
 const worldPx = (x, z) => page.evaluate((x, z) => { const [px, py] = window.__geoMap.tf(x, z); const c = document.getElementById("draw"); const r = c.getBoundingClientRect(); return { px: r.left + px * r.width / c.width, py: r.top + py * r.height / c.height }; }, x, z);
-const moveTo = async (x, z, n = 6) => { const { px, py } = await worldPx(x, z); await page.mouse.move(px, py, { steps: n }); await wait(80); };
+const moveTo = async (x, z, n = 6) => { const { px, py } = await worldPx(x, z); await page.mouse.move(px, py, { steps: n }); await showCursor(px, py); await wait(80); };
+// mover la flecha a un elemento (botón / slider) y opcionalmente al valor v de un slider
+const moveToEl = async (sel, frac = 0.5) => { const r = await page.$eval(sel, (e) => { const b = e.getBoundingClientRect(); return { l: b.left, t: b.top, w: b.width, h: b.height }; }); const px = r.l + r.w * frac, py = r.t + r.h / 2; await page.mouse.move(px, py, { steps: 4 }); await showCursor(px, py); await wait(60); return { px, py }; };
 const glide = async (x, z, n = 4) => { for (let i = 1; i <= n; i++) { await moveTo(x, z, 3); await frame(); } };
-const click = async () => { await page.mouse.down(); await page.mouse.up(); await wait(150); await frame(); };
+const click = async () => { await flash(); await page.mouse.down(); await page.mouse.up(); await wait(150); await frame(); await unflash(); };
+// arrastrar un slider con la flecha visible: fotograma por valor
+const slide = async (id, values) => {
+  const r = await page.$eval("#" + id, (e) => { const b = e.getBoundingClientRect(); return { l: b.left, t: b.top, w: b.width, h: b.height, min: +e.min, max: +e.max }; });
+  for (const v of values) {
+    const px = r.l + 8 + (r.w - 16) * (v - r.min) / (r.max - r.min), py = r.t + r.h / 2;
+    await page.mouse.move(px, py, { steps: 3 }); await showCursor(px, py); await flash();
+    await page.$eval("#" + id, (e, v) => { e.value = String(v); e.dispatchEvent(new Event("input", { bubbles: true })); }, v);
+    await wait(450); await waitIdle(); await frame();
+  }
+  await unflash(); await page.$eval("#" + id, (e) => e.dispatchEvent(new Event("change", { bubbles: true })));
+};
 const hist = async () => console.log("   ", (await page.$eval("#cmdhist", (e) => e.innerText)).replace(/\n/g, " | "));
 
 // 1) hoja nueva y márgenes (órdenes escritas)
@@ -84,10 +111,21 @@ await cmd("etapa +sobrecarga"); await cmd("etapa 2", { settle: false }); await c
 await cmd("sobrecarga", { settle: false }); await cmd("44,-3", { settle: false }); await cmd("56,-3"); await frames(2, 250);
 await cmd("etapa +ancla"); await cmd("etapa 3", { settle: false }); await cmd("F=200", { settle: false }); await cmd("ang=-15", { settle: false });
 await cmd("ancla", { settle: false }); await glide(36, -6, 5); await click(); await waitIdle(); await frames(3, 250); await hist();
-// 8) resultado: las tres etapas
+// 8) el talud DIBUJADO también tiene parámetros: sliders por vértice del terreno y por capa, y de cada suelo
+start("sliders");
+await cmd("ver", { settle: false }); await page.evaluate(() => window.__modo("sliders")); await page.select("#stage", "0"); await wait(500); await frames(2, 200);
+await slide("gs_z3", [-8.5, -8, -7, -6, -5]);          // P4 (32,-9): la banqueta sube → talud más alto y empinado
+await slide("gs_z3", [-6, -7, -8, -9]);                // y vuelve
+await slide("gs_dz1", [-0.5, -1]);                     // la arcilla blanda baja 1 m (el punto de asignación 30,-18 sigue dentro)
+await slide("sl_phi0", [24, 22, 20]);                  // fricción del limo
+await frames(2, 250);
+console.log("   sliders:", (await page.$eval("#fs", (e) => e.innerText)).replace(/\n/g, " | "));
+// vuelta a los valores dibujados (con φ=20 y el ancla de 200 kN la etapa 3 falla: se ve el aviso, y luego se restaura)
+await slide("sl_phi0", [26]); await slide("gs_dz1", [0]); await frames(2, 250);
+// 9) resultado: las tres etapas
 start("resultado");
-await cmd("ver", { settle: false });
-for (const s of ["0", "1", "2"]) { await page.select("#stage", s); await wait(500); await frames(4, 250); }
+await page.evaluate(() => window.__modo("dibujo"));
+for (const s of ["0", "1", "2"]) { await page.select("#stage", s); await wait(500); await waitIdle(); await frames(4, 250); }
 console.log((await page.$eval("#fs", (e) => e.innerText)).replace(/\n/g, " | "));
 console.log("--- .hgeo escrito por el dibujo ---\n" + (await page.$eval("#hgeo", (e) => e.value)));
 await browser.close();
@@ -132,6 +170,11 @@ escena
   voz  Las etapas: una sobrecarga de cuarenta kilopascales con dos puntos escritos sobre la corona, y un ancla de doscientos kilonewtons con un clic en su cabeza.
   sub  etapa · sobrecarga · ancla
   centro  struct3d frames_dib4_etapas n ${beats.etapas} fps 9
+
+escena
+  voz  Y el talud dibujado también tiene parámetros: cada punto del terreno, cada capa y cada suelo llevan su slider{eslaider}. Subo la banqueta, bajo la arcilla un metro, quito fricción: se remalla y se recalcula solo.
+  sub  El talud dibujado también se parametriza con sliders
+  centro  struct3d frames_dib4_sliders n ${beats.sliders} fps 3
 
 escena
   voz  Tres etapas, tres factores de seguridad, y el modelo entero quedó escrito en el editor. Nos vemos en Hekatan Engineers{Jékatan Enyiníers}.
