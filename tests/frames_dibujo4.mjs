@@ -114,14 +114,16 @@ await cmd("ancla", { settle: false }); await glide(36, -6, 5); await click(); aw
 // 8) el talud DIBUJADO también tiene parámetros: sliders por vértice del terreno y por capa, y de cada suelo
 start("sliders");
 await cmd("ver", { settle: false }); await page.evaluate(() => window.__modo("sliders")); await page.select("#stage", "0"); await wait(500); await frames(2, 200);
+const v0 = async (id) => parseFloat(await page.$eval("#" + id, (e) => e.value));
+const z3 = await v0("gs_z3"), c1 = await v0("gs_dz1"), f0 = await v0("sl_phi0");   // valores dibujados, para volver a ellos
 await slide("gs_z3", [-8.5, -8, -7, -6, -5]);          // P4 (32,-9): la banqueta sube → talud más alto y empinado
-await slide("gs_z3", [-6, -7, -8, -9]);                // y vuelve
-await slide("gs_dz1", [-0.5, -1]);                     // la arcilla blanda baja 1 m (el punto de asignación 30,-18 sigue dentro)
+await slide("gs_z3", [-6, -7, -8, z3]);                // y vuelve
+await slide("gs_dz1", [c1 - 0.5, c1 - 1, c1 - 1.5, c1 - 2]);   // la arcilla blanda baja 2 m (su punto de asignación la acompaña)
 await slide("sl_phi0", [24, 22, 20]);                  // fricción del limo
 await frames(2, 250);
 console.log("   sliders:", (await page.$eval("#fs", (e) => e.innerText)).replace(/\n/g, " | "));
 // vuelta a los valores dibujados (con φ=20 y el ancla de 200 kN la etapa 3 falla: se ve el aviso, y luego se restaura)
-await slide("sl_phi0", [26]); await slide("gs_dz1", [0]); await frames(2, 250);
+await slide("sl_phi0", [f0]); await slide("gs_dz1", [c1]); await frames(2, 250);
 // 9) resultado: las tres etapas
 start("resultado");
 await page.evaluate(() => window.__modo("dibujo"));
@@ -172,7 +174,7 @@ escena
   centro  struct3d frames_dib4_etapas n ${beats.etapas} fps 9
 
 escena
-  voz  Y el talud dibujado también tiene parámetros: cada punto del terreno, cada capa y cada suelo llevan su slider{eslaider}. Subo la banqueta, bajo la arcilla un metro, quito fricción: se remalla y se recalcula solo.
+  voz  Y el talud dibujado también tiene parámetros: cada punto del terreno, cada capa y cada suelo llevan su slider{eslaider}. Subo la banqueta, bajo la arcilla dos metros, quito fricción: se remalla y se recalcula solo.
   sub  El talud dibujado también se parametriza con sliders
   centro  struct3d frames_dib4_sliders n ${beats.sliders} fps 3
 

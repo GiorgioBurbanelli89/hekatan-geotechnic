@@ -7,9 +7,9 @@ import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
 import { FieldKind, nodalField } from "./viewer/geo5scale";
-import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef } from "./model/dsl";
+import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, interfaceY, spanInterface } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
-import { DrawTools, Tool } from "./viewer/draw";
+import { DrawTools, Tool, regionOf } from "./viewer/draw";
 
 type Stage = { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean };
 
@@ -128,10 +128,22 @@ function buildDrawnSliders(g: HTMLDivElement) {
     if (k > 0 && k < ter.length - 1) push(`x${k}`, `P${k + 1} x [m]`, ter[k - 1][0], ter[k + 1][0], 0.1, p[0], (v) => { ter[k][0] = v; });
     push(`z${k}`, `P${k + 1} z [m]`, zBot, zTop, 0.1, p[1], (v) => { ter[k][1] = v; });
   });
-  if (d.interfaces.length > 1) head("capas (subir / bajar)");
+  if (d.interfaces.length > 1) head("capas (cota del techo en el centro)");
+  const xmid = (m.xmin + m.xmax) / 2;
+  const yAt = (it: number, x: number) => interfaceY(spanInterface(d.interfaces[it], m.xmin, m.xmax), x);
   for (let i = 1; i < d.interfaces.length; i++) {
     const base = d.interfaces[i].map((p) => [p[0], p[1]] as [number, number]);
-    push(`dz${i}`, `${d.soils[i]?.name ?? "capa " + (i + 1)} Δz [m]`, -5, 5, 0.1, 0, (v) => { d.interfaces[i].forEach((p, k) => { p[1] = base[k][1] + v; }); });
+    const z0 = yAt(i, xmid);
+    // los puntos de asignación que están en la región de ESTA capa (bajo la interfaz i y sobre la i+1) la acompañan
+    const mine = d.assign.filter((a) => regionOf(d, a.p) === i + 1).map((a) => ({ a, z: a.p[1] }));
+    push(`dz${i}`, `${d.soils[i]?.name ?? "capa " + (i + 1)} techo z [m]`, zBot, zTop, 0.1, Math.round(z0 * 10) / 10, (v) => {
+      const dz = v - z0;
+      d.interfaces[i].forEach((p, k) => { p[1] = base[k][1] + dz; });
+      for (const { a, z } of mine) {   // sigue a la capa, pero siempre dentro de ella
+        const top = yAt(i, a.p[0]), bot = i + 1 < d.interfaces.length ? yAt(i + 1, a.p[0]) : m.bottom;
+        a.p[1] = Math.min(top - 0.3, Math.max(bot + 0.3, z + dz));
+      }
+    });
   }
 }
 
