@@ -115,7 +115,11 @@ function currentModel(): GeoModel {
 
 function setBase(m: GeoModel, only?: number[]) {
   base = m; model = m;
-  if (!plot) { plot = new SlopePlot(canvas, m); plot.dark = new URLSearchParams(location.search).get("tema") === "oscuro"; } else plot.setMesh(m);   // ?tema=oscuro → gráfica fondo negro (vídeos)
+  if (!plot) {
+    plot = new SlopePlot(canvas, m);
+    plot.dark = new URLSearchParams(location.search).get("tema") === "oscuro";   // ?tema=oscuro → gráfica fondo negro (vídeos)
+    if (plot.dark) { plot.k = 2; draw.k = 2; for (const c of [canvas, drawCanvas]) { c.width = 2360; c.height = 1400; } }   // lienzo 2x: fotogramas nítidos
+  } else plot.setMesh(m);
   plot.hover = ({ x, z, v }) => { if (!draw.active) hoverEl.textContent = v === null ? "" : `x = ${x.toFixed(2)} m   z = ${z.toFixed(2)} m   valor = ${v.toFixed(2)} mm`; };
   buildSliders(m);
   stages = []; fsEl.innerHTML = "";

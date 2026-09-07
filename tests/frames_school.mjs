@@ -10,7 +10,7 @@ const url = process.argv[2] || "http://localhost:4700/?tema=oscuro";   // gráfi
 const SCHOOL = "C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-school";
 const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage();
-await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 1 });
+await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 2 });   // 2x: fotogramas de ~2450 px de ancho, nítidos al bajar a 720p
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const waitTotal = async () => page.waitForFunction(() => document.getElementById("log").textContent.includes("TOTAL "), { timeout: 120000 });
 await page.goto(url, { waitUntil: "networkidle0" }); await waitTotal();

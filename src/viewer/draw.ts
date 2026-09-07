@@ -18,6 +18,8 @@ type Map2 = { tf: (x: number, z: number) => [number, number]; inv: (px: number, 
 
 export class DrawTools {
   state: DrawState = { tool: "ver", grid: 1, snap: true, osnap: true, ortho: false, soil: "", q: 35, F: 72, ang: -17, stage: 0 };
+  /** escala de trazos/marcadores (2 = lienzo 2x para vídeo) */
+  k = 1;
   private snapKind: SnapKind = null;         // qué snap atrapó el cursor (para el marcador y el estado)
   onChange: ((def: SlopeDef) => void) | null = null;     // el modelo cambió (remallar + recalcular)
   onStatus: ((msg: string) => void) | null = null;
@@ -167,24 +169,26 @@ export class DrawTools {
       ctx.fillStyle = "rgba(0,0,0,0.28)";
       const nx = (m.xmax - m.xmin) / g, ny = (ytop - m.bottom) / g;
       const step = nx * ny > 6000 ? Math.ceil(Math.sqrt(nx * ny / 6000)) : 1;
-      for (let x = m.xmin; x <= m.xmax + 1e-9; x += g * step) for (let y = m.bottom; y <= ytop + 1e-9; y += g * step) { const [px, py] = tf(x, y); ctx.fillRect(px - 0.6, py - 0.6, 1.2, 1.2); }
-      ctx.strokeStyle = "rgba(208,138,62,0.7)"; ctx.setLineDash([4, 3]); ctx.lineWidth = 1;
+      for (let x = m.xmin; x <= m.xmax + 1e-9; x += g * step) for (let y = m.bottom; y <= ytop + 1e-9; y += g * step) { const [px, py] = tf(x, y); ctx.fillRect(px - 0.6 * this.k, py - 0.6 * this.k, 1.2 * this.k, 1.2 * this.k); }
+      ctx.strokeStyle = "rgba(208,138,62,0.7)"; ctx.setLineDash([4 * this.k, 3 * this.k]); ctx.lineWidth = this.k;
       ctx.beginPath(); for (const x of [m.xmin, m.xmax]) { const [a, b] = tf(x, m.bottom), [c, e] = tf(x, ytop); ctx.moveTo(a, b); ctx.lineTo(c, e); } ctx.stroke(); ctx.setLineDash([]);
     }
     if (this.active) {   // vértices de las interfaces (agarraderas)
-      for (let i = 0; i < d.interfaces.length; i++) for (const v of d.interfaces[i]) { const [px, py] = tf(v[0], v[1]); ctx.fillStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.fillRect(px - 3, py - 3, 6, 6); }
-      for (const a of d.assign) { const [px, py] = tf(a.p[0], a.p[1]); ctx.strokeStyle = "#0a6e3a"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px, py, 5, 0, 2 * Math.PI); ctx.stroke(); ctx.fillStyle = "#0a6e3a"; ctx.font = "11px Segoe UI"; ctx.textAlign = "left"; ctx.fillText(a.soil, px + 7, py - 6); }
+      for (let i = 0; i < d.interfaces.length; i++) for (const v of d.interfaces[i]) { const [px, py] = tf(v[0], v[1]); ctx.fillStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.fillRect(px - 3 * this.k, py - 3 * this.k, 6 * this.k, 6 * this.k); }
+      for (const a of d.assign) { const [px, py] = tf(a.p[0], a.p[1]); ctx.strokeStyle = "#0a6e3a"; ctx.lineWidth = 1.5 * this.k; ctx.beginPath(); ctx.arc(px, py, 5 * this.k, 0, 2 * Math.PI); ctx.stroke(); ctx.fillStyle = "#0a6e3a"; ctx.font = `${11 * this.k}px Segoe UI`; ctx.textAlign = "left"; ctx.fillText(a.soil, px + 7 * this.k, py - 6 * this.k); }
     }
     if (this.cur.length) {
-      ctx.strokeStyle = "#e5382b"; ctx.lineWidth = 1.8; ctx.beginPath();
+      ctx.strokeStyle = "#e5382b"; ctx.lineWidth = 1.8 * this.k; ctx.beginPath();
       this.cur.forEach((p, k) => { const [px, py] = tf(p[0], p[1]); if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py); });
       if (this.mouse) { const [px, py] = tf(this.mouse[0], this.mouse[1]); ctx.lineTo(px, py); }
       ctx.stroke();
-      for (const p of this.cur) { const [px, py] = tf(p[0], p[1]); ctx.fillStyle = "#e5382b"; ctx.beginPath(); ctx.arc(px, py, 3.5, 0, 2 * Math.PI); ctx.fill(); }
+      for (const p of this.cur) { const [px, py] = tf(p[0], p[1]); ctx.fillStyle = "#e5382b"; ctx.beginPath(); ctx.arc(px, py, 3.5 * this.k, 0, 2 * Math.PI); ctx.fill(); }
     }
     if (this.mouse && this.active) {   // cursor en cruz con el punto ya ajustado + marcador del snap (AutoCAD)
       const [px, py] = tf(this.mouse[0], this.mouse[1]);
-      ctx.strokeStyle = "#e5382b"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px - 9, py); ctx.lineTo(px + 9, py); ctx.moveTo(px, py - 9); ctx.lineTo(px, py + 9); ctx.stroke();
+      const s = this.k;
+      ctx.strokeStyle = "#e5382b"; ctx.lineWidth = s; ctx.beginPath(); ctx.moveTo(px - 9 * s, py); ctx.lineTo(px + 9 * s, py); ctx.moveTo(px, py - 9 * s); ctx.lineTo(px, py + 9 * s); ctx.stroke();
+      ctx.save(); ctx.translate(px, py); ctx.scale(s, s); ctx.translate(-px, -py);
       const k = this.snapKind; ctx.strokeStyle = "#ffb300"; ctx.lineWidth = 2; ctx.beginPath();
       if (k === "extremo") ctx.rect(px - 6, py - 6, 12, 12);
       else if (k === "medio") { ctx.moveTo(px, py - 7); ctx.lineTo(px + 7, py + 6); ctx.lineTo(px - 7, py + 6); ctx.closePath(); }
@@ -195,6 +199,7 @@ export class DrawTools {
       else ctx.rect(px - 3, py - 3, 6, 6);
       ctx.stroke();
       if (k && k !== "rejilla") { ctx.fillStyle = "#ffb300"; ctx.font = "11px Segoe UI"; ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText(k, px + 10, py - 8); }
+      ctx.restore();
     }
   }
 }
