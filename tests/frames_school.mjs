@@ -10,12 +10,13 @@ const url = process.argv[2] || "http://localhost:4700/?tema=oscuro";   // gráfi
 const SCHOOL = "C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-school";
 const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage();
-await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 2 });   // 2x: fotogramas de ~2450 px de ancho, nítidos al bajar a 720p
+await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 2 });
+await page.evaluateOnNewDocument(() => {});   // 2x: fotogramas de ~2450 px de ancho, nítidos al bajar a 720p
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const waitTotal = async () => page.waitForFunction(() => document.getElementById("log").textContent.includes("TOTAL "), { timeout: 120000 });
 await page.goto(url, { waitUntil: "networkidle0" }); await waitTotal();
 await page.evaluate(() => { const css = document.createElement("style"); css.textContent = "#log,footer{display:none!important}"; document.head.appendChild(css); window.scrollTo(0, 0); });
-const clip = await page.evaluate(() => { const r = document.querySelector(".stack").getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }; });
+const clip = await page.evaluate(() => { const r = document.querySelector("main").getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(Math.min(r.height, r.width * 9 / 16)) }; });   // ventana entera (sliders + lienzo), 16:9
 console.log("clip:", clip);
 const beats = {}; let cur = null, k = 0;
 const start = (name) => { cur = name; k = 0; rmSync(`${SCHOOL}/frames_geo_${name}`, { recursive: true, force: true }); mkdirSync(`${SCHOOL}/frames_geo_${name}`, { recursive: true }); beats[name] = 0; };
@@ -27,7 +28,7 @@ const moveTo = async (x, z, n = 6) => { const { px, py } = await worldPx(x, z); 
 const glide = async (x, z, n = 5) => { for (let i = 1; i <= n; i++) { await moveTo(x, z, 3); await frame(); } };   // cursor deslizándose con fotogramas
 const click = async () => { await page.mouse.down(); await page.mouse.up(); await wait(150); await frame(); };
 
-// 1) la referencia: Demo04 con la malla exacta de GEO5, 3 etapas
+// 1) la referencia: Demo04 con la malla exacta de GEO5{Yeo cinco}, 3 etapas
 start("intro"); await frames(4, 200);
 for (const s of ["1", "2"]) { await page.select("#stage", s); await wait(400); await frames(3, 200); }
 // 2) editor paramétrico
@@ -63,14 +64,14 @@ const hs = `titulo  Hekatan Geotechnic
 tema    oscuro
 
 escena
-  voz  Hekatan Geotechnic: elementos finitos geotécnicos corriendo en el navegador.
-  voz  Este es el talud de referencia de GEO5, con sus tres etapas, y el resultado coincide a doce cifras.
+  voz  Hekatan Geotechnic{Jékatan Yeotécnic}: elementos finitos geotécnicos corriendo en el navegador.
+  voz  Este es el talud de referencia de GEO5{Yeo cinco}, con sus tres etapas, y el resultado coincide a doce cifras.
   sub  La referencia: GEO5, tres etapas
   centro  struct3d frames_geo_intro n ${n("intro")} fps 2
 
 escena
-  voz  El talud se define como en GEO5: márgenes, interfaces y un suelo por región.
-  voz  Con un slider cambias la altura, y el factor de seguridad se recalcula solo.
+  voz  El talud se define como en GEO5{Yeo cinco}: márgenes, interfaces y un suelo por región.
+  voz  Con un slider{eslaider} cambias la altura, y el factor de seguridad se recalcula solo.
   sub  Altura del talud con un slider
   centro  struct3d frames_geo_param n ${n("param")} fps 3
 
@@ -85,8 +86,8 @@ escena
   centro  struct3d frames_geo_corona n ${n("corona")} fps 2
 
 escena
-  voz  Y también se dibuja con el ratón, con snaps como AutoCAD: extremo, punto medio e intersección.
-  voz  Enter cierra la polilínea de borde a borde y el modelo se remalla solo.
+  voz  Y también se dibuja con el ratón, con snaps como AutoCAD{Ótocad}: extremo, punto medio e intersección.
+  voz  Enter{énter} cierra la polilínea de borde a borde y el modelo se remalla solo.
   sub  Dibujar una interfaz
   centro  struct3d frames_geo_dibujo n ${n("dibujo")} fps 6
 
@@ -101,13 +102,13 @@ escena
   centro  struct3d frames_geo_sobrecarga n ${n("sobrecarga")} fps 6
 
 escena
-  voz  Los parámetros del suelo también van con sliders: baja la fricción y cae el factor de seguridad.
+  voz  Los parámetros del suelo también van con sliders{eslaiders}: baja la fricción y cae el factor de seguridad.
   sub  Fricción del suelo
   centro  struct3d frames_geo_phi n ${n("phi")} fps 2
 
 escena
-  voz  Los asientos y la resultante, con la escala y la paleta de GEO5.
-  voz  Nos vemos en Hekatan Engineers.
+  voz  Los asientos y la resultante, con la escala y la paleta de GEO5{Yeo cinco}.
+  voz  Nos vemos en Hekatan Engineers{Jékatan Enyiníers}.
   sub  Asientos y resultante
   centro  struct3d frames_geo_dz n ${n("dz")} fps 2
 `;

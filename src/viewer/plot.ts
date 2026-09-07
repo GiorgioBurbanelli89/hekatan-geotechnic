@@ -148,7 +148,8 @@ export class SlopePlot {
       if (!EMAT.includes(mi + 1)) continue;
       const [cxm, cym] = cen(mi + 1);
       const nm = this.m.MATNAMES?.[mi] ?? `SUELO ${mi + 1}`;
-      box(cxm, cym - (mi === 1 ? 2.5 : 0), [nm, `φ=${MAT[mi][2].toFixed(1)}°  c=${MAT[mi][3].toFixed(0)} kPa`, `γ=${MAT[mi][4].toFixed(0)} kN/m³`]);
+      // capas finas: cajas alternadas en x para que no se pisen
+      box(cxm + [0, -8, 8, -16, 16][mi % 5], cym - (mi === 1 ? 2.5 : 0), [nm, `φ=${MAT[mi][2].toFixed(1)}°  c=${MAT[mi][3].toFixed(0)} kPa`, `γ=${MAT[mi][4].toFixed(0)} kN/m³`]);
     }
     // cargas de la etapa
     const arrow = (xa: number, za: number, xb: number, zb: number, lw: number) => {

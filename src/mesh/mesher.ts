@@ -308,8 +308,24 @@ function anchorLoad(F: Float64Array, Fk: number, p: Pt, ang: number, X: number[]
     if (dist < bestD) { bestD = dist; best = e; L1 = l1; L2 = l2; }
   }
   if (best < 0) return;
+  if (bestD > 1e-6) {
+    // el punto cae FUERA del dominio (p. ej. ancla escrita en el aire): se proyecta al punto más cercano del contorno y
+    // se recalculan las baricéntricas; con N extrapoladas (negativas) el Newton divergía ya en SRF=1 (2026-09-06)
+    let q: Pt = p, dq = Infinity;
+    for (let i = 0; i < outline.length; i++) {
+      const a = outline[i], b = outline[(i + 1) % outline.length];
+      const dx = b[0] - a[0], dy = b[1] - a[1], L2s = dx * dx + dy * dy || 1;
+      const t = Math.min(1, Math.max(0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2s));
+      const c: Pt = [a[0] + t * dx, a[1] + t * dy], d = Math.hypot(c[0] - p[0], c[1] - p[1]);
+      if (d < dq) { dq = d; q = c; }
+    }
+    const [n0, n1, n2] = ELE[best];
+    const ax = X[n0], ay = Y[n0], bx = X[n1], by = Y[n1], cx = X[n2], cy = Y[n2];
+    const det = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+    L1 = ((by - cy) * (q[0] - cx) + (cx - bx) * (q[1] - cy)) / det; L2 = ((cy - ay) * (q[0] - cx) + (ax - cx) * (q[1] - cy)) / det;
+    meshDebug(`ancla en (${p[0]},${p[1]}) fuera del dominio: llevada al contorno en (${q[0].toFixed(2)},${q[1].toFixed(2)})`);
+  }
   const L3 = 1 - L1 - L2;
   const N = [L1 * (2 * L1 - 1), L2 * (2 * L2 - 1), L3 * (2 * L3 - 1), 4 * L1 * L2, 4 * L2 * L3, 4 * L3 * L1];
   ELE[best].forEach((n, k) => { F[2 * n] += fx * N[k]; F[2 * n + 1] += fy * N[k]; });
-  void outline;
 }

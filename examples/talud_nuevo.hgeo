@@ -1,0 +1,22 @@
+# TALUD NUEVO desde cero — carretera con banqueta sobre tres suelos (nada de la Demo04)
+# 1) el rango del modelo: de x=0 a x=50, fondo a z=-22
+margenes xmin=0 xmax=50 fondo=-22
+# 2) el TERRENO (primera interfaz): pie plano, cara 1:1.5 (33.7°) hasta una banqueta, segunda cara, corona
+interfaz 0,-12 14,-12 20,-8 26,-8 32,-4 50,-4
+# 3) las CAPAS: cada interfaz siguiente es el techo de un suelo más profundo
+interfaz 0,-15 20,-14.5 50,-13          # techo de la arcilla blanda
+interfaz 0,-19 50,-18.5                 # techo de la roca meteorizada
+# 4) los SUELOS (E kPa, nu, phi °, c kPa, gamma kN/m3)
+suelo RELLENO   E=25000  nu=0.30 phi=28 c=8   gamma=18
+suelo ARCILLA   E=8000   nu=0.35 phi=17 c=22  gamma=16.5
+suelo ROCA_MET  E=150000 nu=0.25 phi=38 c=120 gamma=22
+# 5) qué suelo hay en cada región: un punto dentro de cada una (como GEO5)
+asignar RELLENO  en 25,-10
+asignar ARCILLA  en 25,-16
+asignar ROCA_MET en 25,-20
+# 6) tamaño de malla
+malla 2.0
+# 7) etapas: cada una AÑADE cargas a la anterior
+etapa peso propio
+etapa +sobrecarga   q=30 en 36,-4 -> 46,-4
+etapa +ancla        F=150 en 29,-6 ang=-20     # cabeza en la cara superior (26,-8)→(32,-4)
