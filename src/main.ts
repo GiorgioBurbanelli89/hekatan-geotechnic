@@ -200,7 +200,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
       if (!fromText) edText.value = serializeHgeo(def);
       dSoil.innerHTML = def.soils.map((s) => `<option value="${s.name}">${s.name}</option>`).join("");
       if (!draw.state.soil || !def.soils.some((s) => s.name === draw.state.soil)) draw.state.soil = def.soils[0]?.name ?? "";
-      model = null; stages = []; fsEl.innerHTML = ""; matsEl.innerHTML = "";
+      model = null; stages = []; fsEl.innerHTML = ""; matsEl.innerHTML = ""; $<HTMLDivElement>("sliders").innerHTML = ""; buildGeomSliders();   // sin malla no hay sliders de suelo; sí los de geometría
       plot!.blank(mg, top, !def.interfaces[0]?.length ? "borrador · dibuja el terreno: interfaz de margen a margen" : "borrador · falta un suelo: suelo NOMBRE E= nu= phi= c= gamma=");
       draw.sheetTop = top; draw.setDef(def); draw.setMap(plot!.mapping());
       (window as unknown as { __geoMap: unknown }).__geoMap = plot!.mapping();
@@ -320,8 +320,21 @@ draw.onPrompt = (p) => {   // tras cada orden: prompt + la barra refleja lo escr
   $<HTMLInputElement>("snap").checked = st.snap; $<HTMLInputElement>("osnap").checked = st.osnap; $<HTMLInputElement>("ortho").checked = st.ortho;
 };
 draw.onTool = (t) => setTool(t);
+// ---- ARCHIVO: nuevo / abrir / guardar (.hgeo). Un modelo = un fichero de texto. ----
+function nuevoModelo() { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = "# modelo nuevo"; draw.state.soil = ""; applyHgeo(); draw.command("interfaz"); }
+$<HTMLButtonElement>("fNuevo").addEventListener("click", nuevoModelo);
+$<HTMLButtonElement>("fAbrir").addEventListener("click", () => $<HTMLInputElement>("fFile").click());
+$<HTMLInputElement>("fFile").addEventListener("change", async (e) => {
+  const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
+  selModel.value = "hgeo"; edWrap.hidden = false; edText.value = await f.text(); applyHgeo(); (e.target as HTMLInputElement).value = "";
+});
+$<HTMLButtonElement>("fGuardar").addEventListener("click", () => {
+  const txt = edText.value.trim() ? edText.value : (def ? serializeHgeo(def) : "");
+  const nombre = (txt.match(/^#\s*([^\n]+)/)?.[1] ?? "talud").trim().replace(/[^\w\-]+/g, "_").slice(0, 40) || "talud";
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type: "text/plain" })); a.download = nombre + ".hgeo"; a.click(); URL.revokeObjectURL(a.href);
+});
 draw.onDsl = (line) => {
-  if (line.toLowerCase() === "nuevo" || line.toLowerCase() === "new") { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = "# modelo nuevo"; draw.state.soil = ""; applyHgeo(); return; }
+  if (line.toLowerCase() === "nuevo" || line.toLowerCase() === "new") { nuevoModelo(); return; }
   if (selModel.value !== "hgeo") { selModel.value = "hgeo"; edWrap.hidden = false; }
   edText.value = (edText.value.trimEnd() + "\n" + line).replace(/^\n/, "");
   applyHgeo();

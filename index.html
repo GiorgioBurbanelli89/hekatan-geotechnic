@@ -64,6 +64,12 @@
   <main>
     <aside class="panel">
       <h2>Modelo</h2>
+      <div class="row" id="archivo" style="gap:6px;margin-bottom:6px">
+        <button id="fNuevo" class="tb" title="hoja en blanco: margenes + dibujar el terreno" style="width:100%">▢ Nuevo</button>
+        <button id="fAbrir" class="tb" title="abrir un fichero .hgeo" style="width:100%">📂 Abrir</button>
+        <button id="fGuardar" class="tb" title="guardar el modelo como .hgeo" style="width:100%">💾 Guardar</button>
+        <input type="file" id="fFile" accept=".hgeo,.txt" hidden>
+      </div>
       <label>Ejemplo</label>
       <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option></select>
       <div id="editor" hidden>

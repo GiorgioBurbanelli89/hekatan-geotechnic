@@ -1,0 +1,17 @@
+# TALUD 4 SUELOS (dibujado desde cero con la linea de ordenes, video DIBUJO4)
+margenes xmin=0 xmax=60 fondo=-26
+interfaz 0,-14 16,-14 24,-9 32,-9 40,-3 60,-3
+interfaz 0,-17 30,-16.5 60,-15
+interfaz 0,-20 60,-19.5
+interfaz 0,-23.5 60,-23.5
+suelo LIMO_ARENOSO E=20000 nu=0.3 phi=26 c=10 gamma=17.5
+suelo ARCILLA_BLANDA E=6000 nu=0.4 phi=15 c=18 gamma=16
+suelo ARENA_DENSA E=45000 nu=0.3 phi=34 c=2 gamma=19
+suelo GRAVA E=90000 nu=0.25 phi=40 c=1 gamma=21
+asignar ARCILLA_BLANDA en 30,-18
+asignar ARENA_DENSA en 30,-21.5
+asignar GRAVA en 30,-25
+malla 2
+etapa peso propio
+etapa +sobrecarga q=40 en 44,-3 -> 56,-3
+etapa +ancla F=200 en 36,-6 ang=-15
