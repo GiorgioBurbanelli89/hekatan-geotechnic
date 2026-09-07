@@ -270,7 +270,7 @@ export class GeoFem {
   private nrstep(SRF: number, Fext: Float64Array, rstep: number, trace?: { u: Float64Array }[]): [boolean, Float64Array, number] {
     const maxit = 100;
     const ab: [number, number][] = [];
-    for (let mm = 0; mm < 2; mm++) {
+    for (let mm = 0; mm < this.MAT.length; mm++) {   // TODOS los suelos (antes tope 2: con 3+ suelos leía fuera del arreglo)
       const phi = Math.atan(Math.tan(this.MAT[mm][2] * Math.PI / 180) / SRF), c = this.MAT[mm][3] / SRF;
       ab[mm + 1] = this.dpAb(phi, c);
     }

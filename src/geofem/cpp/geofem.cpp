@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <array>
 #include <string>
 #include <algorithm>
 #include <emscripten.h>
@@ -256,7 +257,7 @@ struct GeoFem {
 
   void resetState() { std::fill(SIG.begin(), SIG.end(), 0.0); std::fill(hasDep.begin(), hasDep.end(), 0); }
 
-  void assembleInc(const double* du, const double ab[][2], bool commit, double* Fi) {
+  void assembleInc(const double* du, const std::vector<std::array<double, 2>>& ab, bool commit, double* Fi) {
     std::fill(Fi, Fi + ndof, 0.0);
     double ue[12], deps[4], sig[4], Dep[16];
     for (int e = 0; e < ne; e++) {
@@ -283,8 +284,8 @@ struct GeoFem {
 
   bool nrstep(double SRF, const double* Fext, int rstep, vector<double>& u, int& itOut) {
     const int maxit = 100;
-    double ab[3][2] = {{0, 0}, {0, 0}, {0, 0}};
-    for (int mm = 0; mm < 2; mm++) {
+    std::vector<std::array<double, 2>> ab(nmat + 1, {0.0, 0.0});   // un par (alpha,k) por suelo, TODOS (antes ab[3] fijo: con 3+ suelos leía basura)
+    for (int mm = 0; mm < nmat; mm++) {
       double phi = std::atan(std::tan(MAT[mm * 6 + 2] * 3.141592653589793 / 180) / SRF), c = MAT[mm * 6 + 3] / SRF;
       dpAb(phi, c, ab[mm + 1][0], ab[mm + 1][1]);
     }
