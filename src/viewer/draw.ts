@@ -23,6 +23,12 @@ export class DrawTools {
   private snapKind: SnapKind = null;         // qué snap atrapó el cursor (para el marcador y el estado)
   onChange: ((def: SlopeDef) => void) | null = null;     // el modelo cambió (remallar + recalcular)
   onStatus: ((msg: string) => void) | null = null;
+  onEcho: ((line: string) => void) | null = null;      // LÍNEA DE ÓRDENES (AutoCAD): eco de cada orden y punto → historial
+  onPrompt: ((p: string) => void) | null = null;      // qué se espera ahora ("INTERFAZ punto siguiente…")
+  onTool: ((t: Tool) => void) | null = null;          // la línea de órdenes pide cambiar de herramienta (la barra se actualiza)
+  onDsl: ((line: string) => void) | null = null;      // una orden del .hgeo escrita a mano (margenes, suelo, malla, etapa…)
+  /** techo de la hoja en blanco (borrador sin terreno): hasta dónde llega la rejilla */
+  sheetTop: number | null = null;
   private ctx: CanvasRenderingContext2D;
   private map: Map2 | null = null;
   private def: SlopeDef | null = null;
@@ -44,7 +50,7 @@ export class DrawTools {
       if ((e.target as HTMLElement)?.tagName === "TEXTAREA" || (e.target as HTMLElement)?.tagName === "INPUT") return;
       if (e.key === "Shift") { this.shift = true; this.render(); }
       if (e.key === "Enter") this.finish();
-      if (e.key === "Escape") { this.cur = []; this.render(); this.status("cancelado"); }
+      if (e.key === "Escape") this.cancel();
       if (e.key === "Backspace" && this.cur.length) { this.cur.pop(); this.render(); }
       if (e.key === "F9") { e.preventDefault(); this.state.snap = !this.state.snap; this.status(`snap rejilla ${this.state.snap ? "ON" : "OFF"}`); }
       if (e.key === "F3") { e.preventDefault(); this.state.osnap = !this.state.osnap; this.status(`snap a objetos ${this.state.osnap ? "ON" : "OFF"}`); }
@@ -59,6 +65,51 @@ export class DrawTools {
   get active() { return this.state.tool !== "ver"; }
 
   private status(m: string) { this.onStatus?.(m); }
+  private echo(m: string) { this.onEcho?.(m); }
+  cancel() { this.cur = []; this.render(); this.status("cancelado"); this.echo("*Cancelado*"); this.prompt(); }
+  /** el prompt de la línea de órdenes según herramienta y estado (como la ventana de órdenes de AutoCAD) */
+  prompt() {
+    const t = this.state.tool, n = this.cur.length;
+    const p = t === "ver" ? "Orden:"
+      : t === "interfaz" ? (n === 0 ? "INTERFAZ  primer punto (x,y):" : `INTERFAZ  punto ${n + 1} (x,y · @dx,dy) o [Enter=terminar · Esc=cancelar]:`)
+      : t === "asignar" ? `ASIGNAR ${this.state.soil || "(elige suelo)"}  punto dentro de la región:`
+      : t === "sobrecarga" ? (n === 0 ? `SOBRECARGA q=${this.state.q} kPa  primer punto sobre el terreno:` : "SOBRECARGA  segundo punto:")
+      : t === "ancla" ? `ANCLA F=${this.state.F} kN ang=${this.state.ang}°  cabeza (x,y):`
+      : t === "mover" ? "MOVER  arrastra un vértice:" : "BORRAR  vértice o interfaz:";
+    this.onPrompt?.(p);
+  }
+  /** Una línea escrita en la línea de órdenes: herramienta, coordenada, ajuste o una orden del .hgeo. */
+  command(raw: string) {
+    const line = raw.trim();
+    if (!line) { this.echo(this.cur.length ? "  ⏎ terminar" : ""); this.finish(); this.prompt(); return; }
+    const low = line.toLowerCase(), toks = low.split(/\s+/), c = toks[0];
+    const tools: Record<string, Tool> = { i: "interfaz", interfaz: "interfaz", interface: "interfaz", l: "interfaz", linea: "interfaz", line: "interfaz", pl: "interfaz", polilinea: "interfaz", pline: "interfaz",
+      a: "asignar", asignar: "asignar", h: "asignar", hatch: "asignar", sombrear: "asignar", q: "sobrecarga", sobrecarga: "sobrecarga", carga: "sobrecarga", load: "sobrecarga",
+      an: "ancla", ancla: "ancla", anchor: "ancla", m: "mover", mover: "mover", move: "mover", b: "borrar", borrar: "borrar", e: "borrar", erase: "borrar", v: "ver", ver: "ver", esc: "ver" };
+    // coordenada: x,y · @dx,dy (relativa al último punto) · @d<ang (polar, como AutoCAD)
+    const mc = line.match(/^(@?)\s*(-?\d+(?:\.\d+)?)\s*[,;]\s*(-?\d+(?:\.\d+)?)$/), mp = line.match(/^@\s*(-?\d+(?:\.\d+)?)\s*<\s*(-?\d+(?:\.\d+)?)$/);
+    if (mc || mp) {
+      if (!this.active) { this.status("elige antes una herramienta (interfaz, asignar, sobrecarga, ancla)"); this.echo(`? ${line} — no hay herramienta activa`); return; }
+      const ref = this.cur[this.cur.length - 1];
+      let p: Pt;
+      if (mp) { if (!ref) { this.echo("? polar necesita un punto anterior"); return; } const r = parseFloat(mp[1]), a = parseFloat(mp[2]) * Math.PI / 180; p = [ref[0] + r * Math.cos(a), ref[1] + r * Math.sin(a)]; }
+      else { const x = parseFloat(mc![2]), y = parseFloat(mc![3]); p = mc![1] ? (ref ? [ref[0] + x, ref[1] + y] : [x, y]) : [x, y]; }
+      this.echo(`> ${line}`); this.snapKind = null; this.pick([Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000], true); return;
+    }
+    this.echo(`Orden: ${line}`);
+    if (c in tools) { this.cur = []; this.onTool?.(tools[c]); this.prompt(); return; }
+    if (c === "u" || c === "deshacer" || c === "undo" || c === "z") { this.undo(); this.prompt(); return; }
+    if (c === "f3") { this.state.osnap = !this.state.osnap; this.status(`snap a objetos ${this.state.osnap ? "ON" : "OFF"}`); return; }
+    if (c === "f8" || c === "orto") { this.state.ortho = !this.state.ortho; this.status(`orto ${this.state.ortho ? "ON" : "OFF"}`); return; }
+    if (c === "f9") { this.state.snap = !this.state.snap; this.status(`snap rejilla ${this.state.snap ? "ON" : "OFF"}`); return; }
+    if ((c === "rejilla" || c === "grid") && toks[1]) { this.state.grid = parseFloat(toks[1]) || 1; this.render(); this.status(`rejilla ${this.state.grid} m`); return; }
+    const kv = line.match(/^(q|f|ang)\s*=\s*(-?\d+(?:\.\d+)?)$/i);
+    if (kv) { const k = kv[1].toLowerCase(), v = parseFloat(kv[2]); if (k === "q") this.state.q = v; else if (k === "f") this.state.F = v; else this.state.ang = v; this.status(`${k} = ${v}`); this.prompt(); return; }
+    if (c === "suelo" && toks[1] && !line.includes("=")) { const nm = this.def?.soils.find((s) => s.name.toLowerCase() === toks[1])?.name; if (nm) { this.state.soil = nm; this.status(`suelo activo: ${nm}`); this.prompt(); return; } }
+    if (c === "etapa" && /^\d+$/.test(toks[1] ?? "") && toks.length === 2) { this.state.stage = parseInt(toks[1]) - 1; this.status(`las cargas van a la etapa ${toks[1]}`); this.prompt(); return; }
+    // lo demás es una orden del .hgeo (margenes, suelo NOMBRE E=…, asignar … en x,y, malla, etapa, capa, talud, nuevo)
+    this.onDsl?.(line); this.prompt();
+  }
   private world(e: MouseEvent): Pt {
     const r = this.canvas.getBoundingClientRect();
     const px = (e.clientX - r.left) * (this.canvas.width / r.width), py = (e.clientY - r.top) * (this.canvas.height / r.height);
@@ -108,7 +159,13 @@ export class DrawTools {
   private onDown(e: MouseEvent) {
     if (!this.map || !this.def || !this.active || e.button !== 0) return;
     const p = this.snapPt(this.world(e), this.cur[this.cur.length - 1]);
+    this.pick(p);
+  }
+  /** un punto entra (clic o escrito en la línea de órdenes) y la herramienta actual lo consume */
+  pick(p: Pt, typed = false) {
+    if (!this.def || !this.active) return;
     const d = this.def;
+    if (!typed) this.echo(`${this.state.tool.toUpperCase()}  punto: ${fmt(p[0])},${fmt(p[1])}${this.snapKind ? "  ◆ " + this.snapKind : ""}`);
     switch (this.state.tool) {
       case "interfaz": this.cur.push(p); this.render(); this.status(`punto ${this.cur.length}: ${p[0]},${p[1]}  (Enter o doble clic para terminar)`); break;
       case "asignar": {
@@ -116,7 +173,8 @@ export class DrawTools {
         this.push(); d.assign = d.assign.filter((a) => regionOf(d, a.p) !== regionOf(d, p)); d.assign.push({ soil: this.state.soil, p }); this.commit(`${this.state.soil} asignado en ${p[0]},${p[1]}`); break;
       }
       case "sobrecarga": {
-        const pt: Pt = [p[0], terrainY(d, p[0])];
+        const ty = terrainY(d, p[0]); if (!Number.isFinite(ty)) { this.status("primero el terreno (la primera interfaz)"); return; }
+        const pt: Pt = [p[0], ty];
         this.cur.push(pt); this.render();
         if (this.cur.length === 2) { this.push(); const st = d.stages[this.state.stage] ?? d.stages[d.stages.length - 1]; st.surcharges.push({ q: this.state.q, a: this.cur[0], b: this.cur[1] }); this.cur = []; this.commit(`sobrecarga ${this.state.q} kPa en la etapa ${this.state.stage + 1}`); }
         else this.status("segundo punto de la sobrecarga");
@@ -131,13 +189,15 @@ export class DrawTools {
         break;
       }
     }
+    this.prompt();
   }
   private onUp() { if (this.drag) { this.drag = null; this.commit("vértice movido"); } }
   private finish() {
     if (!this.def) return;
     if (this.state.tool === "interfaz" && this.cur.length >= 2) {
+      if (!this.def.margins) { this.status("primero los márgenes: margenes xmin= xmax= fondo="); this.echo("? faltan los márgenes"); return; }
       this.push();
-      const m = this.def.margins!;
+      const m = this.def.margins;
       const poly = spanInterface(this.cur, m.xmin, m.xmax);
       this.def.interfaces.push(poly); this.cur = [];
       this.commit(`interfaz ${this.def.interfaces.length} (${poly.length} puntos)`);
@@ -155,7 +215,7 @@ export class DrawTools {
   }
   private push() { if (this.def) this.history.push(JSON.stringify(this.def)); if (this.history.length > 50) this.history.shift(); }
   undo() { if (!this.history.length || !this.def) { this.status("nada que deshacer"); return; } const s = this.history.pop()!; Object.assign(this.def, JSON.parse(s)); this.cur = []; this.commit("deshecho"); }
-  private commit(msg: string) { this.status(msg); this.render(); if (this.def) this.onChange?.(this.def); }
+  private commit(msg: string) { this.status(msg); this.echo(`  → ${msg}`); this.render(); if (this.def) this.onChange?.(this.def); }
 
   /** capa de dibujo: rejilla, márgenes, polilínea en curso, cursor con snap */
   render() {
@@ -165,7 +225,7 @@ export class DrawTools {
     const tf = this.map.tf, d = this.def;
     if (this.active && d.margins && this.state.grid > 0) {
       const m = d.margins, g = this.state.grid;
-      const ytop = Math.max(...d.interfaces[0].map((p) => p[1])) + 2 * g;
+      const ytop = d.interfaces[0]?.length ? Math.max(...d.interfaces[0].map((p) => p[1])) + 2 * g : (this.sheetTop ?? m.bottom + 20);   // sin terreno aún: rejilla hasta el techo de la hoja
       ctx.fillStyle = "rgba(0,0,0,0.28)";
       const nx = (m.xmax - m.xmin) / g, ny = (ytop - m.bottom) / g;
       const step = nx * ny > 6000 ? Math.ceil(Math.sqrt(nx * ny / 6000)) : 1;
@@ -217,7 +277,8 @@ function footOnSegment(p: Pt, a: Pt, b: Pt): Pt | null {
   const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2; if (t < 0 || t > 1) return null;
   return [a[0] + t * dx, a[1] + t * dy];
 }
-function terrainY(d: SlopeDef, x: number): number { const m = d.margins!; return interfaceY(spanInterface(d.interfaces[0], m.xmin, m.xmax), x); }
+function terrainY(d: SlopeDef, x: number): number { const m = d.margins!; if (!d.interfaces[0]?.length) return NaN; return interfaceY(spanInterface(d.interfaces[0], m.xmin, m.xmax), x); }
+const fmt = (v: number) => String(Math.round(v * 1000) / 1000);
 export function regionOf(d: SlopeDef, p: Pt): number {
   const m = d.margins!;
   return d.interfaces.reduce((n, it) => n + (interfaceY(spanInterface(it, m.xmin, m.xmax), p[0]) > p[1] + 1e-9 ? 1 : 0), 0);

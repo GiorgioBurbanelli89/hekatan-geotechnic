@@ -45,7 +45,7 @@ const num = (s: string) => { const v = parseFloat(s.replace(",", ".")); if (!Num
 const pts = (toks: string[]): Pt[] => toks.map((t) => { const m = t.match(/^(-?[\d.]+),(-?[\d.]+)$/); if (!m) throw new Error(`punto inválido: "${t}" (usa x,y)`); return [num(m[1]), num(m[2])]; });
 const kv = (toks: string[]): Record<string, string> => { const o: Record<string, string> = {}; for (const t of toks) { const m = t.match(/^([A-Za-z_]+)=(.+)$/); if (m) o[m[1].toLowerCase()] = m[2]; } return o; };
 
-export function parseHgeo(text: string): SlopeDef {
+export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDef {   // draft: borrador sin terreno/suelo (hoja en blanco para dibujar)
   const def: SlopeDef = { outline: [], soils: [], layers: [], h: 2.5, stages: [], interfaces: [], assign: [], comments: [] };
   const lines = text.split(/\r?\n/);
   lines.forEach((raw, k) => {
@@ -88,8 +88,10 @@ export function parseHgeo(text: string): SlopeDef {
     if (!def.margins) { const xs = def.interfaces.flat().map((p) => p[0]), ys = def.interfaces.flat().map((p) => p[1]); def.margins = { xmin: Math.min(...xs), xmax: Math.max(...xs), bottom: Math.min(...ys) - 10 }; }
     def.outline = outlineFromInterfaces(def);
   }
-  if (def.outline.length < 3) throw new Error("falta el terreno: `interfaz x,y …` (o un `contorno`)");
-  if (!def.soils.length) throw new Error("falta al menos un suelo");
+  if (!opts.draft) {
+    if (def.outline.length < 3) throw new Error("falta el terreno: `interfaz x,y …` (o un `contorno`)");
+    if (!def.soils.length) throw new Error("falta al menos un suelo");
+  }
   if (!def.stages.length) def.stages.push({ name: "peso propio", surcharges: [], anchors: [] });
   return def;
 }

@@ -40,6 +40,12 @@
     .fs { margin-top: 10px; font-size: 13px; }
     .fs table { width: 100%; border-collapse: collapse; } .fs td, .fs th { padding: 3px 4px; border-bottom: 1px solid #332b1b; text-align: right; } .fs th:first-child, .fs td:first-child { text-align: left; }
     .fs .ok { color: #7ee08a; font-weight: 600; }
+    #cmd { margin-top: 6px; background: #0b0906; border: 1px solid #4a3f28; border-radius: 6px; font: 12.5px Consolas, monospace; color: #cfc4a6; }
+    #cmdhist { padding: 4px 8px 0; min-height: 3.4em; max-height: 5.2em; overflow: hidden; white-space: pre; }
+    #cmdhist div { line-height: 1.3; opacity: .85; } #cmdhist div:last-child { opacity: 1; color: #f3ead0; }
+    .cmdrow { display: flex; align-items: center; gap: 6px; padding: 3px 8px 5px; border-top: 1px solid #332b1b; }
+    #cmdprompt { color: var(--oro); white-space: nowrap; font-weight: 600; }
+    #cmdin { flex: 1; width: auto; border: 0; background: transparent; padding: 2px 4px; font: inherit; color: #f3ead0; outline: none; }
     #plot { width: 100%; height: auto; background: #fff; border-radius: 6px; display: block; }
     #hover { font: 12px Consolas, monospace; color: var(--mut); margin-top: 6px; min-height: 16px; }
     #log { font: 11.5px Consolas, monospace; white-space: pre; overflow: auto; height: 220px; background: #0b0906; border: 1px solid #3a3020; border-radius: 6px; padding: 8px; color: #cfc6a8; margin-top: 10px; }
@@ -113,6 +119,10 @@
         <canvas id="draw" width="1180" height="700"></canvas>
       </div>
       <div id="dstatus" class="mats" style="margin-top:2px;min-height:16px"></div>
+      <div id="cmd" title="línea de órdenes (AutoCAD): herramienta (interfaz, asignar, sobrecarga, ancla, mover, borrar), coordenada x,y · @dx,dy · @d<ang, o una orden del .hgeo (margenes, suelo, malla, etapa)">
+        <div id="cmdhist"></div>
+        <div class="cmdrow"><span id="cmdprompt">Orden:</span><input id="cmdin" autocomplete="off" spellcheck="false" placeholder="escribe una orden o una coordenada x,y y pulsa Enter"></div>
+      </div>
       <div id="hover">mueve el ratón sobre el talud para leer el valor</div>
       <div id="log">Pulsa «Calcular FS». El cálculo corre en tu navegador (Web Worker); el log es el mismo que imprime el driver de Hekatan Python y coincide iteración a iteración con GEO5.</div>
     </section>

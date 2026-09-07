@@ -62,6 +62,33 @@ export class SlopePlot {
   /** Transformación mundo↔píxel del último dibujo (para la capa de herramientas). */
   mapping() { return this.last ? { tf: this.last.tf, inv: this.last.inv } : null; }
 
+  /** HOJA EN BLANCO (borrador sin malla): márgenes a trazos y ejes, misma transformación que draw() para dibujar encima. */
+  blank(m: { xmin: number; xmax: number; bottom: number }, top: number, title = ""): void {
+    const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height, k = this.k;
+    const FG = this.dark ? "#f3ead0" : "#000", BG = this.dark ? "#000" : "#fff";
+    ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+    const grid = { xmin: m.xmin, xmax: m.xmax, zmin: m.bottom, zmax: top, NX: 2, NZ: 2, Z: new Float64Array(4).fill(NaN) } as unknown as ReturnType<typeof gridField>;
+    const mL = 62 * k, mR = 118 * k, mT = 40 * k, mB = 48 * k;
+    const xr = grid.xmax - grid.xmin + 2, zr = grid.zmax - grid.zmin + 4;
+    const sc = Math.min((W - mL - mR) / xr, (H - mT - mB) / zr);
+    const pw = xr * sc, ph = zr * sc, x0 = mL + (W - mL - mR - pw) / 2, y0 = mT + (H - mT - mB - ph) / 2;
+    const tf = (x: number, z: number): [number, number] => [x0 + (x - (grid.xmin - 1)) * sc, y0 + ph - (z - (grid.zmin - 1)) * sc];
+    const inv = (px: number, py: number): [number, number] => [(px - x0) / sc + grid.xmin - 1, (y0 + ph - py) / sc + grid.zmin - 1];
+    this.last = { grid, tf, inv };
+    const [a, b] = tf(m.xmin, top), [c, d] = tf(m.xmax, m.bottom);
+    ctx.strokeStyle = "rgba(208,138,62,0.85)"; ctx.setLineDash([6 * k, 4 * k]); ctx.lineWidth = 1.2 * k; ctx.strokeRect(a, b, c - a, d - b); ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(208,138,62,0.9)"; ctx.font = `${11 * k}px Segoe UI, Arial`; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+    ctx.fillText(`márgenes  x = ${m.xmin} … ${m.xmax} m   fondo z = ${m.bottom} m`, a + 4 * k, b - 3 * k);
+    ctx.strokeStyle = FG; ctx.lineWidth = 1 * k; ctx.strokeRect(x0, y0, pw, ph);
+    ctx.fillStyle = FG; ctx.font = `${11 * k}px Segoe UI, Arial`; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (let x = Math.ceil((grid.xmin - 1) / 5) * 5; x <= grid.xmax + 1; x += 5) { const [q] = tf(x, 0); ctx.fillText(String(x), q, y0 + ph + 4 * k); ctx.beginPath(); ctx.moveTo(q, y0 + ph); ctx.lineTo(q, y0 + ph - 4 * k); ctx.stroke(); }
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    for (let z = Math.ceil((grid.zmin - 1) / 5) * 5; z <= grid.zmax + 3; z += 5) { const [, q] = tf(0, z); ctx.fillText(String(z), x0 - 6 * k, q); ctx.beginPath(); ctx.moveTo(x0, q); ctx.lineTo(x0 + 4 * k, q); ctx.stroke(); }
+    ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText("x [m]", x0 + pw / 2, H - 4 * k);
+    ctx.save(); ctx.translate(14 * k, y0 + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = "top"; ctx.fillText("z [m]", 0, 0); ctx.restore();
+    ctx.font = `bold ${13 * k}px Segoe UI, Arial`; ctx.textBaseline = "bottom"; ctx.fillText(title, x0 + pw / 2, mT - 8 * k);
+  }
+
   /** Sliders: materiales y cargas nuevas sin rehacer las aristas (misma malla). */
   setModel(m: PlotModel): void { this.m = m; }
 

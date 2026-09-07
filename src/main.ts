@@ -22,6 +22,7 @@ const slidersEl = $<HTMLDivElement>("sliders");
 const canvas = $<HTMLCanvasElement>("plot"), drawCanvas = $<HTMLCanvasElement>("draw");
 const edWrap = $<HTMLDivElement>("editor"), edText = $<HTMLTextAreaElement>("hgeo"), edApply = $<HTMLButtonElement>("apply"), edMsg = $<HTMLDivElement>("edmsg");
 const dStatus = $<HTMLDivElement>("dstatus"), dSoil = $<HTMLSelectElement>("dsoil"), dStage = $<HTMLSelectElement>("dstage");
+const cmdIn = $<HTMLInputElement>("cmdin"), cmdHist = $<HTMLDivElement>("cmdhist"), cmdPrompt = $<HTMLSpanElement>("cmdprompt");
 
 let base: GeoModel | null = null;      // modelo tal cual (fixture GEO5 o malla del DSL)
 let model: GeoModel | null = null;     // base + sliders
@@ -145,6 +146,19 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
   try {
     const t0 = performance.now();
     def = d;
+    if (!def.interfaces[0]?.length || !def.soils.length) {   // BORRADOR: todavía no se puede mallar → hoja en blanco para dibujar
+      if (!def.margins) def.margins = { xmin: 0, xmax: 40, bottom: -20 };
+      const mg = def.margins, top = mg.bottom + Math.max(10, 0.6 * (mg.xmax - mg.xmin));
+      if (!fromText) edText.value = serializeHgeo(def);
+      dSoil.innerHTML = def.soils.map((s) => `<option value="${s.name}">${s.name}</option>`).join("");
+      if (!draw.state.soil || !def.soils.some((s) => s.name === draw.state.soil)) draw.state.soil = def.soils[0]?.name ?? "";
+      model = null; stages = []; fsEl.innerHTML = ""; matsEl.innerHTML = "";
+      plot!.blank(mg, top, !def.interfaces[0]?.length ? "borrador · dibuja el terreno: interfaz de margen a margen" : "borrador · falta un suelo: suelo NOMBRE E= nu= phi= c= gamma=");
+      draw.sheetTop = top; draw.setDef(def); draw.setMap(plot!.mapping());
+      (window as unknown as { __geoMap: unknown }).__geoMap = plot!.mapping();
+      edMsg.textContent = !def.interfaces[0]?.length ? "borrador: falta el terreno (dibújalo con «interfaz» o escríbelo)" : "borrador: falta al menos un suelo"; edMsg.style.color = "var(--oro)";
+      draw.prompt(); return;
+    }
     const { model: m, stats } = meshSlope(def);
     m.MATNAMES = def.soils.map((s) => s.name);
     m.name = `Talud .hgeo`;
@@ -158,7 +172,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
     setBase(m, only);
   } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; }
 }
-function applyHgeo() { try { applyDef(parseHgeo(edText.value), true); } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; } }
+function applyHgeo() { try { applyDef(parseHgeo(edText.value, { draft: true }), true); } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; } }
 
 function appendLog(line: string) {
   const cls = line.startsWith("    SRM") ? "srm" : line.includes(">>> FS=") ? "fsl" : line.includes("DIVERGE") ? "div" : "";
@@ -233,6 +247,7 @@ function setTool(t: Tool) {
   document.querySelectorAll<HTMLButtonElement>(".tb[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === t));
   drawCanvas.style.pointerEvents = t === "ver" ? "none" : "auto";
   if (t !== "ver" && selModel.value !== "hgeo") { selModel.value = "hgeo"; edWrap.hidden = false; if (!edText.value.trim()) edText.value = DEMO04_HGEO; applyHgeo(); }
+  draw.prompt();
   dStatus.textContent = { ver: "", interfaz: "interfaz: clic a clic de margen a margen; Enter o doble clic termina, Esc cancela, Retroceso quita el último", asignar: "asignar: clic dentro de una región", sobrecarga: "sobrecarga: dos clics sobre el terreno", ancla: "ancla: clic en la cabeza", mover: "mover: arrastra un vértice", borrar: "borrar: clic en un vértice o en una interfaz" }[t];
   draw.render();
 }
@@ -248,7 +263,36 @@ $<HTMLInputElement>("dF").addEventListener("change", (e) => { draw.state.F = par
 $<HTMLInputElement>("dang").addEventListener("change", (e) => { draw.state.ang = parseFloat((e.target as HTMLInputElement).value) || 0; });
 dStage.addEventListener("change", () => { draw.state.stage = parseInt(dStage.value) || 0; });
 draw.onStatus = (m) => { dStatus.textContent = m; };
-draw.onChange = (d) => { for (const st of d.stages) delete st.geo5; $<HTMLInputElement>("snap").checked = draw.state.snap; $<HTMLInputElement>("osnap").checked = draw.state.osnap; $<HTMLInputElement>("ortho").checked = draw.state.ortho; applyDef(d, false); };
+// ---- línea de órdenes (AutoCAD): historial + prompt + entrada; teclear sobre el lienzo va a la entrada ----
+draw.onEcho = (l) => { if (!l) return; const e = document.createElement("div"); e.textContent = l; cmdHist.appendChild(e); while (cmdHist.children.length > 4) cmdHist.firstChild!.remove(); };
+draw.onPrompt = (p) => {   // tras cada orden: prompt + la barra refleja lo escrito (etapa 3, q=30, F=150, suelo …)
+  cmdPrompt.textContent = p;
+  const st = draw.state; if (dStage.options.length) dStage.value = String(Math.min(st.stage, dStage.options.length - 1)); if (st.soil) dSoil.value = st.soil;
+  $<HTMLInputElement>("dq").value = String(st.q); $<HTMLInputElement>("dF").value = String(st.F); $<HTMLInputElement>("dang").value = String(st.ang); $<HTMLInputElement>("grid").value = String(st.grid);
+  $<HTMLInputElement>("snap").checked = st.snap; $<HTMLInputElement>("osnap").checked = st.osnap; $<HTMLInputElement>("ortho").checked = st.ortho;
+};
+draw.onTool = (t) => setTool(t);
+draw.onDsl = (line) => {
+  if (line.toLowerCase() === "nuevo" || line.toLowerCase() === "new") { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = "# modelo nuevo"; draw.state.soil = ""; applyHgeo(); return; }
+  if (selModel.value !== "hgeo") { selModel.value = "hgeo"; edWrap.hidden = false; }
+  edText.value = (edText.value.trimEnd() + "\n" + line).replace(/^\n/, "");
+  applyHgeo();
+};
+cmdIn.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { const v = cmdIn.value; cmdIn.value = ""; draw.command(v); }
+  else if (e.key === "Escape") { cmdIn.value = ""; draw.cancel(); }
+  else if (e.key === "F3" || e.key === "F8" || e.key === "F9") { e.preventDefault(); draw.command(e.key.toLowerCase()); }
+});
+window.addEventListener("keydown", (e) => {   // entrada dinámica: si escribes con el ratón sobre el lienzo, va a la línea de órdenes
+  const tag = (e.target as HTMLElement)?.tagName; if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) { cmdIn.focus(); }
+});
+draw.onChange = (d) => {
+  for (const st of d.stages) delete st.geo5; $<HTMLInputElement>("snap").checked = draw.state.snap; $<HTMLInputElement>("osnap").checked = draw.state.osnap; $<HTMLInputElement>("ortho").checked = draw.state.ortho; applyDef(d, false);
+  // una carga dibujada en la etapa N → se muestra la etapa N (si no, el ancla "no aparece")
+  // (solo se cambia la etapa VISIBLE; el recálculo de todas ya lo lanzó applyDef y redraw la pinta al llegar)
+  const t = draw.state.tool; if ((t === "sobrecarga" || t === "ancla") && model && draw.state.stage < model.stages.length && String(draw.state.stage) !== selStage.value) { selStage.value = String(draw.state.stage); fillStepSelect(); redraw(); }
+};
 
 btn.addEventListener("click", () => run(base!.stages.map((_, i) => i).slice(0, parseInt(selN.value))));
 selN.addEventListener("change", () => { const n = parseInt(selN.value); const falta = base!.stages.map((_, i) => i).slice(0, n).filter((i) => !stages[i] || stages[i]!.stale); if (falta.length) run(falta); });
