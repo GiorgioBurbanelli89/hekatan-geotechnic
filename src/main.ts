@@ -135,13 +135,19 @@ function buildDrawnSliders(g: HTMLDivElement) {
     const base = d.interfaces[i].map((p) => [p[0], p[1]] as [number, number]);
     const z0 = yAt(i, xmid);
     // los puntos de asignación que están en la región de ESTA capa (bajo la interfaz i y sobre la i+1) la acompañan
-    const mine = d.assign.filter((a) => regionOf(d, a.p) === i + 1).map((a) => ({ a, z: a.p[1] }));
+    // los puntos de asignación de ESTA capa guardan su posición RELATIVA (fracción del espesor): así acompañan a la capa,
+    // nunca salen de ella y al devolver el slider vuelven exactos (antes se recortaba el valor y la vuelta quedaba desplazada)
+    const botAt = (x: number) => (i + 1 < d.interfaces.length ? yAt(i + 1, x) : m.bottom);
+    const mine = d.assign.filter((a) => regionOf(d, a.p) === i + 1).map((a) => {
+      const top = yAt(i, a.p[0]), bot = botAt(a.p[0]);
+      return { a, t: top > bot ? (a.p[1] - bot) / (top - bot) : 0.5, z: a.p[1] };
+    });
     push(`dz${i}`, `${d.soils[i]?.name ?? "capa " + (i + 1)} techo z [m]`, zBot, zTop, 0.1, Math.round(z0 * 10) / 10, (v) => {
       const dz = v - z0;
       d.interfaces[i].forEach((p, k) => { p[1] = base[k][1] + dz; });
-      for (const { a, z } of mine) {   // sigue a la capa, pero siempre dentro de ella
-        const top = yAt(i, a.p[0]), bot = i + 1 < d.interfaces.length ? yAt(i + 1, a.p[0]) : m.bottom;
-        a.p[1] = Math.min(top - 0.3, Math.max(bot + 0.3, z + dz));
+      for (const { a, t, z } of mine) {
+        const top = yAt(i, a.p[0]), bot = botAt(a.p[0]);
+        a.p[1] = dz === 0 ? z : bot + t * (top - bot);   // sin redondear aquí: el .hgeo ya redondea a mm al escribirse
       }
     });
   }
