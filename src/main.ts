@@ -7,7 +7,7 @@ import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
 import { FieldKind, nodalField } from "./viewer/geo5scale";
-import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain } from "./model/dsl";
+import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
 import { Pasos } from "./pasos";
@@ -224,6 +224,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
     const t0 = performance.now();
     def = d;
     const bajados = clampLayersToTerrain(def); if (bajados && fromText) edText.value = serializeHgeo(def);   // GEO5: capa por encima del terreno → al terreno
+    const avisos = autoAssign(def); if (avisos.length) { if (fromText) edText.value = serializeHgeo(def); dStatus.textContent = avisos.join(" · "); }   // región nueva → siguiente suelo libre
     const hayTerreno = !!def.interfaces[0]?.length || def.outline.length >= 3;   // `interfaz` (GEO5) o `contorno` (DSL viejo)
     if (!hayTerreno || !def.soils.length) {   // BORRADOR: todavía no se puede mallar → hoja en blanco para dibujar
       if (!def.margins) def.margins = { xmin: 0, xmax: 40, bottom: -20 };

@@ -176,3 +176,28 @@ export function clampLayersToTerrain(def: SlopeDef): number {
   }
   return n;
 }
+
+/** Región de GEO5 de un punto = nº de interfaces por encima (el terreno cuenta): 1 = bajo el terreno, 2 = bajo la capa 1… */
+export function regionAt(def: SlopeDef, x: number, y: number): number {
+  const m = def.margins!; return def.interfaces.reduce((n, it) => n + (interfaceY(spanInterface(it, m.xmin, m.xmax), x) > y + 1e-9 ? 1 : 0), 0);
+}
+/** Al cerrar una capa: la región nueva sin suelo recibe el siguiente suelo aún no usado (en el punto de MÁXIMO espesor de la
+ *  región), como haría uno a mano en el frame Assign de GEO5. Devuelve los avisos ("ARCILLA asignada bajo la capa 1"). */
+export function autoAssign(def: SlopeDef): string[] {
+  const out: string[] = []; const m = def.margins; if (!m || def.interfaces.length < 2 || !def.soils.length) return out;
+  const spans = def.interfaces.map((it) => spanInterface(it, m.xmin, m.xmax));
+  const usados = new Set(def.assign.map((a) => a.soil)); usados.add(def.soils[0].name);   // el primer suelo ya es el de la región 1
+  const libres = def.soils.map((s) => s.name).filter((n) => !usados.has(n));
+  for (let k = 1; k < def.interfaces.length && libres.length; k++) {
+    const region = k + 1; if (def.assign.some((a) => regionAt(def, a.p[0], a.p[1]) === region)) continue;
+    let best: { x: number; y: number; t: number } | null = null;
+    for (let i = 1; i < 100; i++) {   // x de mayor espesor entre la capa k y la de abajo (o el fondo)
+      const x = m.xmin + (m.xmax - m.xmin) * i / 100, top = interfaceY(spans[k], x), bot = k + 1 < spans.length ? interfaceY(spans[k + 1], x) : m.bottom;
+      const t = top - bot; if (t > 0.2 && (!best || t > best.t)) best = { x, y: (top + bot) / 2, t };
+    }
+    if (!best) continue;
+    const soil = libres.shift()!; def.assign.push({ soil, p: [Math.round(best.x * 100) / 100, Math.round(best.y * 100) / 100] });
+    out.push(`${soil} asignado bajo la capa ${k} (en ${def.assign[def.assign.length - 1].p.join(",")}; cámbialo en Asignar)`);
+  }
+  return out;
+}
