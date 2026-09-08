@@ -26,7 +26,7 @@ await shot("01_margenes");
 // 3) terreno con clics (FASE 1): botón dibujar → 6 clics → Enter
 await page.click('#pasos .pt[data-tool="interfaz"]'); await wait(300); console.log("dibujar →", await paso(), "| estado:", await page.$eval("#dstatus", (e) => e.textContent));
 for (const [x, z] of [[0, -14], [16, -14], [24, -9], [32, -9], [40, -3], [60, -3]]) await clickWorld(x, z);
-await page.mouse.move(600, 500); const st = await page.$eval("#dstatus", (e) => e.textContent); console.log("   lectura en vivo:", st.slice(0, 90));
+const { px, py } = await page.evaluate((x, z) => { const [px, py] = window.__geoMap.tf(x, z); const c = document.getElementById("draw"); const r = c.getBoundingClientRect(); return { px: r.left + px * r.width / c.width, py: r.top + py * r.height / c.height }; }, 48, -8); await page.mouse.move(px, py); await wait(150); const st = await page.$eval("#dstatus", (e) => e.textContent); console.log("   lectura en vivo:", st.slice(0, 90)); await shot("02a_cursor");
 await page.keyboard.press("Enter"); await idle(); console.log("terreno →", await paso(), "|", await page.$eval("#hgeo", (e) => e.value.split("\n").find((l) => l.startsWith("interfaz"))));
 await shot("02_terreno");
 // 4) suelo por FORMULARIO

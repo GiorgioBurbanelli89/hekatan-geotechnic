@@ -260,7 +260,15 @@ export class DrawTools {
       else if (k === "margen") { ctx.moveTo(px, py - 8); ctx.lineTo(px, py + 8); ctx.moveTo(px - 4, py - 8); ctx.lineTo(px + 4, py - 8); ctx.moveTo(px - 4, py + 8); ctx.lineTo(px + 4, py + 8); }
       else ctx.rect(px - 3, py - 3, 6, 6);
       ctx.stroke();
-      if (k && k !== "rejilla") { ctx.fillStyle = "#ffb300"; ctx.font = "11px Segoe UI"; ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText(k, px + 10, py - 8); }
+      // etiqueta PEGADA AL CURSOR (Jorge: "el hover al lado del cursor cuando se dibuja"): x,z · snap · L y β del tramo
+      const ref = this.cur[this.cur.length - 1];
+      const l1 = `${this.mouse[0].toFixed(2)}, ${this.mouse[1].toFixed(2)}${k && k !== "rejilla" ? "  ◆ " + k : ""}`;
+      const l2 = ref ? `L = ${Math.hypot(this.mouse[0] - ref[0], this.mouse[1] - ref[1]).toFixed(2)} m   β = ${(Math.abs(this.mouse[0] - ref[0]) < 1e-9 ? 90 : Math.atan((this.mouse[1] - ref[1]) / (this.mouse[0] - ref[0])) * 180 / Math.PI).toFixed(1)}°` : "";
+      ctx.font = "11px Consolas, monospace"; ctx.textAlign = "left"; ctx.textBaseline = "top";
+      const w = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width) + 10, h = l2 ? 30 : 17;
+      let bx = px + 14, by = py + 12; if ((bx + w) * s > this.canvas.width) bx = px - 14 - w; if ((by + h) * s > this.canvas.height) by = py - 12 - h;
+      ctx.fillStyle = "rgba(20,17,10,0.88)"; ctx.fillRect(bx, by, w, h); ctx.strokeStyle = "#ffb300"; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
+      ctx.fillStyle = "#ffe08a"; ctx.fillText(l1, bx + 5, by + 3); if (l2) { ctx.fillStyle = "#f3ead0"; ctx.fillText(l2, bx + 5, by + 16); }
       ctx.restore();
     }
   }
