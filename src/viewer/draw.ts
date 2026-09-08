@@ -277,6 +277,27 @@ export class DrawTools {
       ctx.stroke();
       for (const p of this.cur) { const [px, py] = tf(p[0], p[1]); ctx.fillStyle = "#e5382b"; ctx.beginPath(); ctx.arc(px, py, 3.5 * this.k, 0, 2 * Math.PI); ctx.fill(); }
     }
+    // FANTASMA de la carga bajo el cursor: al usar «sobrecarga» o «ancla» se ve DÓNDE caería antes de hacer clic (Jorge 8-sep-2026)
+    if (this.mouse && (this.state.tool === "sobrecarga" || this.state.tool === "ancla")) {
+      const k = this.k;
+      if (this.state.tool === "sobrecarga") {
+        const ty = terrainY(d, this.mouse[0]);
+        if (Number.isFinite(ty)) {
+          const a = this.cur[0] ?? [this.mouse[0], ty], b: Pt = [this.mouse[0], ty];   // banda entre el 1er punto y el cursor
+          const x0 = Math.min(a[0], b[0]), x1 = Math.max(a[0], b[0]); ctx.strokeStyle = "#2c7be5"; ctx.fillStyle = "#2c7be5"; ctx.lineWidth = 1.4 * k;
+          const nf = Math.max(2, Math.round((x1 - x0) / 2) + 1);
+          for (let i = 0; i < nf; i++) { const xx = nf === 1 ? x0 : x0 + (x1 - x0) * i / (nf - 1), yy = terrainY(d, xx); if (!Number.isFinite(yy)) continue; const [sx, sy] = tf(xx, yy); ctx.beginPath(); ctx.moveTo(sx, sy - 22 * k); ctx.lineTo(sx, sy - 3 * k); ctx.stroke(); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - 3 * k, sy - 6 * k); ctx.lineTo(sx + 3 * k, sy - 6 * k); ctx.closePath(); ctx.fill(); }
+          const [lx, ly] = tf((x0 + x1) / 2, terrainY(d, (x0 + x1) / 2)); ctx.fillStyle = "#2c7be5"; ctx.font = `${11 * k}px Segoe UI`; ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(`q = ${this.state.q} kPa`, lx, ly - 26 * k);
+        }
+      } else {   // ancla: tirante inclinado con el ángulo desde la cabeza (cursor) hacia adentro, con la flecha de la fuerza
+        const [hx, hy] = tf(this.mouse[0], this.mouse[1]); const a = this.state.ang * Math.PI / 180, L = 60 * k;
+        const ex = hx + L * Math.cos(a), ey = hy - L * Math.sin(a);   // z hacia arriba en el mundo → −sin en pantalla
+        ctx.strokeStyle = "#0a6e3a"; ctx.lineWidth = 2 * k; ctx.setLineDash([6 * k, 4 * k]); ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(ex, ey); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = "#0a6e3a"; ctx.beginPath(); ctx.arc(hx, hy, 4 * k, 0, 2 * Math.PI); ctx.fill();   // cabeza
+        const bx = ex - 10 * k * Math.cos(a), by = ey + 10 * k * Math.sin(a); ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(bx - 4 * k * Math.sin(a), by - 4 * k * Math.cos(a)); ctx.lineTo(bx + 4 * k * Math.sin(a), by + 4 * k * Math.cos(a)); ctx.closePath(); ctx.fill();   // bulbo/flecha
+        ctx.font = `${11 * k}px Segoe UI`; ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText(`F = ${this.state.F} kN · ${this.state.ang}°`, hx + 8 * k, hy - 6 * k);
+      }
+    }
     if (this.mouse && this.active) {   // cursor en cruz con el punto ya ajustado + marcador del snap (AutoCAD)
       const [px, py] = tf(this.mouse[0], this.mouse[1]);
       const s = this.k;
