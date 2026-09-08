@@ -9,7 +9,8 @@
     "dev": "vite --host 0.0.0.0 --port 4700",
     "build": "vite build",
     "preview": "vite preview --port 4701",
-    "test": "tsx tests/demo04.ts"
+    "test": "tsx tests/demo04.ts",
+    "deploy": "node deploy.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",

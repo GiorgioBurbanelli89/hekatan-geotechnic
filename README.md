@@ -1,5 +1,7 @@
 # Hekatan Geotechnic
 
+**Sitio público:** https://giorgioburbanelli89.github.io/hekatan-geotechnic/ (rama `gh-pages`, `npm run deploy`).
+
 GeoFEM en el navegador: estabilidad de taludes por **reducción de resistencia** (SRM) con elementos T6 en
 deformación plana y Drucker-Prager. Es un port fiel del driver de Hekatan Python que reproduce a GEO5 2024
 (GeoFEM) a 12 cifras por punto de Gauss en la Demo04 (3 etapas: peso propio, sobrecarga, ancla).

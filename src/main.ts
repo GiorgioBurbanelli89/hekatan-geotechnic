@@ -194,7 +194,8 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
   try {
     const t0 = performance.now();
     def = d;
-    if (!def.interfaces[0]?.length || !def.soils.length) {   // BORRADOR: todavía no se puede mallar → hoja en blanco para dibujar
+    const hayTerreno = !!def.interfaces[0]?.length || def.outline.length >= 3;   // `interfaz` (GEO5) o `contorno` (DSL viejo)
+    if (!hayTerreno || !def.soils.length) {   // BORRADOR: todavía no se puede mallar → hoja en blanco para dibujar
       if (!def.margins) def.margins = { xmin: 0, xmax: 40, bottom: -20 };
       const mg = def.margins, top = mg.bottom + Math.max(10, 0.6 * (mg.xmax - mg.xmin));
       if (!fromText) edText.value = serializeHgeo(def);
