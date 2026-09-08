@@ -211,19 +211,19 @@ export class SlopePlot {
     ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText("x [m]", x0 + pw / 2, H - 4 * k);
     ctx.save(); ctx.translate(14 * k, y0 + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = "top"; ctx.fillText("z [m]", 0, 0); ctx.restore();
     ctx.font = `bold ${13 * k}px Segoe UI, Arial`; ctx.textBaseline = "bottom"; ctx.fillText(o.title, x0 + pw / 2, mT - 8 * k);
-    // barra de color (mínimo abajo, como la GUI de GEO5 muestra su rango)
+    // barra de color: MÍNIMO ARRIBA y máximo abajo, como la leyenda de la GUI de GEO5 (verificado 8-sep-2026 contra su captura)
     if (flat) return { lv, vmin, vmax };
     const bx = x0 + pw + 22 * k, by = y0, bh = ph, bw = 18 * k, nb = lv.length - 1;
     for (let b = 0; b < nb; b++) {
       const t0 = (lv[b] - lv[0]) / (lv[nb] - lv[0]), t1 = (lv[b + 1] - lv[0]) / (lv[nb] - lv[0]);
       const c = cmap[b]; ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
-      ctx.fillRect(bx, by + bh - t1 * bh, bw, (t1 - t0) * bh);
+      ctx.fillRect(bx, by + t0 * bh, bw, (t1 - t0) * bh);
     }
     ctx.strokeStyle = FG; ctx.lineWidth = 0.8 * k; ctx.strokeRect(bx, by, bw, bh);
     ctx.font = `${10 * k}px Segoe UI, Arial`; ctx.fillStyle = FG; ctx.textAlign = "left"; ctx.textBaseline = "middle";
     let lastY = -1e9;
     for (let b = 0; b <= nb; b++) {
-      const t = (lv[b] - lv[0]) / (lv[nb] - lv[0]); const y = by + bh - t * bh;
+      const t = (lv[b] - lv[0]) / (lv[nb] - lv[0]); const y = by + t * bh;
       ctx.beginPath(); ctx.moveTo(bx + bw, y); ctx.lineTo(bx + bw + 3 * k, y); ctx.stroke();
       if (Math.abs(y - lastY) < 10 * k && b < nb) continue;                 // rótulos que se pisan: el extremo manda
       if (b === nb && Math.abs(y - lastY) < 10 * k) { ctx.fillStyle = BG; ctx.fillRect(bx + bw + 4 * k, lastY - 6 * k, 40 * k, 12 * k); ctx.fillStyle = FG; }
