@@ -11,6 +11,7 @@ import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, inte
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
 import { Pasos } from "./pasos";
+import { hgeoToDxf, recetaGeo5 } from "./model/dxf";
 
 type Stage = { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean };
 
@@ -90,7 +91,7 @@ function buildGeomSliders() {
     b.addEventListener("click", () => { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = DEMO04_HGEO; applyHgeo(); });
     g.appendChild(b); return;
   }
-  if (!def.param) { buildDrawnSliders(g); return; }
+  if (!def.param) { buildDrawnSliders(g); buildLoadSliders(g); return; }
   const pm = def.param;
   const rows: { key: keyof typeof pm; label: string; min: number; max: number; step: number }[] = [
     { key: "H", label: "altura H [m]", min: 1, max: 15, step: 0.1 },
@@ -112,6 +113,34 @@ function buildGeomSliders() {
       draw.render();
       clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(def!, false, [visibleStage()]), 300);
     });
+  }
+  buildLoadSliders(g);
+}
+/** CARGAS de cada etapa del modelo .hgeo: q de cada sobrecarga, F y ángulo de cada ancla. Reescriben el .hgeo y recalculan
+ *  la etapa visible (Jorge: "¿y los parámetros de valor de carga?"). En la fixture Demo04 esas cargas ya tienen sus sliders q/ancla. */
+function buildLoadSliders(g: HTMLDivElement) {
+  const d = def; if (!d) return;
+  const rows: { key: string; label: string; min: number; max: number; step: number; val: number; set: (v: number) => void }[] = [];
+  d.stages.forEach((st, i) => {
+    st.surcharges.forEach((sc, j) => rows.push({ key: `q${i}_${j}`, label: `q etapa ${i + 1}${st.surcharges.length > 1 ? "." + (j + 1) : ""} [kPa]`, min: 0, max: Math.max(100, 2 * sc.q), step: 1, val: sc.q, set: (v) => { sc.q = v; } }));
+    st.anchors.forEach((an, j) => {
+      rows.push({ key: `F${i}_${j}`, label: `F ancla ${i + 1}${st.anchors.length > 1 ? "." + (j + 1) : ""} [kN]`, min: 0, max: Math.max(200, 2 * an.F), step: 1, val: an.F, set: (v) => { an.F = v; } });
+      rows.push({ key: `ang${i}_${j}`, label: `áng. ancla ${i + 1}${st.anchors.length > 1 ? "." + (j + 1) : ""} [°]`, min: -60, max: 60, step: 1, val: an.ang, set: (v) => { an.ang = v; } });
+    });
+  });
+  if (!rows.length) return;
+  const h = document.createElement("div"); h.className = "sl"; h.style.display = "block"; h.style.color = "var(--oro)"; h.style.fontWeight = "600"; h.style.marginTop = "6px"; h.textContent = "cargas (por etapa)"; g.appendChild(h);
+  for (const r of rows) {
+    const row = document.createElement("div"); row.className = "sl";
+    row.innerHTML = `<span class="n">${r.label}</span><input type="range" id="gs_${r.key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${r.val}"><span class="v" id="gv_${r.key}">${r.val}</span>`;
+    g.appendChild(row);
+    const inp = row.querySelector("input") as HTMLInputElement;
+    inp.addEventListener("input", () => {
+      geomSliding = true; $<HTMLSpanElement>("gv_" + r.key).textContent = inp.value; r.set(parseFloat(inp.value));
+      for (const st of d.stages) delete st.geo5;
+      clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
+    });
+    inp.addEventListener("change", () => { geomSliding = false; window.setTimeout(buildGeomSliders, 350); });
   }
 }
 /** Talud DIBUJADO (sin `talud …`): también tiene parámetros. Un slider por coordenada de cada vértice del terreno
@@ -302,11 +331,26 @@ function fillStepSelect() {
   if (keep && parseInt(keep) < st.steps.length) selStep.value = keep;
 }
 
+// ---- indicador «calculando… N ms» sobre la gráfica (Jorge: "cuando esté calculando debe haber un texto y los ms") ----
+const calcEl = $<HTMLDivElement>("calc"); let calcT0 = 0, calcN = 0, calcK = 0, calcTimer: number | undefined, calcHide: number | undefined;
+const fmtMs = (ms: number) => ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s (${Math.round(ms).toLocaleString("es")} ms)`;
+function calcStart(n: number) {
+  calcT0 = performance.now(); calcN = n; calcK = 0; clearTimeout(calcHide); calcEl.hidden = false; calcEl.className = "on";
+  clearInterval(calcTimer); calcTimer = window.setInterval(() => { calcEl.textContent = `⏳ calculando etapa ${Math.min(calcK + 1, calcN)} de ${calcN} · ${fmtMs(performance.now() - calcT0)}`; }, 50);
+  calcEl.textContent = `⏳ calculando etapa 1 de ${n} · 0 ms`;
+}
+function calcStage() { calcK++; }
+function calcDone(err: boolean) {
+  clearInterval(calcTimer); const ms = performance.now() - calcT0;
+  calcEl.className = err ? "err" : "ok"; calcEl.textContent = err ? `✖ error tras ${fmtMs(ms)}` : `✓ listo · ${calcN} etapa${calcN === 1 ? "" : "s"} en ${fmtMs(ms)}`;
+  calcHide = window.setTimeout(() => { calcEl.hidden = true; }, 4000);
+}
 function run(idx: number[]) {
   if (!base) return;
   model = currentModel();
   plot?.setModel(model);
   busy = true; logEl.textContent = ""; fsTable();
+  calcStart(idx.length);
   worker?.terminate();
   worker = new Worker(new URL("./geofem/worker.ts", import.meta.url), { type: "module" });
   const t0 = performance.now();
@@ -316,9 +360,10 @@ function run(idx: number[]) {
     else if (m.type === "engine") appendLog(`(motor: ${m.engine === "wasm" ? "WASM · C++ compilado con emscripten" : "TypeScript"})`);
     else if (m.type === "stage") {
       stages[m.index] = { ...(m.result as Stage), stale: false };
+      calcStage();
       fsTable(); if (m.index === visibleStage()) { fillStepSelect(); redraw(); }
-    } else if (m.type === "done") { busy = false; fsTable(); appendLog(`(navegador: ${m.seconds.toFixed(1)} s · ${((performance.now() - t0) / 1000).toFixed(1)} s con el render)`); }
-    else if (m.type === "error") { busy = false; fsTable(); appendLog("ERROR: " + m.message); }
+    } else if (m.type === "done") { busy = false; calcDone(false); fsTable(); appendLog(`(navegador: ${m.seconds.toFixed(1)} s · ${((performance.now() - t0) / 1000).toFixed(1)} s con el render)`); }
+    else if (m.type === "error") { busy = false; calcDone(true); fsTable(); appendLog("ERROR: " + m.message); }
   };
   worker.postMessage({ type: "run", model, stageIdx: idx });
 }
@@ -364,6 +409,14 @@ $<HTMLInputElement>("fFile").addEventListener("change", async (e) => {
   const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
   selModel.value = "hgeo"; edWrap.hidden = false; edText.value = await f.text(); applyHgeo(); (e.target as HTMLInputElement).value = "";
 });
+$<HTMLButtonElement>("fDxf").addEventListener("click", () => {
+  if (!def) { dStatus.textContent = "el DXF sale del modelo .hgeo: pasa a «Editor .hgeo» o pulsa «parametrizar geometría»"; return; }
+  const nombre = (edText.value.match(/^#\s*([^\n]+)/)?.[1] ?? "talud").trim().replace(/[^\w\-]+/g, "_").slice(0, 40) || "talud";
+  const dl = (txt: string, fn: string, type: string) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type })); a.download = fn; a.click(); URL.revokeObjectURL(a.href); };
+  dl(hgeoToDxf(def), nombre + "_geo5.dxf", "application/dxf"); dl(recetaGeo5(def), nombre + "_geo5_pasos.txt", "text/plain");
+  dStatus.textContent = "DXF para GEO5 (Interfaces → Import DXF) + pasos_geo5.txt con suelos, asignación, malla y cargas para teclear";
+});
+(window as unknown as { __dxf: () => string }).__dxf = () => (def ? hgeoToDxf(def) : "");
 $<HTMLButtonElement>("fGuardar").addEventListener("click", () => {
   const txt = edText.value.trim() ? edText.value : (def ? serializeHgeo(def) : "");
   const nombre = (txt.match(/^#\s*([^\n]+)/)?.[1] ?? "talud").trim().replace(/[^\w\-]+/g, "_").slice(0, 40) || "talud";
