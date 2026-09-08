@@ -236,6 +236,8 @@ export class DrawTools {
       ctx.beginPath(); for (const x of [m.xmin, m.xmax]) { const [a, b] = tf(x, m.bottom), [c, e] = tf(x, ytop); ctx.moveTo(a, b); ctx.lineTo(c, e); } ctx.stroke(); ctx.setLineDash([]);
     }
     if (this.active) {   // vértices de las interfaces (agarraderas)
+      // las LÍNEAS de cada interfaz (en borrador la gráfica está vacía y solo se veían los vértices): terreno naranja, capas azul a trazos
+      for (let i = 0; i < d.interfaces.length; i++) { const it = d.interfaces[i]; if (it.length < 2) continue; ctx.strokeStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.lineWidth = (i === 0 ? 2.2 : 1.6) * this.k; ctx.setLineDash(i === 0 ? [] : [6 * this.k, 4 * this.k]); ctx.beginPath(); it.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); ctx.setLineDash([]); }
       for (let i = 0; i < d.interfaces.length; i++) for (const v of d.interfaces[i]) { const [px, py] = tf(v[0], v[1]); ctx.fillStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.fillRect(px - 3 * this.k, py - 3 * this.k, 6 * this.k, 6 * this.k); }
       for (const a of d.assign) { const [px, py] = tf(a.p[0], a.p[1]); ctx.strokeStyle = "#0a6e3a"; ctx.lineWidth = 1.5 * this.k; ctx.beginPath(); ctx.arc(px, py, 5 * this.k, 0, 2 * Math.PI); ctx.stroke(); ctx.fillStyle = "#0a6e3a"; ctx.font = `${11 * this.k}px Segoe UI`; ctx.textAlign = "left"; ctx.fillText(a.soil, px + 7 * this.k, py - 6 * this.k); }
     }
