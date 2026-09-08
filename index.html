@@ -34,13 +34,13 @@
     .tools .il { display: inline-flex; align-items: center; gap: 4px; margin: 0; color: var(--mut); }
     .tools .il input, .tools .il select { padding: 3px 5px; font-size: 12px; }
     .tools .il input[type=checkbox] { width: auto; }
-    .stack { position: relative; }
+    .stack { position: relative; max-width: calc((100vh - 330px) * 1180 / 700); min-width: 560px; margin: 0 auto; }   /* cabe en pantalla con la línea de órdenes debajo */
     .stack canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
     #draw { position: absolute; left: 0; top: 0; background: transparent; cursor: crosshair; }
     .fs { margin-top: 10px; font-size: 13px; }
     .fs table { width: 100%; border-collapse: collapse; } .fs td, .fs th { padding: 3px 4px; border-bottom: 1px solid #332b1b; text-align: right; } .fs th:first-child, .fs td:first-child { text-align: left; }
     .fs .ok { color: #7ee08a; font-weight: 600; }
-    #cmd { margin-top: 6px; background: #0b0906; border: 1px solid #4a3f28; border-radius: 6px; font: 12.5px Consolas, monospace; color: #cfc4a6; }
+    #cmd { margin-top: 6px; background: #0b0906; border: 1px solid #8a6a2a; border-radius: 6px; font: 13px Consolas, monospace; color: #cfc4a6; position: sticky; bottom: 6px; z-index: 5; box-shadow: 0 0 0 3px #0b0906, 0 -6px 18px #000a; }
     #cmdhist { padding: 4px 8px 0; min-height: 3.4em; max-height: 5.2em; overflow: hidden; white-space: pre; }
     #cmdhist div { line-height: 1.3; opacity: .85; } #cmdhist div:last-child { opacity: 1; color: #f3ead0; }
     .cmdrow { display: flex; align-items: center; gap: 6px; padding: 3px 8px 5px; border-top: 1px solid #332b1b; }
@@ -119,6 +119,7 @@
         <label class="il">F <input id="dF" type="number" value="72" style="width:56px"> kN</label>
         <label class="il">ang <input id="dang" type="number" value="-17" style="width:56px">°</label>
         <label class="il">en etapa <select id="dstage" style="width:auto"></select></label>
+        <span class="il" style="margin-left:auto;color:var(--oro)">⌨ o escribe órdenes abajo en <b>Orden:</b> (talud desde 0: <b>nuevo</b>)</span>
       </div>
       <div class="stack">
         <canvas id="plot" width="1180" height="700"></canvas>
