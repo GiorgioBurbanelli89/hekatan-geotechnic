@@ -79,7 +79,7 @@ export function gridField(X: number[], Y: number[], ELE: number[][], vals: Float
 // dx/dz/d = mecanismo de falla (u(SRF) − u_el, como GEO5 en estabilidad); el resto = estado de TENSIÓN (SRF=1, «stress analysis»).
 export type FieldKind = "dx" | "dz" | "d" | "sx" | "sz" | "sxt" | "szt" | "txz" | "J" | "u" | "Ed" | "Edpl";
 export const FIELD_LABEL: Record<FieldKind, string> = { dx: "d_x", dz: "d_z", d: "|d|", sx: "σ_x,eff", sz: "σ_z,eff", sxt: "σ_x,tot", szt: "σ_z,tot", txz: "τ_xz", J: "J", u: "u_tot", Ed: "E_d", Edpl: "E_d,pl" };
-export const FIELD_UNIT: Record<FieldKind, string> = { dx: "mm", dz: "mm", d: "mm", sx: "kPa", sz: "kPa", sxt: "kPa", szt: "kPa", txz: "kPa", J: "kPa", u: "kPa", Ed: "‰", Edpl: "‰" };
+export const FIELD_UNIT: Record<FieldKind, string> = { dx: "mm", dz: "mm", d: "mm", sx: "kPa", sz: "kPa", sxt: "kPa", szt: "kPa", txz: "kPa", J: "kPa", u: "kPa", Ed: "%", Edpl: "%" };
 export const FIELD_NAME: Record<FieldKind, string> = { dx: "Displacement d_x", dz: "Displacement d_z", d: "Displacement resultant |d|", sx: "Effective stress σ_x,eff", sz: "Effective stress σ_z,eff", sxt: "Total stress σ_x,tot", szt: "Total stress σ_z,tot", txz: "Shear stress τ_xz", J: "Equivalent deviatoric stress J", u: "Total pore pressure u_tot", Ed: "Equivalent deviatoric strain E_d", Edpl: "Plastic equivalent deviatoric strain E_d,pl" };
 export const isStressField = (k: FieldKind) => k !== "dx" && k !== "dz" && k !== "d";
 
@@ -108,8 +108,8 @@ export function stressField(kind: FieldKind, ELE: number[][], nn: number, ngp: n
     case "txz": return gpToNodal(ELE, nn, per, (kk) => sig[kk * 4 + 3]);
     case "J": return gpToNodal(ELE, nn, per, (kk) => dev(sig, kk, false));
     case "u": return new Float64Array(nn);
-    case "Ed": return gpToNodal(ELE, nn, per, (kk) => 1e3 * dev(eps, kk, true));
-    case "Edpl": return gpToNodal(ELE, nn, per, (kk) => 1e3 * dev(epl, kk, true));
+    case "Ed": return gpToNodal(ELE, nn, per, (kk) => 1e2 * dev(eps, kk, true));   // en %, como GEO5
+    case "Edpl": return gpToNodal(ELE, nn, per, (kk) => 1e2 * dev(epl, kk, true));
     default: return new Float64Array(nn);
   }
 }
