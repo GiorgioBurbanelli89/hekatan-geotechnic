@@ -25,7 +25,7 @@ export const PASOS: Paso[] = [
 export class Guia {
   el: HTMLDivElement; cerrada = true; private saltados = new Set<string>();
   constructor(parent: HTMLElement, private usar: (cmd: string) => void, private tool: (t: string) => void) {
-    this.el = document.createElement("div"); this.el.id = "guia"; this.el.hidden = true; parent.appendChild(this.el);
+    this.el = document.createElement("div"); this.el.id = "guia"; this.el.hidden = true; parent.prepend(this.el);   // en el panel izquierdo, NUNCA sobre el lienzo (taparía los clics)
   }
   abrir(desdeCero = false) { this.cerrada = false; if (desdeCero) this.saltados.clear(); this.el.hidden = false; }
   cerrar() { this.cerrada = true; this.el.hidden = true; }

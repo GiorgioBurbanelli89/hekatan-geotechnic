@@ -31,7 +31,7 @@ await page.evaluate(() => {
   const modo = document.createElement("style"); modo.id = "__modo"; document.head.appendChild(modo);
   window.__modo = (m) => { modo.textContent = m === "sliders"
     ? "aside.panel>*:not(#gsliders):not(#sliders):not(#fs):not(h2){display:none!important} #sliders .sl:nth-child(n+6){display:none!important} .sl{font-size:13px!important}"
-    : "aside.panel>*:not(#editor):not(#fs):not(h2:first-child){display:none!important}"; };
+    : "aside.panel>*:not(#editor):not(#fs):not(#guia):not(h2:first-child){display:none!important}"; };
   window.__modo("dibujo");
 });
 const showCursor = (px, py) => page.evaluate((x, y) => { const c = document.getElementById("__cur"); c.style.left = x + "px"; c.style.top = y + "px"; }, px, py);

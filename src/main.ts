@@ -34,7 +34,7 @@ let worker: Worker | null = null;
 let timer: number | undefined;
 let busy = false;
 const draw = new DrawTools(drawCanvas);
-const guia = new Guia(document.querySelector(".stack")!, (cmd) => { const i = $<HTMLInputElement>("cmdin"); i.value = cmd; i.focus(); i.select(); }, (t) => setTool(t as Tool));
+const guia = new Guia(document.querySelector("aside.panel")!, (cmd) => { const i = $<HTMLInputElement>("cmdin"); i.value = cmd; i.focus(); i.select(); }, (t) => setTool(t as Tool));
 
 // ---- sliders ----
 type Slider = { id: string; label: string; min: number; max: number; step: number; value: number };
