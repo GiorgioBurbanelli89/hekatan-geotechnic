@@ -10,7 +10,7 @@ import { FieldKind, nodalField } from "./viewer/geo5scale";
 import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, interfaceY, spanInterface } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
-import { Guia } from "./guia";
+import { Pasos } from "./pasos";
 
 type Stage = { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean };
 
@@ -34,7 +34,11 @@ let worker: Worker | null = null;
 let timer: number | undefined;
 let busy = false;
 const draw = new DrawTools(drawCanvas);
-const guia = new Guia(document.querySelector("aside.panel")!, (cmd) => { const i = $<HTMLInputElement>("cmdin"); i.value = cmd; i.focus(); i.select(); }, (t) => setTool(t as Tool));
+const pasos = new Pasos(document.querySelector("aside.panel")!, {
+  apply: (d) => applyDef(d, false), tool: (t) => setTool(t as Tool), run: () => $<HTMLButtonElement>("run").click(),
+  usar: (cmd) => { const i = $<HTMLInputElement>("cmdin"); i.value = cmd; i.focus(); i.select(); },
+  state: draw.state, syncBar: () => draw.prompt(), info: () => edMsg.textContent ?? "",
+});
 
 // ---- sliders ----
 type Slider = { id: string; label: string; min: number; max: number; step: number; value: number };
@@ -211,7 +215,7 @@ function setBase(m: GeoModel, only?: number[]) {
 async function loadFixture(url: string) {
   const baseUrl = import.meta.env.BASE_URL || "./";
   const m = (await (await fetch(baseUrl + url)).json()) as GeoModel;
-  def = null; edWrap.hidden = true; setTool("ver"); draw.setDef({ outline: [], soils: [], layers: [], h: 1, stages: [], interfaces: [], assign: [], comments: [] });
+  def = null; edWrap.hidden = true; pasos.actualizar(null); setTool("ver"); draw.setDef({ outline: [], soils: [], layers: [], h: 1, stages: [], interfaces: [], assign: [], comments: [] });
   setBase(m);
 }
 
@@ -231,7 +235,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
       draw.sheetTop = top; draw.setDef(def); draw.setMap(plot!.mapping());
       (window as unknown as { __geoMap: unknown }).__geoMap = plot!.mapping();
       edMsg.textContent = !def.interfaces[0]?.length ? "borrador: falta el terreno (dibújalo con «interfaz» o escríbelo)" : "borrador: falta al menos un suelo"; edMsg.style.color = "var(--oro)";
-      draw.prompt(); guia.actualizar(def, edText.value); return;
+      draw.prompt(); pasos.actualizar(def); return;
     }
     const { model: m, stats } = meshSlope(def);
     m.MATNAMES = def.soils.map((s) => s.name);
@@ -244,7 +248,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
     dSoil.value = draw.state.soil;
     draw.setDef(def);
     setBase(m, only);
-    guia.actualizar(def, edText.value);
+    pasos.actualizar(def);
   } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; }
 }
 function applyHgeo() { try { applyDef(parseHgeo(edText.value, { draft: true }), true); } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; } }
@@ -321,6 +325,7 @@ function setTool(t: Tool) {
   draw.state.tool = t;
   document.querySelectorAll<HTMLButtonElement>(".tb[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === t));
   drawCanvas.style.pointerEvents = t === "ver" ? "none" : "auto";
+  if (t !== "ver") pasos.tool(t);   // al dibujar salen los PASOS, en el paso de esa herramienta
   if (t !== "ver" && selModel.value !== "hgeo") { selModel.value = "hgeo"; edWrap.hidden = false; if (!edText.value.trim()) edText.value = DEMO04_HGEO; applyHgeo(); }
   draw.prompt();
   dStatus.textContent = { ver: "", interfaz: "interfaz: clic a clic de margen a margen; Enter o doble clic termina, Esc cancela, Retroceso quita el último", asignar: "asignar: clic dentro de una región", sobrecarga: "sobrecarga: dos clics sobre el terreno", ancla: "ancla: clic en la cabeza", mover: "mover: arrastra un vértice", borrar: "borrar: clic en un vértice o en una interfaz" }[t];
@@ -348,8 +353,8 @@ draw.onPrompt = (p) => {   // tras cada orden: prompt + la barra refleja lo escr
 };
 draw.onTool = (t) => setTool(t);
 // ---- ARCHIVO: nuevo / abrir / guardar (.hgeo). Un modelo = un fichero de texto. ----
-$<HTMLButtonElement>("gAyuda").addEventListener("click", () => { guia.abrir(); guia.actualizar(def, edText.value); });
-function nuevoModelo() { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = "# modelo nuevo"; draw.state.soil = ""; guia.abrir(true); applyHgeo(); draw.command("interfaz"); }
+$<HTMLButtonElement>("gAyuda").addEventListener("click", () => { pasos.abrir(); pasos.actualizar(def); });
+function nuevoModelo() { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = "# modelo nuevo"; draw.state.soil = ""; pasos.abrir("margenes"); applyHgeo(); setTool("ver"); draw.prompt(); }   // el flujo empieza en Márgenes (Settings de GEO5); «dibujar el terreno» está en el paso 2
 $<HTMLButtonElement>("fNuevo").addEventListener("click", nuevoModelo);
 $<HTMLButtonElement>("fAbrir").addEventListener("click", () => $<HTMLInputElement>("fFile").click());
 $<HTMLInputElement>("fFile").addEventListener("change", async (e) => {

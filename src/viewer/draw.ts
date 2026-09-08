@@ -154,7 +154,9 @@ export class DrawTools {
     this.mouse = this.active ? this.snapPt(raw, this.cur[this.cur.length - 1]) : raw;
     if (this.drag && this.def) { const it = this.def.interfaces[this.drag.it]; it[this.drag.k] = this.snapPt(raw); }
     this.render();
-    if (this.mouse) this.status(`x = ${this.mouse[0].toFixed(2)}   z = ${this.mouse[1].toFixed(2)}${this.snapKind ? "   ◆ " + this.snapKind : ""}${this.state.snap ? "   [rejilla " + this.state.grid + " m]" : ""}${this.state.ortho || this.shift ? "   [orto]" : ""}`);
+    const ref = this.active ? this.cur[this.cur.length - 1] : undefined;   // como el lienzo de Hekatan Lab: L y ángulo del tramo en curso
+    const tramo = ref && this.mouse ? `   L = ${Math.hypot(this.mouse[0] - ref[0], this.mouse[1] - ref[1]).toFixed(2)} m   β = ${(Math.abs(this.mouse[0] - ref[0]) < 1e-9 ? 90 : Math.atan((this.mouse[1] - ref[1]) / (this.mouse[0] - ref[0])) * 180 / Math.PI).toFixed(1)}°` : "";
+    if (this.mouse) this.status(`x = ${this.mouse[0].toFixed(2)}   z = ${this.mouse[1].toFixed(2)}${tramo}${this.snapKind ? "   ◆ " + this.snapKind : ""}${this.state.snap ? "   [rejilla " + this.state.grid + " m]" : ""}${this.state.ortho || this.shift ? "   [orto]" : ""}`);
   }
   private onDown(e: MouseEvent) {
     if (!this.map || !this.def || !this.active || e.button !== 0) return;
