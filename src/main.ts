@@ -84,15 +84,20 @@ function buildGeomSliders() {
   const g = $<HTMLDivElement>("gsliders");
   if (geomSliding && g.children.length) return;
   g.innerHTML = "";
-  if (!def) {   // malla importada de GEO5 (fija): la geometría se parametriza en su gemelo .hgeo (malla propia, mismos suelos y etapas)
+  if (!def) {   // malla importada de GEO5 (fija): se enseñan YA los sliders de su gemelo .hgeo; al mover uno se pasa al .hgeo (malla propia)
     if (selModel.value === "hgeo") return;
-    const b = document.createElement("button"); b.className = "tb"; b.id = "gParam"; b.style.cssText = "width:100%;margin:4px 0 6px";
-    b.textContent = "✎ parametrizar geometría (β, H, corona… → .hgeo)"; b.title = "abre este talud como .hgeo con malla propia: sliders de ángulo, altura, corona, pie y capas";
-    b.addEventListener("click", () => { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = DEMO04_HGEO; applyHgeo(); });
-    g.appendChild(b); return;
+    const twin = parseHgeo(DEMO04_HGEO, { draft: true });
+    if (twin.param) buildParamSliders(g, twin.param, () => { if (!def) { geomSliding = true; selModel.value = "hgeo"; edWrap.hidden = false; edText.value = DEMO04_HGEO; applyHgeo(); } return def; });
+    const nota = document.createElement("div"); nota.className = "mats"; nota.textContent = "malla exacta de GEO5: al mover un slider de geometría se pasa al mismo talud con malla propia (.hgeo)"; g.appendChild(nota);
+    return;
   }
   if (!def.param) { buildDrawnSliders(g); buildLoadSliders(g); return; }
-  const pm = def.param;
+  buildParamSliders(g, def.param, () => def);
+  buildLoadSliders(g);
+}
+/** Sliders del talud PARAMÉTRICO (`talud H= beta= corona= xpie=`). `ensure()` devuelve el def a modificar (en la fixture Demo04
+ *  primero cambia al gemelo .hgeo). Mientras se arrastra, las líneas se mueven en vivo (draw.showGeom); al soltar, remalla y recalcula. */
+function buildParamSliders(g: HTMLDivElement, pm: NonNullable<SlopeDef["param"]>, ensure: () => SlopeDef | null) {
   const rows: { key: keyof typeof pm; label: string; min: number; max: number; step: number }[] = [
     { key: "H", label: "altura H [m]", min: 1, max: 15, step: 0.1 },
     { key: "beta", label: "talud β [°]", min: 10, max: 75, step: 0.5 },
@@ -106,15 +111,16 @@ function buildGeomSliders() {
     const inp = row.querySelector("input") as HTMLInputElement;
     inp.addEventListener("input", () => {
       $<HTMLSpanElement>("gv_" + r.key).textContent = inp.value;
-      if (!def?.param) return;
-      def.param[r.key] = parseFloat(inp.value);
-      def.interfaces[0] = terrainFromParam(def.param, def.margins!.xmin, def.margins!.xmax);
-      for (const st of def.stages) delete st.geo5;   // geometría distinta de la escrita: la referencia GEO5 ya no vale
-      draw.render();
-      clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(def!, false, [visibleStage()]), 300);
+      const d = ensure(); if (!d?.param) return;
+      geomSliding = true;
+      d.param[r.key] = parseFloat(inp.value);
+      d.interfaces[0] = terrainFromParam(d.param, d.margins!.xmin, d.margins!.xmax);
+      for (const st of d.stages) delete st.geo5;   // geometría distinta de la escrita: la referencia GEO5 ya no vale
+      draw.showGeom = true; draw.setDef(d); draw.render();
+      clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
     });
+    inp.addEventListener("change", () => { geomSliding = false; draw.showGeom = false; draw.render(); window.setTimeout(buildGeomSliders, 350); });
   }
-  buildLoadSliders(g);
 }
 /** CARGAS de cada etapa del modelo .hgeo: q de cada sobrecarga, F y ángulo de cada ancla. Reescriben el .hgeo y recalculan
  *  la etapa visible (Jorge: "¿y los parámetros de valor de carga?"). En la fixture Demo04 esas cargas ya tienen sus sliders q/ancla. */
@@ -159,10 +165,10 @@ function buildDrawnSliders(g: HTMLDivElement) {
     inp.addEventListener("input", () => {
       geomSliding = true; $<HTMLSpanElement>("gv_" + key).textContent = inp.value; onInput(parseFloat(inp.value));
       for (const st of d.stages) delete st.geo5;
-      draw.render();
+      draw.showGeom = true; draw.render();
       clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
     });
-    inp.addEventListener("change", () => { geomSliding = false; window.setTimeout(buildGeomSliders, 350); });   // suelto el ratón: cotas nuevas
+    inp.addEventListener("change", () => { geomSliding = false; draw.showGeom = false; draw.render(); window.setTimeout(buildGeomSliders, 350); });   // suelto el ratón: cotas nuevas
   };
   head("terreno (puntos)");
   ter.forEach((p, k) => {
@@ -308,7 +314,10 @@ function stageLoads(si: number): Float64Array {
 function redraw() {
   if (!model || !plot) return;
   const si = visibleStage(), st = stages[si];
-  if (!st) { draw.setMap(plot.mapping()); return; }
+  if (!st) {   // aún sin resultado (remallado en curso): geometría + malla nueva ya, sin esperar al cálculo
+    plot.draw({ field: "dx", vals: new Float64Array(model.X.length), stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, title: `${model.name || "Talud"} · calculando…`, deformScale: 0, u: new Float64Array(model.X.length * 2), uel: new Float64Array(model.X.length * 2) });
+    draw.setMap(plot.mapping()); return;
+  }
   const kind = selField.value as FieldKind;
   const stepIdx = parseInt(selStep.value || "-1");
   const u = stepIdx >= 0 && st.steps[stepIdx] ? st.steps[stepIdx].u : st.u;

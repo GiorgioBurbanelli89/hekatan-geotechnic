@@ -20,6 +20,8 @@ export class DrawTools {
   state: DrawState = { tool: "ver", grid: 1, snap: true, osnap: true, ortho: false, soil: "", q: 35, F: 72, ang: -17, stage: 0 };
   /** escala de trazos/marcadores (2 = lienzo 2x para vídeo) */
   k = 1;
+  /** true mientras se arrastra un slider de geometría: render() pinta las interfaces aunque no haya herramienta */
+  showGeom = false;
   private snapKind: SnapKind = null;         // qué snap atrapó el cursor (para el marcador y el estado)
   onChange: ((def: SlopeDef) => void) | null = null;     // el modelo cambió (remallar + recalcular)
   onStatus: ((msg: string) => void) | null = null;
@@ -243,6 +245,11 @@ export class DrawTools {
     ctx.clearRect(0, 0, W, H);
     if (!this.map || !this.def) return;
     const tf = this.map.tf, d = this.def;
+    if (this.showGeom && !this.active) {   // arrastrando un slider de geometría: las líneas se mueven EN VIVO sobre la gráfica (Jorge: "recién cuando suelto cambia")
+      for (let i = 0; i < d.interfaces.length; i++) { const it = d.interfaces[i]; if (it.length < 2) continue; ctx.strokeStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.lineWidth = 2.2 * this.k; ctx.setLineDash(i === 0 ? [] : [6 * this.k, 4 * this.k]); ctx.beginPath(); it.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); ctx.setLineDash([]); for (const v of it) { const [px, py] = tf(v[0], v[1]); ctx.fillStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.fillRect(px - 3 * this.k, py - 3 * this.k, 6 * this.k, 6 * this.k); } }
+      for (const ln of d.lines ?? []) { ctx.strokeStyle = "#c026d3"; ctx.lineWidth = 1.8 * this.k; ctx.setLineDash([5 * this.k, 4 * this.k]); ctx.beginPath(); ln.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); ctx.setLineDash([]); }
+      return;
+    }
     if (this.active && d.margins && this.state.grid > 0) {
       const m = d.margins, g = this.state.grid;
       const ytop = d.interfaces[0]?.length ? Math.max(...d.interfaces[0].map((p) => p[1])) + 2 * g : (this.sheetTop ?? m.bottom + 20);   // sin terreno aún: rejilla hasta el techo de la hoja
