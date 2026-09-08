@@ -73,9 +73,10 @@ export class Pasos {
     const usar = (cmd: string) => `<div class="pe"><code>${esc(cmd)}</code><button class="pu" data-cmd="${esc(cmd)}" title="lo deja escrito en Orden:; pulsa Enter">usar</button></div>`;
     switch (id) {
       case "terreno": {
-        const its = d.interfaces.map((it, i) => `<li>${i === 0 ? "terreno" : "capa " + i} · ${it.length} puntos <span class="mut">${it.map((p) => `${num(p[0], 1)},${num(p[1], 1)}`).join(" ")}</span><button class="pdel" data-it="${i}" title="borrar">✕</button></li>`).join("");
+        const its = d.interfaces.map((it, i) => `<li>${i === 0 ? "terreno" : "capa " + i} · ${it.length} puntos <span class="mut">${it.map((p) => `${num(p[0], 1)},${num(p[1], 1)}`).join(" ")}</span><button class="pdel" data-it="${i}" title="borrar">✕</button></li>`).join("")
+          + (d.lines ?? []).map((ln, i) => `<li><span style="color:#e879f9">línea libre ${i + 1}</span> · ${ln.length} puntos <span class="mut">${ln.map((p) => `${num(p[0], 1)},${num(p[1], 1)}`).join(" ")}</span><button class="pdel" data-ln="${i}" title="borrar">✕</button></li>`).join("");
         const fase = d.interfaces[0]?.length ? "FASE 2 — CAPAS: cada capa es otra interfaz de margen a margen, bajo el terreno. Los suelos van de ARRIBA hacia ABAJO." : "FASE 1 — TERRENO: traza el BORDE del terreno con clics de izquierda a derecha, de margen a margen (Enter termina · Esc cancela · Retroceso quita el último · rejilla F9 · snap F3 · orto F8).";
-        return `<div class="pq"><b>Interfaces</b> (GEO5: <i>Interfaces</i>). ${fase} Al mover el ratón ves x, z, la longitud L y el ángulo β del tramo.</div>
+        return `<div class="pq"><b>Interfaces</b> (GEO5: <i>Interfaces</i>). ${fase} Al mover el ratón ves x, z, la longitud L y el ángulo β del tramo.${d.interfaces[0]?.length ? " <b>Línea libre</b> (GEO5: <i>Free line</i>): si la polilínea no va de margen a margen o vuelve atrás y toca el borde, el terreno u otra línea en sus dos extremos, cierra una región que recibe su propio suelo." : ""}</div>
         <details class="pr" ${d.interfaces.length ? "" : "open"}><summary>rango del modelo (GEO5: <i>Set ranges</i>): x de izquierda a derecha y profundidad</summary>
         <div class="pf"><label>x mín <input id="pm_xmin" type="number" step="1" value="${m.xmin}"></label><label>x máx <input id="pm_xmax" type="number" step="1" value="${m.xmax}"></label><label>fondo z <input id="pm_fondo" type="number" step="0.5" value="${m.bottom}"></label></div>
         <div class="pb"><button id="pm_ok">aplicar rango</button></div></details>
@@ -131,6 +132,7 @@ export class Pasos {
     this.el.querySelectorAll<HTMLButtonElement>(".pu").forEach((b) => { b.onclick = () => this.api.usar(b.dataset.cmd!); });
     $("#pm_ok")?.addEventListener("click", () => { d.margins = { xmin: v("pm_xmin"), xmax: v("pm_xmax"), bottom: v("pm_fondo") }; this.margOk = true; this.api.apply(d); });
     this.el.querySelectorAll<HTMLButtonElement>(".pdel[data-it]").forEach((b) => { b.onclick = () => { d.interfaces.splice(parseInt(b.dataset.it!), 1); if (!d.interfaces.length) d.outline = []; this.api.apply(d); }; });
+    this.el.querySelectorAll<HTMLButtonElement>(".pdel[data-ln]").forEach((b) => { b.onclick = () => { d.lines.splice(parseInt(b.dataset.ln!), 1); this.api.apply(d); }; });
     $("#ps_add")?.addEventListener("click", () => {
       const name = ($<HTMLInputElement>("#ps_name")!).value.trim().replace(/\s+/g, "_").toUpperCase(); if (!name) return;
       const s: Soil = { name, E: v("ps_E"), nu: v("ps_nu"), phi: v("ps_phi"), c: v("ps_c"), gamma: v("ps_g"), psi: 0 };

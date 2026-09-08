@@ -1,0 +1,8 @@
+# LÍNEA LIBRE (GEO5 Free line): la línea roja de Jorge (8-sep-2026 03:46) va y vuelve y toca el borde en sus dos extremos → cierra una región con su propio suelo
+margenes xmin=0 xmax=40 fondo=-20
+interfaz 0,-6 10,-6 13,1 28,1 29,-1 40,-1
+linea 0,-9 12,-7 15,-3 10.7,-1.5
+suelo LIMO_ARENOSO E=20000 nu=0.3 phi=26 c=10 gamma=18
+suelo ARCILLA E=8000 nu=0.35 phi=18 c=15 gamma=17
+malla 2
+etapa peso propio

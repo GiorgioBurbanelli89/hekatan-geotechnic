@@ -24,6 +24,7 @@ export type SlopeDef = {
   outline: Pt[]; soils: Soil[]; layers: Layer[]; h: number; stages: StageDef[];
   margins?: { xmin: number; xmax: number; bottom: number };
   interfaces: Pt[][];                       // GEO5: de margen a margen, la primera = terreno
+  lines: Pt[][];                            // GEO5 "Free line": polilínea cualquiera que toca el borde/otra línea en sus dos extremos y CIERRA una región
   assign: { soil: string; p: Pt }[];        // GEO5: punto dentro de la región
   comments: string[];
   param?: TaludParam;                       // terreno paramétrico (sliders); si se dibuja a mano, se pierde
@@ -46,7 +47,7 @@ const pts = (toks: string[]): Pt[] => toks.map((t) => { const m = t.match(/^(-?[
 const kv = (toks: string[]): Record<string, string> => { const o: Record<string, string> = {}; for (const t of toks) { const m = t.match(/^([A-Za-z_]+)=(.+)$/); if (m) o[m[1].toLowerCase()] = m[2]; } return o; };
 
 export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDef {   // draft: borrador sin terreno/suelo (hoja en blanco para dibujar)
-  const def: SlopeDef = { outline: [], soils: [], layers: [], h: 2.5, stages: [], interfaces: [], assign: [], comments: [] };
+  const def: SlopeDef = { outline: [], soils: [], layers: [], h: 2.5, stages: [], interfaces: [], lines: [], assign: [], comments: [] };
   const lines = text.split(/\r?\n/);
   lines.forEach((raw, k) => {
     const line = raw.replace(/#.*$/, "").trim();
@@ -58,6 +59,7 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
       if (cmd === "contorno") def.outline = pts(toks.slice(1));
       else if (cmd === "margenes" || cmd === "márgenes") { const o = kv(toks.slice(1)); def.margins = { xmin: num(o.xmin ?? "0"), xmax: num(o.xmax ?? "40"), bottom: num(o.fondo ?? o.bottom ?? "-20") }; }
       else if (cmd === "interfaz" || cmd === "interface") def.interfaces.push(pts(toks.slice(1)));
+      else if (cmd === "linea" || cmd === "línea" || cmd === "line" || cmd === "libre") def.lines.push(pts(toks.slice(1)));
       else if (cmd === "talud") { const o = kv(toks.slice(1)); def.param = { xpie: num(o.xpie ?? "10"), zpie: num(o.zpie ?? "-10"), H: num(o.h ?? "6"), beta: num(o.beta ?? "33"), corona: num(o.corona ?? "8"), zfin: num(o.zfin ?? String(num(o.zpie ?? "-10") + num(o.h ?? "6"))), beta2: num(o.beta2 ?? "28.6") }; def.interfaces.unshift([]); }
       else if (cmd === "suelo") {
         const o = kv(toks.slice(2));
@@ -127,6 +129,7 @@ export function serializeHgeo(def: SlopeDef): string {
   def.interfaces.forEach((it, k) => { if (k === 0 && def.param) { const q = def.param; L.push(`talud xpie=${r(q.xpie)} zpie=${r(q.zpie)} H=${r(q.H)} beta=${r(q.beta)} corona=${r(q.corona)} zfin=${r(q.zfin)} beta2=${r(q.beta2)}`); } else L.push(`interfaz ${it.map(p).join(" ")}`); });
   if (!def.interfaces.length && def.outline.length) L.push(`contorno ${def.outline.map(p).join(" ")}`);
   for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.psi ? ` psi=${r(s.psi)}` : ""}`);
+  for (const ln of def.lines ?? []) L.push(`linea ${ln.map(p).join(" ")}`);   // GEO5 Free line
   for (const a of def.assign) L.push(`asignar ${a.soil} en ${p(a.p)}`);
   for (const c of def.layers) L.push(`capa ${c.soil} ${c.side} ${c.poly.map(p).join(" ")}`);
   L.push(`malla ${r(def.h)}`);

@@ -32,7 +32,7 @@ function polyY(poly: Pt[], x: number): number {
   return P[P.length - 1][1];
 }
 
-export type MeshStats = { nodes: number; corners: number; elements: number; minAngle: number; meanEdge: number; area: number; steiner: number };
+export type MeshStats = { nodes: number; corners: number; elements: number; minAngle: number; meanEdge: number; area: number; steiner: number; avisos: string[] };
 
 export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } {
   const h = def.h;
@@ -59,6 +59,10 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
     chains.push(ch);
     for (const e of [ch[0], ch[ch.length - 1]]) if (Math.abs(interfaceY(spans[0], e[0]) - e[1]) < 1e-6) insertOnOutline(outline, e);
   }
+  // LÍNEAS LIBRES (GEO5 Free line): polilíneas cualesquiera recortadas al dominio; sus extremos sobre el contorno pasan a ser
+  // vértices del contorno. Cierran regiones (componentes de la malla separadas por líneas) que reciben su propio suelo.
+  const freeChains: Pt[][] = [];
+  for (const ln of def.lines ?? []) { const ch = clipPolyline(ln, outline); if (ch.length < 2) continue; for (const e of [ch[0], ch[ch.length - 1]]) insertOnOutline(outline, e, 1e-3); freeChains.push(ch); chains.push(ch); }
   chains[0] = outline.concat([outline[0]]);   // el contorno con los cruces insertados
   // región de GEO5 = nº de interfaces por encima del punto (el terreno cuenta): asignación por punto
   const regionOf = (x: number, y: number) => spans.reduce((n, sp) => n + (interfaceY(sp, x) > y + 1e-9 ? 1 : 0), 0);
@@ -198,7 +202,7 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   const ren = (i: number) => (i < s0 ? i : i - 3);                    // salta los 3 del supertriángulo
   const midOf = new Map<string, number>();
   const mid = (u: number, v: number) => { const k = u < v ? u + "," + v : v + "," + u; let m = midOf.get(k); if (m === undefined) { m = X.length; X.push((X[u] + X[v]) / 2); Y.push((Y[u] + Y[v]) / 2); midOf.set(k, m); } return m; };
-  const ELE: number[][] = [], EMAT: number[] = [];
+  const ELE: number[][] = [], EMAT: number[] = [], avisos: string[] = [];
   for (const t of tris) {
     const a = ren(t.a), b = ren(t.b), c = ren(t.c);
     ELE.push([a, b, c, mid(a, b), mid(b, c), mid(c, a)]);
@@ -206,6 +210,36 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
     let m = spans.length ? (regionSoil.get(regionOf(gx, gy)) ?? 1) : 1;
     for (const L of def.layers) { const yl = polyY(L.poly, gx); if ((L.side === "bajo" && gy < yl) || (L.side === "sobre" && gy > yl)) m = soilIdx.get(L.soil) ?? m; }
     EMAT.push(m);
+  }
+  if (freeChains.length) {   // regiones = componentes de triángulos que no cruzan ninguna línea (contorno, interfaces, líneas libres)
+    const onSeg = (x: number, y: number, a: Pt, b: Pt) => { const L2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2; if (L2 < 1e-18) return false; const t = ((x - a[0]) * (b[0] - a[0]) + (y - a[1]) * (b[1] - a[1])) / L2; if (t < -1e-6 || t > 1 + 1e-6) return false; return Math.hypot(x - a[0] - t * (b[0] - a[0]), y - a[1] - t * (b[1] - a[1])) < 1e-6; };
+    const onChains = (x: number, y: number, cs: Pt[][]) => { for (const ch of cs) for (let i = 0; i + 1 < ch.length; i++) if (onSeg(x, y, ch[i], ch[i + 1])) return true; return false; };
+    const key = (u: number, v: number) => (u < v ? u + "," + v : v + "," + u);
+    const byEdge = new Map<string, number[]>();
+    tris.forEach((t, i) => { for (const [u, v] of [[t.a, t.b], [t.b, t.c], [t.c, t.a]]) { const k = key(u, v); const l = byEdge.get(k) ?? []; l.push(i); byEdge.set(k, l); } });
+    const comp = new Array<number>(tris.length).fill(-1); let nc = 0;
+    for (let s0i = 0; s0i < tris.length; s0i++) {
+      if (comp[s0i] >= 0) continue; const stack = [s0i]; comp[s0i] = nc;
+      while (stack.length) { const i = stack.pop()!; const t = tris[i]; for (const [u, v] of [[t.a, t.b], [t.b, t.c], [t.c, t.a]]) { if (onChains((P[u][0] + P[v][0]) / 2, (P[u][1] + P[v][1]) / 2, chains)) continue; for (const j of byEdge.get(key(u, v)) ?? []) if (comp[j] < 0) { comp[j] = nc; stack.push(j); } } }
+      nc++;
+    }
+    const inTri = (i: number, x: number, y: number) => { const t = tris[i]; const d1 = cross(P[t.b][0] - P[t.a][0], P[t.b][1] - P[t.a][1], x - P[t.a][0], y - P[t.a][1]), d2 = cross(P[t.c][0] - P[t.b][0], P[t.c][1] - P[t.b][1], x - P[t.b][0], y - P[t.b][1]), d3 = cross(P[t.a][0] - P[t.c][0], P[t.a][1] - P[t.c][1], x - P[t.c][0], y - P[t.c][1]); return d1 >= -1e-9 && d2 >= -1e-9 && d3 >= -1e-9; };
+    const compSoil = new Map<number, number>();
+    for (const a of def.assign) { const si = soilIdx.get(a.soil); if (!si) continue; const i = tris.findIndex((_, k) => inTri(k, a.p[0], a.p[1])); if (i >= 0) compSoil.set(comp[i], si); }
+    // componentes que tocan una línea libre y no tienen punto de asignación → siguiente suelo libre (y queda escrito en el .hgeo)
+    const usados = new Set(def.assign.map((a) => a.soil)); usados.add(def.soils[0]?.name ?? ""); const libres = def.soils.map((s1) => s1.name).filter((n) => !usados.has(n));
+    const tocaLibre = new Set<number>();
+    tris.forEach((t, i) => { for (const [u, v] of [[t.a, t.b], [t.b, t.c], [t.c, t.a]]) if (onChains((P[u][0] + P[v][0]) / 2, (P[u][1] + P[v][1]) / 2, freeChains)) tocaLibre.add(comp[i]); });
+    const sizes = new Map<number, number>(); comp.forEach((c) => sizes.set(c, (sizes.get(c) ?? 0) + 1));
+    const candidatas = [...tocaLibre].filter((c) => !compSoil.has(c)).sort((a, b) => (sizes.get(a) ?? 0) - (sizes.get(b) ?? 0));   // la más pequeña primero (la región cerrada)
+    for (const c of candidatas) {
+      if (candidatas.length > 1 && c === candidatas[candidatas.length - 1]) break;   // la mayor conserva su suelo de interfaz
+      const soil = libres.shift(); if (!soil) break;
+      let bi = -1, ba = 0; tris.forEach((t, i) => { if (comp[i] !== c) return; const ar = Math.abs(cross(P[t.b][0] - P[t.a][0], P[t.b][1] - P[t.a][1], P[t.c][0] - P[t.a][0], P[t.c][1] - P[t.a][1])); if (ar > ba) { ba = ar; bi = i; } });
+      const t = tris[bi]; const px = Math.round((P[t.a][0] + P[t.b][0] + P[t.c][0]) / 3 * 100) / 100, py = Math.round((P[t.a][1] + P[t.b][1] + P[t.c][1]) / 3 * 100) / 100;
+      def.assign.push({ soil, p: [px, py] }); compSoil.set(c, soilIdx.get(soil)!); avisos.push(`${soil} asignado a la región de la línea libre (en ${px},${py}; cámbialo en Asignar)`);
+    }
+    tris.forEach((_, i) => { const si = compSoil.get(comp[i]); if (si) EMAT[i] = si; });
   }
   const nn = X.length, ndof = 2 * nn;
   // ---- apoyos (GEO5): base MX+MY, laterales MX ----
@@ -235,7 +269,7 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   let mn = 180, sumL = 0, nL = 0, ar = 0;
   for (const t of tris) { mn = Math.min(mn, ...angles(t)); ar += triArea(t); for (const [u, v] of [[t.a, t.b], [t.b, t.c], [t.c, t.a]]) { sumL += Math.hypot(P[u][0] - P[v][0], P[u][1] - P[v][1]); nL++; } }
   void domArea; void nBoundary;
-  return { model, stats: { nodes: nn, corners: s0 + steiner, elements: ELE.length, minAngle: mn, meanEdge: sumL / nL, area: ar, steiner } };
+  return { model, stats: { nodes: nn, corners: s0 + steiner, elements: ELE.length, minAngle: mn, meanEdge: sumL / nL, area: ar, steiner , avisos } };
 }
 
 /** Tramos de la capa estrictamente por DEBAJO del terreno (polilíneas x-monótonas). Devuelve una o varias cadenas;
@@ -263,14 +297,14 @@ function belowTerrain(layer: Pt[], terr: Pt[]): Pt[][] {
   return out;
 }
 /** Inserta p como vértice del contorno si cae sobre una de sus aristas (y aún no es vértice). */
-function insertOnOutline(outline: Pt[], p: Pt) {
-  for (const q of outline) if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-6) return;
+function insertOnOutline(outline: Pt[], p: Pt, tol = 1e-6) {
+  for (const q of outline) if (Math.hypot(q[0] - p[0], q[1] - p[1]) < Math.max(tol, 1e-6)) { p[0] = q[0]; p[1] = q[1]; return; }
   for (let i = 0; i < outline.length; i++) {
     const a = outline[i], b = outline[(i + 1) % outline.length];
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-9) continue;
     const t = ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / (L * L);
     const dist = Math.abs(cross(b[0] - a[0], b[1] - a[1], p[0] - a[0], p[1] - a[1])) / L;
-    if (t > 1e-6 && t < 1 - 1e-6 && dist < 1e-6) { outline.splice(i + 1, 0, [p[0], p[1]]); return; }
+    if (t > 1e-6 && t < 1 - 1e-6 && dist < tol) { p[0] = a[0] + t * (b[0] - a[0]); p[1] = a[1] + t * (b[1] - a[1]); outline.splice(i + 1, 0, [p[0], p[1]]); return; }   // proyectado exacto sobre la arista
   }
 }
 function clipPolyline(poly: Pt[], outline: Pt[]): Pt[] {

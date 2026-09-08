@@ -215,7 +215,7 @@ function setBase(m: GeoModel, only?: number[]) {
 async function loadFixture(url: string) {
   const baseUrl = import.meta.env.BASE_URL || "./";
   const m = (await (await fetch(baseUrl + url)).json()) as GeoModel;
-  def = null; edWrap.hidden = true; pasos.actualizar(null); setTool("ver"); draw.setDef({ outline: [], soils: [], layers: [], h: 1, stages: [], interfaces: [], assign: [], comments: [] });
+  def = null; edWrap.hidden = true; pasos.actualizar(null); setTool("ver"); draw.setDef({ outline: [], soils: [], layers: [], h: 1, stages: [], interfaces: [], lines: [], assign: [], comments: [] });
   setBase(m);
 }
 
@@ -240,6 +240,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
       draw.prompt(); pasos.actualizar(def); return;
     }
     const { model: m, stats } = meshSlope(def);
+    if (stats.avisos.length) dStatus.textContent = stats.avisos.join(" · ");   // p. ej. "ARCILLA asignado a la región de la línea libre"
     m.MATNAMES = def.soils.map((s) => s.name);
     m.name = `Talud .hgeo`;
     edMsg.textContent = `malla: ${stats.elements} T6 · ${stats.nodes} nudos · ángulo mín ${stats.minAngle.toFixed(1)}° · arista media ${stats.meanEdge.toFixed(2)} m · área ${stats.area.toFixed(1)} m² · ${((performance.now() - t0) / 1000).toFixed(2)} s`;

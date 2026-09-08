@@ -187,7 +187,8 @@ export class DrawTools {
       case "borrar": {
         const hit = this.hitVertex(p);
         if (hit) { this.push(); const it = d.interfaces[hit.it]; if (hit.it === 0) delete d.param; if (it.length > 2) it.splice(hit.k, 1); else if (hit.it > 0) d.interfaces.splice(hit.it, 1); this.commit("vértice borrado"); break; }
-        const k = this.hitInterface(p); if (k > 0) { this.push(); d.interfaces.splice(k, 1); this.commit("interfaz borrada"); }
+        const k = this.hitInterface(p); if (k > 0) { this.push(); d.interfaces.splice(k, 1); this.commit("interfaz borrada"); break; }
+        const ln = this.hitLine(p); if (ln >= 0) { this.push(); d.lines.splice(ln, 1); this.commit("línea libre borrada"); }
         break;
       }
     }
@@ -199,16 +200,33 @@ export class DrawTools {
     if (this.state.tool === "interfaz" && this.cur.length >= 2) {
       if (!this.def.margins) { this.status("primero los márgenes: margenes xmin= xmax= fondo="); this.echo("? faltan los márgenes"); return; }
       this.push();
-      const m = this.def.margins;
-      const poly = spanInterface(this.cur, m.xmin, m.xmax);
-      this.def.interfaces.push(poly); this.cur = [];
-      this.commit(`interfaz ${this.def.interfaces.length} (${poly.length} puntos)`);
+      const m = this.def.margins, c = this.cur;
+      // INTERFAZ (GEO5 Interfaces) = monótona en x y de margen a margen. Cualquier otra polilínea (vuelve atrás, o toca el
+      // borde/terreno/otra línea en sus dos extremos sin ir de margen a margen) = LÍNEA LIBRE (GEO5 Free line): cierra una región.
+      const mono = c.every((q, i) => i === 0 || q[0] >= c[i - 1][0] - 1e-9), monoInv = c.every((q, i) => i === 0 || q[0] <= c[i - 1][0] + 1e-9);
+      const enMargen = (q: Pt) => Math.abs(q[0] - m.xmin) < 0.05 || Math.abs(q[0] - m.xmax) < 0.05;
+      const esInterfaz = (mono || monoInv) && enMargen(c[0]) && enMargen(c[c.length - 1]);
+      if (esInterfaz) {
+        const poly = spanInterface(monoInv ? c.slice().reverse() : c, m.xmin, m.xmax);
+        this.def.interfaces.push(poly); this.cur = [];
+        this.commit(`interfaz ${this.def.interfaces.length} (${poly.length} puntos)`);
+      } else {
+        if (!this.def.lines) this.def.lines = [];
+        this.def.lines.push(c.map((q) => [q[0], q[1]] as Pt)); this.cur = [];
+        this.commit(`línea libre ${this.def.lines.length} (${c.length} puntos): cierra una región con el borde, el terreno u otra línea → recibe su propio suelo`);
+      }
     } else { this.cur = []; this.render(); }
   }
   private hitVertex(p: Pt): { it: number; k: number } | null {
     if (!this.def) return null; const tol = this.state.grid * 0.45;
     for (let i = 0; i < this.def.interfaces.length; i++) for (let k = 0; k < this.def.interfaces[i].length; k++) { const v = this.def.interfaces[i][k]; if (Math.hypot(v[0] - p[0], v[1] - p[1]) < tol) return { it: i, k }; }
     return null;
+  }
+  private hitLine(p: Pt): number {
+    if (!this.def?.lines) return -1; const tol = this.state.grid * 0.45;
+    const dseg = (a: Pt, b: Pt) => { const L2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2; const t = L2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / L2)) : 0; return Math.hypot(p[0] - a[0] - t * (b[0] - a[0]), p[1] - a[1] - t * (b[1] - a[1])); };
+    for (let i = 0; i < this.def.lines.length; i++) { const ln = this.def.lines[i]; for (let k = 0; k + 1 < ln.length; k++) if (dseg(ln[k], ln[k + 1]) < tol) return i; }
+    return -1;
   }
   private hitInterface(p: Pt): number {
     if (!this.def) return -1;
@@ -239,6 +257,10 @@ export class DrawTools {
       // las LÍNEAS de cada interfaz (en borrador la gráfica está vacía y solo se veían los vértices): terreno naranja, capas azul a trazos
       for (let i = 0; i < d.interfaces.length; i++) { const it = d.interfaces[i]; if (it.length < 2) continue; ctx.strokeStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.lineWidth = (i === 0 ? 2.2 : 1.6) * this.k; ctx.setLineDash(i === 0 ? [] : [6 * this.k, 4 * this.k]); ctx.beginPath(); it.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); ctx.setLineDash([]); }
       for (let i = 0; i < d.interfaces.length; i++) for (const v of d.interfaces[i]) { const [px, py] = tf(v[0], v[1]); ctx.fillStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.fillRect(px - 3 * this.k, py - 3 * this.k, 6 * this.k, 6 * this.k); }
+      for (const ln of d.lines ?? []) {   // líneas libres (GEO5 Free line): magenta a trazos
+        ctx.strokeStyle = "#c026d3"; ctx.lineWidth = 1.8 * this.k; ctx.setLineDash([5 * this.k, 4 * this.k]); ctx.beginPath(); ln.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); ctx.setLineDash([]);
+        for (const v of ln) { const [px, py] = tf(v[0], v[1]); ctx.fillStyle = "#c026d3"; ctx.fillRect(px - 3 * this.k, py - 3 * this.k, 6 * this.k, 6 * this.k); }
+      }
       for (const a of d.assign) { const [px, py] = tf(a.p[0], a.p[1]); ctx.strokeStyle = "#0a6e3a"; ctx.lineWidth = 1.5 * this.k; ctx.beginPath(); ctx.arc(px, py, 5 * this.k, 0, 2 * Math.PI); ctx.stroke(); ctx.fillStyle = "#0a6e3a"; ctx.font = `${11 * this.k}px Segoe UI`; ctx.textAlign = "left"; ctx.fillText(a.soil, px + 7 * this.k, py - 6 * this.k); }
     }
     if (this.cur.length) {
