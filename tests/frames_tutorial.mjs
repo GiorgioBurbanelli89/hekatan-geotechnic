@@ -76,13 +76,18 @@ await clickEl("#ps_add"); await waitIdle(); await frames(4, 300);
 // ---- 5) Malla + etapa con sobrecarga y ancla ----
 start("etapas");
 await page.click('#pasos .pl li[data-p="malla"]'); await wait(200); await typeIn("#pml_h", "2"); await clickEl("#pml_ok"); await waitIdle(); await frames(3, 250);
-await page.click('#pasos .pl li[data-p="etapas"]'); await wait(200); await clickEl("#pe_add"); await waitIdle(); await typeIn("#pe_q", "40");
-await clickEl('#pasos .pt[data-tool="sobrecarga"]'); await glide(44, -3, 4); await click(); await glide(56, -3, 4); await click(); await waitIdle(); await frames(3, 250);
-await clickEl("#pe_add"); await waitIdle(); await typeIn("#pe_F", "200"); await typeIn("#pe_ang", "-15");
-await clickEl('#pasos .pt[data-tool="ancla"]'); await glide(36, -6, 5); await click(); await waitIdle(); await frames(4, 300);
-// ---- 6) Resultados: los campos de GEO5 ----
+await page.click('#pasos .pl li[data-p="etapas"]'); await wait(200); await typeIn("#pe_q", "40");
+await clickEl('#pasos .pt[data-tool="sobrecarga"]'); await glide(44, -3, 4); await click(); await glide(56, -3, 4); await click(); await waitIdle(); await frames(4, 300);   // crea +sobrecarga y la muestra
+await page.click('#pasos .pl li[data-p="etapas"]'); await wait(200); await clickEl("#pe_add"); await waitIdle(); await typeIn("#pe_F", "200"); await typeIn("#pe_ang", "-15");
+await clickEl('#pasos .pt[data-tool="ancla"]'); await glide(36, -6, 5); await click(); await waitIdle(); await frames(4, 300);   // +ancla en su etapa
+// ---- 6) Etapas por PESTAÑAS + campos de GEO5 (la carga se ve dibujada en su etapa) ----
 start("resultados");
-for (const [st, f] of [["2", "dx"], ["2", "sz"], ["2", "Edpl"], ["1", "Edpl"]]) { await page.select("#stage", st); await waitIdle(); await page.select("#field", f); await wait(400); await frames(4, 300); }
+const clicTab = async (i) => { await moveToEl(`#etabs button:nth-child(${i + 1})`); await flash(); await page.$$eval("#etabs button", (l, i) => l[i].click(), i); await waitIdle(); await frame(); await unflash(); };
+await clicTab(1); await frames(3, 300);                          // etapa +sobrecarga (banda de flechas)
+await page.select("#field", "sz"); await wait(400); await frames(3, 300);
+await clicTab(2); await frames(3, 300);                          // etapa +ancla (ancla dibujada)
+await page.select("#field", "Edpl"); await wait(400); await frames(4, 350);
+await clicTab(0); await frames(3, 300);                          // volver a peso propio
 // ---- 7) Modelo HECHO: sliders de geometría (en vivo) y de suelo; editar un suelo en el formulario ----
 start("sliders"); await page.evaluate(() => window.__modo("sliders")); await page.select("#stage", "0"); await waitIdle(); await frames(2, 200);
 await slide("gs_beta0", [36, 40, 45, 50]); await slide("gs_H0", [6, 7, 8]); await slide("gs_H0", [7, 6, 5]); await slide("gs_beta0", [45, 40, 32]);
