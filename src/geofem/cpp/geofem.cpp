@@ -93,6 +93,8 @@ struct GeoFem {
   vector<double> Bc, dJw; vector<int> edof;
   Band Kel, Kt;
   vector<double> SIG, DEP; vector<unsigned char> hasDep;
+  // estado de TENSIÓN (SRF=1, la «stress analysis» de GEO5) para los campos del visor: σ, ε total, ε plástica acumulada, u
+  vector<double> EPL, Dinv, SIG1, EPL1, EPS1, U1;
   vector<double> Fg2;
   int nstepsOut = 0;
 
@@ -174,6 +176,20 @@ struct GeoFem {
       }
     }
     SIG.assign((size_t)ne * NG * 4, 0.0); DEP.assign((size_t)ne * NG * 16, 0.0); hasDep.assign((size_t)ne * NG, 0);
+    EPL.assign((size_t)ne * NG * 4, 0.0); SIG1.assign((size_t)ne * NG * 4, 0.0); EPL1.assign((size_t)ne * NG * 4, 0.0); EPS1.assign((size_t)ne * NG * 4, 0.0); U1.assign(ndof, 0.0);
+    // inversa de De (4x4) por material: ε_el = Dinv·Δσ → ε_pl = Δε − ε_el
+    Dinv.assign((size_t)(nmat + 1) * 16, 0.0);
+    for (int mm = 1; mm <= nmat; mm++) {
+      double A[4][8]; const double* D = &D4[(size_t)mm * 16];
+      for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) { A[i][j] = D[i * 4 + j]; A[i][4 + j] = (i == j) ? 1.0 : 0.0; }
+      for (int c = 0; c < 4; c++) {   // Gauss-Jordan con pivote parcial
+        int piv = c; for (int r = c + 1; r < 4; r++) if (std::fabs(A[r][c]) > std::fabs(A[piv][c])) piv = r;
+        for (int j = 0; j < 8; j++) std::swap(A[c][j], A[piv][j]);
+        double d = A[c][c]; for (int j = 0; j < 8; j++) A[c][j] /= d;
+        for (int r = 0; r < 4; r++) if (r != c) { double f = A[r][c]; for (int j = 0; j < 8; j++) A[r][j] -= f * A[c][j]; }
+      }
+      for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) Dinv[(size_t)mm * 16 + i * 4 + j] = A[i][4 + j];
+    }
     Kel.init(nfree, band); Kt.init(nfree, band);
     assembleK(Kel, true);
     Kel.factor();
@@ -255,7 +271,7 @@ struct GeoFem {
     return false;
   }
 
-  void resetState() { std::fill(SIG.begin(), SIG.end(), 0.0); std::fill(hasDep.begin(), hasDep.end(), 0); }
+  void resetState() { std::fill(SIG.begin(), SIG.end(), 0.0); std::fill(hasDep.begin(), hasDep.end(), 0); std::fill(EPL.begin(), EPL.end(), 0.0); }
 
   void assembleInc(const double* du, const std::vector<std::array<double, 2>>& ab, bool commit, double* Fi) {
     std::fill(Fi, Fi + ndof, 0.0);
@@ -275,6 +291,10 @@ struct GeoFem {
         double t0 = sig[0] * w, t1 = sig[1] * w, t3 = sig[3] * w;
         for (int c = 0; c < 12; c++) Fi[edof[e * 12 + c]] += B[c] * t0 + B[12 + c] * t1 + B[24 + c] * t3;
         if (commit) {
+          if (got) {   // deformación plástica acumulada: Δε_pl = Δε − Dinv·Δσ (en un punto elástico sale 0)
+            const double* Di = &Dinv[(size_t)mm * 16]; double ds[4]; for (int i = 0; i < 4; i++) ds[i] = sig[i] - sigN[i];
+            for (int i = 0; i < 4; i++) { double eel = 0; for (int j = 0; j < 4; j++) eel += Di[i * 4 + j] * ds[j]; EPL[kk * 4 + i] += deps[i] - eel; }
+          }
           for (int i = 0; i < 4; i++) sigN[i] = sig[i];
           if (got) { std::memcpy(&DEP[kk * 16], Dep, sizeof Dep); hasDep[kk] = 1; } else hasDep[kk] = 0;
         }
@@ -337,6 +357,13 @@ struct GeoFem {
     double Racc = 1, fs = 1; int nrelax = 0, rs = 0; std::string prog;
     vector<double> ulo(ndof, 0.0), u; int n0;
     bool c0 = nrstep(1.0, Ftot, 0, u, n0);
+    // instantánea del estado de tensión (SRF=1) para los campos del visor
+    SIG1 = SIG; EPL1 = EPL; U1 = u;
+    for (int e = 0; e < ne; e++) for (int q = 0; q < NG; q++) {
+      size_t kk = (size_t)e * NG + q; const double* B = &Bc[kk * 36]; double e0 = 0, e1 = 0, e2 = 0;
+      for (int c = 0; c < 12; c++) { double v = u[edof[e * 12 + c]]; e0 += B[c] * v; e1 += B[12 + c] * v; e2 += B[24 + c] * v; }
+      EPS1[kk * 4] = e0; EPS1[kk * 4 + 1] = e1; EPS1[kk * 4 + 2] = 0; EPS1[kk * 4 + 3] = e2;
+    }
     vector<double> rhs(nfree), x(nfree);
     for (int k = 0; k < nfree; k++) rhs[k] = Ftot[free_[k]];
     Kel.solve(rhs.data(), x.data());
@@ -386,6 +413,13 @@ EMSCRIPTEN_KEEPALIVE int geofem_band(int h) { return handles[h]->band; }
 EMSCRIPTEN_KEEPALIVE int geofem_nfree(int h) { return handles[h]->nfree; }
 EMSCRIPTEN_KEEPALIVE double* geofem_gravity(int h) { return handles[h]->Fg2.data(); }
 EMSCRIPTEN_KEEPALIVE int geofem_nsteps(int h) { return handles[h]->nstepsOut; }
+EMSCRIPTEN_KEEPALIVE int geofem_ngp(int h) { return handles[h]->ne * NG; }
+// estado de TENSIÓN de la última etapa (SRF=1): σ (4/GP: xx yy zz xy), ε_pl (4/GP), ε (4/GP), u (ndof)
+EMSCRIPTEN_KEEPALIVE void geofem_state1(int h, double* sig, double* epl, double* eps, double* u1) {
+  GeoFem* g = handles[h]; size_t n = (size_t)g->ne * NG * 4;
+  std::memcpy(sig, g->SIG1.data(), sizeof(double) * n); std::memcpy(epl, g->EPL1.data(), sizeof(double) * n); std::memcpy(eps, g->EPS1.data(), sizeof(double) * n);
+  std::memcpy(u1, g->U1.data(), sizeof(double) * g->ndof);
+}
 EMSCRIPTEN_KEEPALIVE
 double geofem_run_stage(int h, const double* F, double* outU, double* outUel, double* outSrf, double* outStepsU, int maxSteps) {
   return handles[h]->runStage(F, outU, outUel, outSrf, outStepsU, maxSteps);

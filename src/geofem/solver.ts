@@ -36,6 +36,8 @@ export type StageResult = {
   steps: { srf: number; u: Float64Array }[];
   prog: string;
   seconds: number;
+  // estado de TENSIÓN (SRF=1, la «stress analysis» de GEO5): u, σ por punto de Gauss (xx yy zz xy), ε total, ε plástica acumulada
+  u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number;
 };
 
 export type Log = (line: string) => void;
@@ -150,6 +152,8 @@ export class GeoFem {
     log(`cargas: gravedad Fy=${sFg.toFixed(3)} (recalculada ${sFg2.toFixed(3)}, dif max ${dmax.toExponential(2)}) | sobrecarga Fy=${sFs.toFixed(3)} | ancla Fx=${sFax.toFixed(3)} Fy=${sFay.toFixed(3)} kN`);
     // estado
     this.SIG = new Float64Array(ne * NG * 4); this.DEP = new Float64Array(ne * NG * 16); this.hasDep = new Uint8Array(ne * NG);
+    this.EPL = new Float64Array(ne * NG * 4);
+    this.Dinv = this.D4.map((D) => (D ? inv4(D) : D));
     // K elástica (respaldo si la tangente sale singular)
     this.Kel = bandCreate(this.nfree, band); this.Kt = bandCreate(this.nfree, band);
     this.assembleK(this.Kel, true);
@@ -238,7 +242,8 @@ export class GeoFem {
     return false;
   }
 
-  private resetState(): void { this.SIG.fill(0); this.hasDep.fill(0); }
+  private resetState(): void { this.SIG.fill(0); this.hasDep.fill(0); this.EPL.fill(0); }
+  private EPL!: Float64Array; private Dinv!: Float64Array[];
 
   /** Fuerzas internas con σ = retorno(SIG + De·B·du). Si commit: guarda σ y la tangente del retorno. */
   private assembleInc(du: Float64Array, ab: [number, number][], commit: boolean, Fi: Float64Array): void {
@@ -259,6 +264,10 @@ export class GeoFem {
         const t0 = sig[0] * w, t1 = sig[1] * w, t3 = sig[3] * w;
         for (let c = 0; c < 12; c++) Fi[this.edof[e * 12 + c]] += B[c] * t0 + B[12 + c] * t1 + B[24 + c] * t3;
         if (commit) {
+          if (got) {   // deformación plástica acumulada: Δε_pl = Δε − Dinv·Δσ
+            const Di = this.Dinv[mm]; const ds = [sig[0] - sigN[0], sig[1] - sigN[1], sig[2] - sigN[2], sig[3] - sigN[3]];
+            for (let i = 0; i < 4; i++) { let eel = 0; for (let j = 0; j < 4; j++) eel += Di[i * 4 + j] * ds[j]; this.EPL[kk * 4 + i] += deps[i] - eel; }
+          }
           sigN.set(sig);
           if (got) { this.DEP.set(Dep, kk * 16); this.hasDep[kk] = 1; } else this.hasDep[kk] = 0;
         }
@@ -319,12 +328,19 @@ export class GeoFem {
   }
 
   /** Escalera SRM de GEO5 para una etapa (carga total Ftot). */
-  private srm(Ftot: Float64Array): { fs: number; prog: string; ulo: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[] } {
+  private srm(Ftot: Float64Array): { fs: number; prog: string; ulo: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; u1: Float64Array; sig1: Float64Array; epl1: Float64Array; eps1: Float64Array } {
     const RED0 = 0.9, RELAX = 2, MINSTEP = 0.99, MAXRELAX = 3;
     let Racc = 1, fs = 1, nrelax = 0, rs = 0, prog = "";
     let ulo: Float64Array = new Float64Array(this.ndof);
     const steps: { srf: number; u: Float64Array }[] = [];
-    const [c0, , n0] = this.nrstep(1.0, Ftot, 0);
+    const [c0, u1, n0] = this.nrstep(1.0, Ftot, 0);
+    // instantánea del estado de tensión (SRF=1) para los campos del visor
+    const sig1 = Float64Array.from(this.SIG), epl1 = Float64Array.from(this.EPL), eps1 = new Float64Array(this.ne * NG * 4);
+    for (let e = 0; e < this.ne; e++) for (let q = 0; q < NG; q++) {
+      const kk = e * NG + q, B = this.Bc.subarray(kk * 36, kk * 36 + 36); let e0 = 0, e1 = 0, e2 = 0;
+      for (let c = 0; c < 12; c++) { const v = u1[this.edof[e * 12 + c]]; e0 += B[c] * v; e1 += B[12 + c] * v; e2 += B[24 + c] * v; }
+      eps1[kk * 4] = e0; eps1[kk * 4 + 1] = e1; eps1[kk * 4 + 3] = e2;
+    }
     // u ELÁSTICA = K_el⁻¹ F: la referencia que GEO5 resta (u(FS) − u_el), MEDIDO 2026-09-03
     const rhs = new Float64Array(this.nfree), x = new Float64Array(this.nfree);
     for (let k = 0; k < this.nfree; k++) rhs[k] = Ftot[this.free[k]];
@@ -349,7 +365,7 @@ export class GeoFem {
         if (nrelax > MAXRELAX) break;
       }
     }
-    return { fs, prog, ulo, uel, steps };
+    return { fs, prog, ulo, uel, steps, u1, sig1, epl1, eps1 };
   }
 
   setLog(log: Log): void { this.log = log; }
@@ -373,7 +389,7 @@ export class GeoFem {
       const sec = (performance.now() - ts) / 1000;
       this.log(`    progresion dx(mm) por SRF:${r.prog}`);
       this.log(`  ${st.name.padEnd(22)} >>> FS=${f4(r.fs)}  ${st.geo5 ? `(GEO5=${st.geo5.toFixed(2)})` : "(sin referencia GEO5)"}  [${sec.toFixed(1)} s]`);
-      const res: StageResult = { name: st.name, fs: r.fs, geo5: st.geo5, u: r.ulo, uel: r.uel, steps: r.steps, prog: r.prog, seconds: sec };
+      const res: StageResult = { name: st.name, fs: r.fs, geo5: st.geo5, u: r.ulo, uel: r.uel, steps: r.steps, prog: r.prog, seconds: sec, u1: r.u1, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: this.ne * NG };
       results.push(res); onStage?.(res, si);
     }
     this.log(""); this.log("================ RESUMEN (Hekatan Geotechnic · TS) ================");
@@ -381,4 +397,17 @@ export class GeoFem {
     this.log(`TOTAL ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     return results;
   }
+}
+
+/** inversa 4x4 (Gauss-Jordan con pivote parcial), para Dinv = De⁻¹ */
+function inv4(D: Float64Array): Float64Array {
+  const A = Array.from({ length: 4 }, (_, i) => Array.from({ length: 8 }, (_, j) => (j < 4 ? D[i * 4 + j] : i === j - 4 ? 1 : 0)));
+  for (let c = 0; c < 4; c++) {
+    let piv = c; for (let r = c + 1; r < 4; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+    [A[c], A[piv]] = [A[piv], A[c]];
+    const d = A[c][c]; for (let j = 0; j < 8; j++) A[c][j] /= d;
+    for (let r = 0; r < 4; r++) if (r !== c) { const f = A[r][c]; for (let j = 0; j < 8; j++) A[r][j] -= f * A[c][j]; }
+  }
+  const out = new Float64Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) out[i * 4 + j] = A[i][4 + j];
+  return out;
 }

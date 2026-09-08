@@ -11,6 +11,7 @@ type Mod = {
   _geofem_set_mat: (h: number, MAT: number) => void;
   _geofem_band: (h: number) => number; _geofem_nfree: (h: number) => number;
   _geofem_gravity: (h: number) => number; _geofem_nsteps: (h: number) => number;
+  _geofem_ngp: (h: number) => number; _geofem_state1: (h: number, sig: number, epl: number, eps: number, u1: number) => void;
   _geofem_run_stage: (h: number, F: number, u: number, uel: number, srf: number, stepsU: number, maxSteps: number) => number;
   _geofem_destroy: (h: number) => void;
   _geofem_alloc: (n: number) => number; _geofem_alloc_i: (n: number) => number; _geofem_free: (p: number) => void;
@@ -75,8 +76,14 @@ export class GeoFemWasm {
       const uel = Float64Array.from(mod.HEAPF64.subarray(pUel >> 3, (pUel >> 3) + ndof));
       const ns = mod._geofem_nsteps(this.h);
       const steps = Array.from({ length: ns }, (_, k) => ({ srf: mod.HEAPF64[(pSrf >> 3) + k], u: Float64Array.from(mod.HEAPF64.subarray((pSU >> 3) + k * ndof, (pSU >> 3) + (k + 1) * ndof)) }));
+      // estado de tensión (SRF=1): σ, ε_pl, ε por punto de Gauss y u1
+      const ngp = mod._geofem_ngp(this.h), pS = mod._geofem_alloc(ngp * 4), pP = mod._geofem_alloc(ngp * 4), pE = mod._geofem_alloc(ngp * 4), pU1 = mod._geofem_alloc(ndof);
+      mod._geofem_state1(this.h, pS, pP, pE, pU1);
+      const sig1 = Float64Array.from(mod.HEAPF64.subarray(pS >> 3, (pS >> 3) + ngp * 4)), epl1 = Float64Array.from(mod.HEAPF64.subarray(pP >> 3, (pP >> 3) + ngp * 4));
+      const eps1 = Float64Array.from(mod.HEAPF64.subarray(pE >> 3, (pE >> 3) + ngp * 4)), u1 = Float64Array.from(mod.HEAPF64.subarray(pU1 >> 3, (pU1 >> 3) + ndof));
+      for (const p of [pS, pP, pE, pU1]) mod._geofem_free(p);
       this.log(`  ${st.name.padEnd(22)} >>> FS=${f4(fs)}  ${st.geo5 ? `(GEO5=${st.geo5.toFixed(2)})` : "(sin referencia GEO5)"}  [${sec.toFixed(1)} s]`);
-      const res: StageResult = { name: st.name, fs, geo5: st.geo5, u, uel, steps, prog: "", seconds: sec };
+      const res: StageResult = { name: st.name, fs, geo5: st.geo5, u, uel, steps, prog: "", seconds: sec, u1, sig1, epl1, eps1, ngp };
       results.push(res); onStage?.(res, si);
     }
     for (const p of [pF, pU, pUel, pSrf, pSU]) mod._geofem_free(p);

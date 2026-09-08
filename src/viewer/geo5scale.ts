@@ -75,8 +75,44 @@ export function gridField(X: number[], Y: number[], ELE: number[][], vals: Float
   return { xmin, xmax, zmin, zmax, NX, NZ, Z };
 }
 
-export type FieldKind = "dx" | "dz" | "d";
-export const FIELD_LABEL: Record<FieldKind, string> = { dx: "d_x", dz: "d_z", d: "d" };
+// Los mismos resultados que ofrece GEO5 FEM en «Variable» (Jorge, 8-sep-2026: "fíjate cuántos resultados se pueden escoger").
+// dx/dz/d = mecanismo de falla (u(SRF) − u_el, como GEO5 en estabilidad); el resto = estado de TENSIÓN (SRF=1, «stress analysis»).
+export type FieldKind = "dx" | "dz" | "d" | "sx" | "sz" | "sxt" | "szt" | "txz" | "J" | "u" | "Ed" | "Edpl";
+export const FIELD_LABEL: Record<FieldKind, string> = { dx: "d_x", dz: "d_z", d: "|d|", sx: "σ_x,eff", sz: "σ_z,eff", sxt: "σ_x,tot", szt: "σ_z,tot", txz: "τ_xz", J: "J", u: "u_tot", Ed: "E_d", Edpl: "E_d,pl" };
+export const FIELD_UNIT: Record<FieldKind, string> = { dx: "mm", dz: "mm", d: "mm", sx: "kPa", sz: "kPa", sxt: "kPa", szt: "kPa", txz: "kPa", J: "kPa", u: "kPa", Ed: "‰", Edpl: "‰" };
+export const FIELD_NAME: Record<FieldKind, string> = { dx: "Displacement d_x", dz: "Displacement d_z", d: "Displacement resultant |d|", sx: "Effective stress σ_x,eff", sz: "Effective stress σ_z,eff", sxt: "Total stress σ_x,tot", szt: "Total stress σ_z,tot", txz: "Shear stress τ_xz", J: "Equivalent deviatoric stress J", u: "Total pore pressure u_tot", Ed: "Equivalent deviatoric strain E_d", Edpl: "Plastic equivalent deviatoric strain E_d,pl" };
+export const isStressField = (k: FieldKind) => k !== "dx" && k !== "dz" && k !== "d";
+
+/** Promedio nodal de un valor por punto de Gauss (media de los GP del elemento a sus 6 nudos, media entre elementos). */
+export function gpToNodal(ELE: number[][], nn: number, ngpPerEl: number, val: (kk: number) => number): Float64Array {
+  const sum = new Float64Array(nn), cnt = new Float64Array(nn);
+  for (let e = 0; e < ELE.length; e++) {
+    let s = 0; for (let q = 0; q < ngpPerEl; q++) s += val(e * ngpPerEl + q); s /= ngpPerEl;
+    for (const n of ELE[e]) { sum[n] += s; cnt[n]++; }
+  }
+  for (let i = 0; i < nn; i++) sum[i] = cnt[i] ? sum[i] / cnt[i] : 0;
+  return sum;
+}
+/** Campo nodal de tensión/deformación (SRF=1) con el convenio de GEO5: compresión POSITIVA; sin agua u_tot = 0 y σ_tot = σ_eff. */
+export function stressField(kind: FieldKind, ELE: number[][], nn: number, ngp: number, sig: Float64Array, eps: Float64Array, epl: Float64Array): Float64Array {
+  const per = Math.round(ngp / ELE.length);
+  const dev = (a: Float64Array, kk: number, strain: boolean) => {   // invariante desviador: J = √J2 (σ) ; E_d = √(2/3 e:e) (ε)
+    const xx = a[kk * 4], yy = a[kk * 4 + 1], zz = a[kk * 4 + 2], xy = a[kk * 4 + 3], m = (xx + yy + zz) / 3;
+    const ex = xx - m, ey = yy - m, ez = zz - m, g = strain ? xy / 2 : xy;   // ε_xy = γ_xy/2
+    const J2 = 0.5 * (ex * ex + ey * ey + ez * ez) + g * g;
+    return strain ? Math.sqrt((4 / 3) * J2) : Math.sqrt(J2);
+  };
+  switch (kind) {
+    case "sx": case "sxt": return gpToNodal(ELE, nn, per, (kk) => -sig[kk * 4]);
+    case "sz": case "szt": return gpToNodal(ELE, nn, per, (kk) => -sig[kk * 4 + 1]);
+    case "txz": return gpToNodal(ELE, nn, per, (kk) => sig[kk * 4 + 3]);
+    case "J": return gpToNodal(ELE, nn, per, (kk) => dev(sig, kk, false));
+    case "u": return new Float64Array(nn);
+    case "Ed": return gpToNodal(ELE, nn, per, (kk) => 1e3 * dev(eps, kk, true));
+    case "Edpl": return gpToNodal(ELE, nn, per, (kk) => 1e3 * dev(epl, kk, true));
+    default: return new Float64Array(nn);
+  }
+}
 
 /** Campo nodal en mm con el signo de GEO5: d_x + hacia la izquierda, d_z asiento +, d resultante. */
 export function nodalField(u: Float64Array, uel: Float64Array, nn: number, kind: FieldKind): Float64Array {

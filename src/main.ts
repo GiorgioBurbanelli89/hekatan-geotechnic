@@ -6,14 +6,14 @@
 import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
-import { FieldKind, nodalField } from "./viewer/geo5scale";
+import { FieldKind, FIELD_LABEL, FIELD_UNIT, nodalField, stressField, isStressField } from "./viewer/geo5scale";
 import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
 import { Pasos } from "./pasos";
 import { hgeoToDxf, recetaGeo5 } from "./model/dxf";
 
-type Stage = { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean };
+type Stage = { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean; u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const selModel = $<HTMLSelectElement>("model"), selN = $<HTMLSelectElement>("nstages"), btn = $<HTMLButtonElement>("run");
@@ -227,7 +227,7 @@ function setBase(m: GeoModel, only?: number[]) {
     plot.dark = new URLSearchParams(location.search).get("tema") === "oscuro";   // ?tema=oscuro → gráfica fondo negro (vídeos)
     if (plot.dark) { plot.k = 3; draw.k = 3; for (const c of [canvas, drawCanvas]) { c.width = 2360; c.height = 1400; } }   // lienzo 2x y textos 3x (=1.5x relativos): en el vídeo la gráfica baja a ~700 px de ancho
   } else plot.setMesh(m);
-  plot.hover = ({ x, z, v }) => { if (!draw.active) hoverEl.textContent = v === null ? "" : `x = ${x.toFixed(2)} m   z = ${z.toFixed(2)} m   valor = ${v.toFixed(2)} mm`; };
+  plot.hover = ({ x, z, v }) => { if (!draw.active) hoverEl.textContent = v === null ? "" : `x = ${x.toFixed(2)} m   z = ${z.toFixed(2)} m   ${FIELD_LABEL[selField.value as FieldKind]} = ${v.toFixed(2)} ${FIELD_UNIT[selField.value as FieldKind]}`; };
   buildSliders(m);
   stages = []; fsEl.innerHTML = "";
   selN.innerHTML = m.stages.map((_, i) => `<option value="${i + 1}">${i + 1}</option>`).reverse().join("");
@@ -313,15 +313,17 @@ function redraw() {
   const stepIdx = parseInt(selStep.value || "-1");
   const u = stepIdx >= 0 && st.steps[stepIdx] ? st.steps[stepIdx].u : st.u;
   const srf = stepIdx >= 0 && st.steps[stepIdx] ? st.steps[stepIdx].srf : st.fs;
-  const vals = nodalField(u, st.uel, model.X.length, kind);
-  const lab = { dx: "d_x", dz: "d_z", d: "d" }[kind];
-  plot.draw({
+  const stress = isStressField(kind) && !!st.sig1;
+  const vals = stress ? stressField(kind, model.ELE, model.X.length, st.ngp!, st.sig1!, st.eps1!, st.epl1!) : nodalField(u, st.uel, model.X.length, kind);
+  const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress ? " · estado de tensión SRF=1" : "");
+  const rango = plot.draw({
     field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked,
-    title: `${model.name || "Talud"} · ${st.name} - ${lab} [mm]  ${st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
+    title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
     deformScale: parseFloat(inpDef.value) || 0, u, uel: st.uel,
   });
   draw.setMap(plot.mapping());
   (window as unknown as { __geoMap: unknown }).__geoMap = plot.mapping();   // para el arnés puppeteer (clics en coordenadas del mundo)
+  (window as unknown as { __lastRange: unknown }).__lastRange = { ...rango, field: kind, stage: si, unit: FIELD_UNIT[kind] };   // barra de color (para comprobar campo a campo y etapa a etapa)
 }
 
 function fillStepSelect() {

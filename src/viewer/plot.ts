@@ -1,6 +1,6 @@
 // Visor 2D (Canvas) del talud: campo por bandas con la ESCALA DE GEO5, malla T6, contorno, interfaz
 // de suelos, rótulos de suelo, cargas de la etapa y barra de color. Calca talud_plot_lib.plot_stage.
-import { FIELD_LABEL, FieldKind, geo5Cmap, geo5Levels, gridField } from "./geo5scale";
+import { FIELD_LABEL, FIELD_UNIT, FieldKind, geo5Cmap, geo5Levels, gridField } from "./geo5scale";
 
 export type PlotModel = { X: number[]; Y: number[]; ELE: number[][]; EMAT: number[]; MAT: number[][]; Fs: number[]; Fa: number[]; MATNAMES?: string[] };
 
@@ -229,7 +229,7 @@ export class SlopePlot {
       if (b === nb && Math.abs(y - lastY) < 10 * k) { ctx.fillStyle = BG; ctx.fillRect(bx + bw + 4 * k, lastY - 6 * k, 40 * k, 12 * k); ctx.fillStyle = FG; }
       ctx.fillText(lv[b].toFixed(1), bx + bw + 5 * k, y); lastY = y;
     }
-    ctx.save(); ctx.translate(bx + bw + 46 * k, by + bh / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.font = `${11 * k}px Segoe UI, Arial`; ctx.fillText(`${FIELD_LABEL[o.field]} [mm]`, 0, 0); ctx.restore();
+    ctx.save(); ctx.translate(bx + bw + 46 * k, by + bh / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.font = `${11 * k}px Segoe UI, Arial`; ctx.fillText(`${FIELD_LABEL[o.field]} [${FIELD_UNIT[o.field]}]`, 0, 0); ctx.restore();
     return { lv, vmin, vmax };
   }
 }
