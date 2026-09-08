@@ -7,7 +7,7 @@
 //   mover      arrastra un vértice de interfaz (snap)
 //   borrar     clic en un vértice (lo quita) o en una interfaz (la borra si no es el terreno)
 //   Ctrl+Z deshace. Cada cambio reescribe el .hgeo y remalla (como los sliders: sin botón).
-import type { Pt, SlopeDef } from "../model/dsl";
+import type { Pt, SlopeDef, StageDef } from "../model/dsl";
 import { interfaceY, spanInterface } from "../model/dsl";
 
 export type Tool = "ver" | "interfaz" | "asignar" | "sobrecarga" | "ancla" | "mover" | "borrar";
@@ -180,11 +180,11 @@ export class DrawTools {
         const ty = terrainY(d, p[0]); if (!Number.isFinite(ty)) { this.status("primero el terreno (la primera interfaz)"); return; }
         const pt: Pt = [p[0], ty];
         this.cur.push(pt); this.render();
-        if (this.cur.length === 2) { this.push(); const st = d.stages[this.state.stage] ?? d.stages[d.stages.length - 1]; st.surcharges.push({ q: this.state.q, a: this.cur[0], b: this.cur[1] }); this.cur = []; this.commit(`sobrecarga ${this.state.q} kPa en la etapa ${this.state.stage + 1}`); }
+        if (this.cur.length === 2) { this.push(); const st = this.stageForLoad("+sobrecarga"); st.surcharges.push({ q: this.state.q, a: this.cur[0], b: this.cur[1] }); this.cur = []; this.commit(`sobrecarga ${this.state.q} kPa en la etapa ${this.state.stage + 1}`); }
         else this.status("segundo punto de la sobrecarga");
         break;
       }
-      case "ancla": { this.push(); const st = d.stages[this.state.stage] ?? d.stages[d.stages.length - 1]; st.anchors.push({ F: this.state.F, p: [p[0], p[1]], ang: this.state.ang }); this.commit(`ancla ${this.state.F} kN en ${p[0]},${p[1]}`); break; }
+      case "ancla": { this.push(); const st = this.stageForLoad("+ancla"); st.anchors.push({ F: this.state.F, p: [p[0], p[1]], ang: this.state.ang }); this.commit(`ancla ${this.state.F} kN en ${p[0]},${p[1]} (etapa ${this.state.stage + 1})`); break; }
       case "mover": { const hit = this.hitVertex(p); if (hit) { this.push(); this.drag = hit; if (hit.it === 0) delete d.param; } break; }
       case "borrar": {
         const hit = this.hitVertex(p);
@@ -218,6 +218,14 @@ export class DrawTools {
         this.commit(`línea libre ${this.def.lines.length} (${c.length} puntos): cierra una región con el borde, el terreno u otra línea → recibe su propio suelo`);
       }
     } else { this.cur = []; this.render(); }
+  }
+  /** Etapa donde poner una carga dibujada: la activa si ya es una etapa de carga (≥1); si es peso propio (0) o no hay más,
+   *  CREA una etapa nueva para no arruinar el peso propio (que debe quedar sin cargas y con su FS). Deja esa etapa como activa. */
+  private stageForLoad(nombre: string): StageDef {
+    const d = this.def!;
+    if (this.state.stage >= 1 && d.stages[this.state.stage]) return d.stages[this.state.stage];
+    const st: StageDef = { name: nombre, surcharges: [], anchors: [] };
+    d.stages.push(st); this.state.stage = d.stages.length - 1; return st;
   }
   private hitVertex(p: Pt): { it: number; k: number } | null {
     if (!this.def) return null; const tol = this.state.grid * 0.45;
