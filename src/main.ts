@@ -80,7 +80,8 @@ function buildSliders(m: GeoModel) {
 
 // ---- sliders GEOMÉTRICOS (terreno paramétrico `talud …`): cambian la geometría → remallan → recalculan ----
 let gtimer: number | undefined;
-let geomSliding = false;   // mientras se arrastra un slider geométrico no se reconstruye el panel (el elemento bajo el ratón no se sustituye)
+let geomSliding = false;
+let analitico = false;   // método analítico activo: la gráfica muestra el talud (sin color map de FEM) y el círculo de falla   // mientras se arrastra un slider geométrico no se reconstruye el panel (el elemento bajo el ratón no se sustituye)
 function buildGeomSliders() {
   const g = $<HTMLDivElement>("gsliders");
   if (geomSliding && g.children.length) return;
@@ -336,7 +337,8 @@ function redraw() {
   const u = stepIdx >= 0 && st.steps[stepIdx] ? st.steps[stepIdx].u : st.u;
   const srf = stepIdx >= 0 && st.steps[stepIdx] ? st.steps[stepIdx].srf : st.fs;
   const stress = isStressField(kind) && !!st.sig1;
-  const vals = stress ? stressField(kind, model.ELE, model.X.length, st.ngp!, st.sig1!, st.eps1!, st.epl1!) : nodalField(u, st.uel, model.X.length, kind);
+  const vals = analitico ? new Float64Array(model.X.length)   // método analítico: talud sin color map, solo el círculo de falla
+    : stress ? stressField(kind, model.ELE, model.X.length, st.ngp!, st.sig1!, st.eps1!, st.epl1!) : nodalField(u, st.uel, model.X.length, kind);
   const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress ? " · estado de tensión SRF=1" : "");
   const rango = plot.draw({
     field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked,
@@ -411,14 +413,20 @@ $<HTMLInputElement>("grid").addEventListener("change", (e) => { draw.state.grid 
 // crítica y se dibuja sobre el talud; GeoFEM la borra y deja el mapa de elementos finitos.
 const selMetodo = $<HTMLSelectElement>("metodo"), lemOut = $<HTMLDivElement>("lemout");
 function runLem() {
-  const met = selMetodo.value; if (met === "fem" || !def) { draw.lem = null; lemOut.textContent = ""; draw.render(); return; }
+  const met = selMetodo.value; analitico = met !== "fem";
+  if (met === "fem") { draw.lem = null; lemOut.textContent = ""; redraw(); return; }
+  if (!def) {   // Demo04 (malla fija de GEO5): el análisis por dovelas necesita la geometría → su gemelo .hgeo
+    lemOut.textContent = "pasando a malla propia (.hgeo) para el análisis…";
+    selModel.value = "hgeo"; edWrap.hidden = false; edText.value = DEMO04_HGEO; applyHgeo();   // applyDef vuelve a llamar runLem
+    return;
+  }
   lemOut.textContent = "buscando la superficie crítica…";
   window.setTimeout(() => {
     const t0 = performance.now(); const r = criticalCircle(def!, met as LemMethod, 40);
     if (!r) { draw.lem = null; lemOut.textContent = "no se encontró superficie de falla (revisa el terreno y los suelos)"; draw.render(); return; }
     draw.lem = { circle: r.circle, slices: r.slices, fs: r.fs, method: r.method, x0: r.x0, x1: r.x1 };
     lemOut.innerHTML = `<b style="color:#c026d3">${met === "bishop" ? "Bishop" : "Fellenius"} FS = ${r.fs.toFixed(3)}</b> · círculo (${r.circle.cx.toFixed(1)}, ${r.circle.cy.toFixed(1)}) R=${r.circle.R.toFixed(1)} · ${r.slices.length} dovelas · ${((performance.now() - t0) / 1000).toFixed(2)} s`;
-    draw.render();
+    redraw(); draw.render();
   }, 30);
 }
 selMetodo.addEventListener("change", runLem);
