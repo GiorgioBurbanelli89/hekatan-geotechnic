@@ -52,7 +52,14 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   for (const L of def.layers) chains.push(clipPolyline(L.poly, outline));
   // GEO5: las interfaces (salvo el terreno, que ya es contorno) son restricciones internas de margen a margen
   const spans: Pt[][] = def.margins ? def.interfaces.map((it) => spanInterface(it, def.margins!.xmin, def.margins!.xmax)) : [];
-  for (let k = 1; k < spans.length; k++) chains.push(clipPolyline(spans[k], outline));
+  // Una capa NO puede ir por encima del terreno (GEO5 la recorta contra él): de cada capa solo entran los tramos
+  // estrictamente por debajo; donde toca o sube sobre el terreno se corta en el cruce exacto, y ese cruce pasa a ser
+  // vértice del contorno (si no, el tramo coincidente con el borde rompía la triangulación: FS=1.0000 divergiendo).
+  for (let k = 1; k < spans.length; k++) for (const ch of belowTerrain(spans[k], spans[0])) {
+    chains.push(ch);
+    for (const e of [ch[0], ch[ch.length - 1]]) if (Math.abs(interfaceY(spans[0], e[0]) - e[1]) < 1e-6) insertOnOutline(outline, e);
+  }
+  chains[0] = outline.concat([outline[0]]);   // el contorno con los cruces insertados
   // región de GEO5 = nº de interfaces por encima del punto (el terreno cuenta): asignación por punto
   const regionOf = (x: number, y: number) => spans.reduce((n, sp) => n + (interfaceY(sp, x) > y + 1e-9 ? 1 : 0), 0);
   const regionSoil = new Map<number, number>();
@@ -231,6 +238,41 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   return { model, stats: { nodes: nn, corners: s0 + steiner, elements: ELE.length, minAngle: mn, meanEdge: sumL / nL, area: ar, steiner } };
 }
 
+/** Tramos de la capa estrictamente por DEBAJO del terreno (polilíneas x-monótonas). Devuelve una o varias cadenas;
+ *  los extremos que tocan el terreno son el cruce exacto (sobre el terreno). Lo que coincide o sube se descarta. */
+function belowTerrain(layer: Pt[], terr: Pt[]): Pt[][] {
+  if (layer.length < 2) return [];
+  const x0 = layer[0][0], x1 = layer[layer.length - 1][0];
+  const xs = new Set<number>(); for (const p of layer) xs.add(p[0]); for (const p of terr) if (p[0] > x0 + 1e-9 && p[0] < x1 - 1e-9) xs.add(p[0]);
+  const X = [...xs].sort((a, b) => a - b);
+  const f = (x: number) => interfaceY(layer, x) - interfaceY(terr, x);   // <0: la capa está debajo
+  const pts: { x: number; y: number; below: boolean }[] = [];
+  const push = (x: number) => { const d = f(x); pts.push({ x, y: d < 0 ? interfaceY(layer, x) : interfaceY(terr, x), below: d < -1e-6 }); };
+  for (let i = 0; i < X.length; i++) {
+    push(X[i]);
+    if (i + 1 < X.length) { const a = f(X[i]), b = f(X[i + 1]); if ((a < 0 && b > 0) || (a > 0 && b < 0)) push(X[i] + (X[i + 1] - X[i]) * a / (a - b)); }   // cruce (f lineal a trozos entre X)
+  }
+  const out: Pt[][] = []; let cur: Pt[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], prev = pts[i - 1], next = pts[i + 1];
+    const useful = p.below || (prev?.below ?? false) || (next?.below ?? false);   // un punto "en el terreno" solo vale como extremo de un tramo por debajo
+    if (useful) cur.push([p.x, p.y]);
+    if (!p.below && cur.length && !(next?.below ?? false)) { if (cur.length >= 2) out.push(cur); cur = []; }
+  }
+  if (cur.length >= 2) out.push(cur);
+  return out;
+}
+/** Inserta p como vértice del contorno si cae sobre una de sus aristas (y aún no es vértice). */
+function insertOnOutline(outline: Pt[], p: Pt) {
+  for (const q of outline) if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-6) return;
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i], b = outline[(i + 1) % outline.length];
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-9) continue;
+    const t = ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / (L * L);
+    const dist = Math.abs(cross(b[0] - a[0], b[1] - a[1], p[0] - a[0], p[1] - a[1])) / L;
+    if (t > 1e-6 && t < 1 - 1e-6 && dist < 1e-6) { outline.splice(i + 1, 0, [p[0], p[1]]); return; }
+  }
+}
 function clipPolyline(poly: Pt[], outline: Pt[]): Pt[] {
   // recorta la polilínea al dominio: se queda con los tramos cuyo punto medio está dentro y proyecta los
   // extremos exteriores al cruce con el contorno (búsqueda por bisección sobre el tramo)

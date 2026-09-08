@@ -1,0 +1,9 @@
+# Capa dibujada que SUBE por encima del terreno a la derecha (GEO5 la recorta contra el terreno): caso de Jorge 8-sep-2026
+margenes xmin=0 xmax=40 fondo=-20
+interfaz 0,-7 11,-7 19,-2 31,-2 35,-9 40,-9
+interfaz 0,-14 19,-11 25,-5 25,-2 40,-2
+suelo SUELO1 E=20000 nu=0.3 phi=26 c=10 gamma=17.5
+suelo SUELO2 E=40000 nu=0.3 phi=34 c=5 gamma=19
+asignar SUELO2 en 28,-13
+malla 2
+etapa peso propio

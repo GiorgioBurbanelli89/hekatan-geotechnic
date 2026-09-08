@@ -154,3 +154,12 @@ etapa peso propio   geo5=1.69
 etapa +sobrecarga   geo5=1.48  q=35 en 22,-2.5 -> 29,-2.5    # 7 m: medido en la fixture (ΣFy = 245 kN)
 etapa +ancla        geo5=1.69  F=72 en 16,-5.75 ang=-17   # cabeza del ancla en la cara (medido en la fixture: N del T6)
 `;
+
+/** GEO5: una interfaz no puede estar por encima del terreno. Los vértices de las capas que suben sobre el terreno se
+ *  bajan hasta él (queda escrito así en el .hgeo y así se dibuja). Devuelve cuántos vértices corrigió. */
+export function clampLayersToTerrain(def: SlopeDef): number {
+  if (!def.margins || !def.interfaces[0]?.length) return 0;
+  const terr = spanInterface(def.interfaces[0], def.margins.xmin, def.margins.xmax); let n = 0;
+  for (let k = 1; k < def.interfaces.length; k++) for (const p of def.interfaces[k]) { const zt = interfaceY(terr, p[0]); if (p[1] > zt + 1e-9) { p[1] = Math.round(zt * 1000) / 1000; n++; } }
+  return n;
+}
