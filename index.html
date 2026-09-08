@@ -51,6 +51,7 @@
     #pasos .pq { line-height: 1.35; margin-bottom: 6px; } #pasos .mut { color: var(--mut); font-size: 11.5px; }
     #pasos .pf { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 6px; margin-bottom: 6px; } #pasos .pf label { display: block; font-size: 11px; color: var(--mut); }
     #pasos .pf input, #pasos .pf select { width: 100%; padding: 3px 5px; font-size: 12px; margin-top: 1px; } #pasos .ps6 label:first-child { grid-column: 1 / 3; }
+    #pasos .pr { margin-bottom: 6px; } #pasos .pr summary { cursor: pointer; color: var(--mut); font-size: 11.5px; margin-bottom: 4px; }
     #pasos .pb { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 6px; }
     #pasos .pe { display: flex; gap: 6px; align-items: center; background: #0b0906; border: 1px solid #4a3f28; border-radius: 5px; padding: 3px 6px; margin-bottom: 6px; }
     #pasos .pe code { flex: 1; min-width: 0; font: 11.5px Consolas, monospace; color: #f3ead0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -128,7 +129,7 @@
         <button data-tool="mover" class="tb" title="arrastra un vértice">✥ mover</button>
         <button data-tool="borrar" class="tb" title="clic en vértice o interfaz">✕ borrar</button>
         <button id="undo" class="tb" title="Ctrl+Z">↶ deshacer</button>
-        <button id="gAyuda" class="tb" title="pasos, como los frames de GEO5: márgenes, interfaces, suelos, asignar, malla, etapas, análisis">? pasos</button>
+        <button id="gAyuda" class="tb" title="pasos, como los frames de GEO5: interfaces (rango + terreno + capas), suelos, asignar, malla, etapas, análisis">? pasos</button>
         <span class="sep"></span>
         <label class="il">rejilla <input id="grid" type="number" value="1" min="0.1" step="0.5" style="width:56px"></label>
         <label class="il"><input id="snap" type="checkbox" checked> rejilla F9</label>

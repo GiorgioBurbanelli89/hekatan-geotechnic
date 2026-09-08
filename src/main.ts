@@ -354,7 +354,7 @@ draw.onPrompt = (p) => {   // tras cada orden: prompt + la barra refleja lo escr
 draw.onTool = (t) => setTool(t);
 // ---- ARCHIVO: nuevo / abrir / guardar (.hgeo). Un modelo = un fichero de texto. ----
 $<HTMLButtonElement>("gAyuda").addEventListener("click", () => { pasos.abrir(); pasos.actualizar(def); });
-function nuevoModelo() { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = "# modelo nuevo"; draw.state.soil = ""; pasos.abrir("margenes"); applyHgeo(); setTool("ver"); draw.prompt(); }   // el flujo empieza en Márgenes (Settings de GEO5); «dibujar el terreno» está en el paso 2
+function nuevoModelo() { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = "# modelo nuevo"; draw.state.soil = ""; pasos.abrir("terreno"); applyHgeo(); setTool("ver"); draw.prompt(); }   // empieza en Interfaces (como GEO5): rango del modelo + terreno
 $<HTMLButtonElement>("fNuevo").addEventListener("click", nuevoModelo);
 $<HTMLButtonElement>("fAbrir").addEventListener("click", () => $<HTMLInputElement>("fFile").click());
 $<HTMLInputElement>("fFile").addEventListener("change", async (e) => {

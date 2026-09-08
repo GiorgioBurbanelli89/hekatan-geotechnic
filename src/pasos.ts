@@ -7,7 +7,7 @@
 import type { SlopeDef, Soil } from "./model/dsl";
 import { regionOf } from "./viewer/draw";
 
-export type PasoId = "margenes" | "terreno" | "suelos" | "asignar" | "malla" | "etapas" | "analisis";
+export type PasoId = "terreno" | "suelos" | "asignar" | "malla" | "etapas" | "analisis";
 type Estado = { soil: string; q: number; F: number; ang: number; stage: number };
 export type PasosApi = {
   apply: (d: SlopeDef) => void;          // el modelo cambió desde un formulario → remallar + recalcular (escribe el .hgeo)
@@ -21,7 +21,6 @@ export type PasosApi = {
 
 type Paso = { id: PasoId; n: string; geo5: string; hecho: (d: SlopeDef, p: Pasos) => boolean; opcional?: boolean };
 const PASOS: Paso[] = [
-  { id: "margenes", n: "Márgenes", geo5: "Settings", hecho: (d, p) => p.margOk || d.interfaces.length > 0 },   // hechos cuando los aplicas o ya hay terreno
   { id: "terreno", n: "Terreno y capas", geo5: "Interfaces", hecho: (d) => (d.interfaces[0]?.length ?? 0) >= 2 },
   { id: "suelos", n: "Suelos", geo5: "Soils", hecho: (d) => d.soils.length >= 1 },
   { id: "asignar", n: "Asignar", geo5: "Assign", hecho: (d) => d.soils.length >= 1 && (d.interfaces.length <= 1 || d.assign.length >= d.interfaces.length - 1) },
@@ -34,12 +33,12 @@ const num = (v: string | number, k = 2) => (typeof v === "string" ? parseFloat(v
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
 export class Pasos {
-  el: HTMLDivElement; cerrado = true; cur: PasoId = "margenes"; margOk = false;
+  el: HTMLDivElement; cerrado = true; cur: PasoId = "terreno"; margOk = false;
   private d: SlopeDef | null = null; private hechoAntes = new Map<PasoId, boolean>(); private editSoil: string | null = null;
   constructor(parent: HTMLElement, private api: PasosApi) {
     this.el = document.createElement("div"); this.el.id = "pasos"; this.el.hidden = true; parent.prepend(this.el);
   }
-  abrir(paso?: PasoId) { this.cerrado = false; if (paso) { this.cur = paso; this.hechoAntes.clear(); if (paso === "margenes") this.margOk = false; } this.el.hidden = false; this.render(); }
+  abrir(paso?: PasoId) { this.cerrado = false; if (paso) { this.cur = paso; this.hechoAntes.clear(); this.margOk = false; } this.el.hidden = false; this.render(); }
   cerrar() { this.cerrado = true; this.el.hidden = true; }
   /** la herramienta activa manda: el paso actual es el de esa herramienta */
   tool(t: string) {
@@ -73,13 +72,13 @@ export class Pasos {
     const m = d.margins ?? { xmin: 0, xmax: 40, bottom: -20 };
     const usar = (cmd: string) => `<div class="pe"><code>${esc(cmd)}</code><button class="pu" data-cmd="${esc(cmd)}" title="lo deja escrito en Orden:; pulsa Enter">usar</button></div>`;
     switch (id) {
-      case "margenes": return `<div class="pq"><b>Márgenes</b> (GEO5: <i>Settings</i>). El rectángulo del modelo: x de izquierda a derecha y cota del fondo. Todo lo que dibujes va dentro.</div>
-        <div class="pf"><label>x mín <input id="pm_xmin" type="number" step="1" value="${m.xmin}"></label><label>x máx <input id="pm_xmax" type="number" step="1" value="${m.xmax}"></label><label>fondo z <input id="pm_fondo" type="number" step="0.5" value="${m.bottom}"></label></div>
-        <div class="pb"><button id="pm_ok">aplicar márgenes</button><button class="pn" data-go="terreno">siguiente: terreno ▸</button></div>`;
       case "terreno": {
         const its = d.interfaces.map((it, i) => `<li>${i === 0 ? "terreno" : "capa " + i} · ${it.length} puntos <span class="mut">${it.map((p) => `${num(p[0], 1)},${num(p[1], 1)}`).join(" ")}</span><button class="pdel" data-it="${i}" title="borrar">✕</button></li>`).join("");
         const fase = d.interfaces[0]?.length ? "FASE 2 — CAPAS: cada capa es otra interfaz de margen a margen, bajo el terreno. Los suelos van de ARRIBA hacia ABAJO." : "FASE 1 — TERRENO: traza el BORDE del terreno con clics de izquierda a derecha, de margen a margen (Enter termina · Esc cancela · Retroceso quita el último · rejilla F9 · snap F3 · orto F8).";
         return `<div class="pq"><b>Interfaces</b> (GEO5: <i>Interfaces</i>). ${fase} Al mover el ratón ves x, z, la longitud L y el ángulo β del tramo.</div>
+        <details class="pr" ${d.interfaces.length ? "" : "open"}><summary>rango del modelo (GEO5: <i>Set ranges</i>): x de izquierda a derecha y profundidad</summary>
+        <div class="pf"><label>x mín <input id="pm_xmin" type="number" step="1" value="${m.xmin}"></label><label>x máx <input id="pm_xmax" type="number" step="1" value="${m.xmax}"></label><label>fondo z <input id="pm_fondo" type="number" step="0.5" value="${m.bottom}"></label></div>
+        <div class="pb"><button id="pm_ok">aplicar rango</button></div></details>
         <div class="pb"><button class="pt" data-tool="interfaz">✎ dibujar ${d.interfaces[0]?.length ? "otra capa" : "el terreno"}</button><button class="pt" data-tool="mover">✥ mover</button><button class="pt" data-tool="borrar">✕ borrar</button></div>
         ${usar(d.interfaces[0]?.length ? "interfaz 0,-17 30,-16.5 60,-15" : "interfaz 0,-14 16,-14 24,-9 32,-9 40,-3 60,-3")}
         <ul class="pli">${its || "<li class='mut'>todavía no hay terreno</li>"}</ul>
