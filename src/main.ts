@@ -10,6 +10,7 @@ import { FieldKind, FIELD_LABEL, FIELD_UNIT, nodalField, stressField, isStressFi
 import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
+import { criticalCircle, LemMethod } from "./lem/slices";
 import { Pasos } from "./pasos";
 import { hgeoToDxf, recetaGeo5 } from "./model/dxf";
 
@@ -287,7 +288,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
     dSoil.value = draw.state.soil;
     draw.setDef(def);
     setBase(m, only);
-    pasos.actualizar(def);
+    pasos.actualizar(def); if (selMetodo.value !== "fem") runLem();
   } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; }
 }
 function applyHgeo() { try { applyDef(parseHgeo(edText.value, { draft: true }), true); } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; } }
@@ -405,6 +406,23 @@ function setTool(t: Tool) {
 document.querySelectorAll<HTMLButtonElement>(".tb[data-tool]").forEach((b) => b.addEventListener("click", () => setTool(b.dataset.tool as Tool)));
 $<HTMLButtonElement>("undo").addEventListener("click", () => draw.undo());
 $<HTMLInputElement>("grid").addEventListener("change", (e) => { draw.state.grid = parseFloat((e.target as HTMLInputElement).value) || 1; draw.render(); });
+
+// MÉTODO analítico (equilibrio límite) vs elementos finitos. Al elegir Bishop/Fellenius se busca la superficie de falla
+// crítica y se dibuja sobre el talud; GeoFEM la borra y deja el mapa de elementos finitos.
+const selMetodo = $<HTMLSelectElement>("metodo"), lemOut = $<HTMLDivElement>("lemout");
+function runLem() {
+  const met = selMetodo.value; if (met === "fem" || !def) { draw.lem = null; lemOut.textContent = ""; draw.render(); return; }
+  lemOut.textContent = "buscando la superficie crítica…";
+  window.setTimeout(() => {
+    const t0 = performance.now(); const r = criticalCircle(def!, met as LemMethod, 40);
+    if (!r) { draw.lem = null; lemOut.textContent = "no se encontró superficie de falla (revisa el terreno y los suelos)"; draw.render(); return; }
+    draw.lem = { circle: r.circle, slices: r.slices, fs: r.fs, method: r.method, x0: r.x0, x1: r.x1 };
+    lemOut.innerHTML = `<b style="color:#c026d3">${met === "bishop" ? "Bishop" : "Fellenius"} FS = ${r.fs.toFixed(3)}</b> · círculo (${r.circle.cx.toFixed(1)}, ${r.circle.cy.toFixed(1)}) R=${r.circle.R.toFixed(1)} · ${r.slices.length} dovelas · ${((performance.now() - t0) / 1000).toFixed(2)} s`;
+    draw.render();
+  }, 30);
+}
+selMetodo.addEventListener("change", runLem);
+(window as unknown as { __lem: () => unknown }).__lem = () => draw.lem;   // para el arnés puppeteer
 $<HTMLInputElement>("snap").addEventListener("change", (e) => { draw.state.snap = (e.target as HTMLInputElement).checked; });
 $<HTMLInputElement>("osnap").addEventListener("change", (e) => { draw.state.osnap = (e.target as HTMLInputElement).checked; });
 $<HTMLInputElement>("ortho").addEventListener("change", (e) => { draw.state.ortho = (e.target as HTMLInputElement).checked; });

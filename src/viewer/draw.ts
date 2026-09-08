@@ -22,6 +22,8 @@ export class DrawTools {
   k = 1;
   /** true mientras se arrastra un slider de geometría: render() pinta las interfaces aunque no haya herramienta */
   showGeom = false;
+  /** superficie de falla del método ANALÍTICO (equilibrio límite) a dibujar sobre el talud, o null */
+  lem: { circle: { cx: number; cy: number; R: number }; slices: { xm: number; b: number; yb: number; yt: number }[]; fs: number; method: string; x0: number; x1: number } | null = null;
   private snapKind: SnapKind = null;         // qué snap atrapó el cursor (para el marcador y el estado)
   onChange: ((def: SlopeDef) => void) | null = null;     // el modelo cambió (remallar + recalcular)
   onStatus: ((msg: string) => void) | null = null;
@@ -253,6 +255,26 @@ export class DrawTools {
     ctx.clearRect(0, 0, W, H);
     if (!this.map || !this.def) return;
     const tf = this.map.tf, d = this.def;
+    if (this.lem) {   // superficie de falla del método analítico (dovelas): arco de rotura + dovelas + centro/radio + FS
+      const L = this.lem, C = L.circle;
+      ctx.save();
+      ctx.strokeStyle = "#c026d3"; ctx.fillStyle = "rgba(192,38,211,0.10)"; ctx.lineWidth = 2.4 * this.k;
+      // masa deslizante: terreno de x0 a x1 + arco inferior de vuelta
+      ctx.beginPath(); const t0 = tf(L.x0, C.cy - Math.sqrt(Math.max(0, C.R * C.R - (L.x0 - C.cx) ** 2))); ctx.moveTo(t0[0], t0[1]);
+      const NA = 60; for (let i = 1; i <= NA; i++) { const x = L.x1 + (L.x0 - L.x1) * i / NA; const yb = C.cy - Math.sqrt(Math.max(0, C.R * C.R - (x - C.cx) ** 2)); const [px, py] = tf(x, yb); ctx.lineTo(px, py); }
+      for (const sl of L.slices) { const [px, py] = tf(sl.xm - sl.b / 2, sl.yt); ctx.lineTo(px, py); }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      // dovelas (líneas finas verticales)
+      ctx.strokeStyle = "rgba(192,38,211,0.45)"; ctx.lineWidth = 0.8 * this.k; ctx.beginPath();
+      for (const sl of L.slices) { const a = tf(sl.xm, sl.yb), b = tf(sl.xm, sl.yt); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); } ctx.stroke();
+      // centro + radio
+      const [cxp, cyp] = tf(C.cx, C.cy); ctx.fillStyle = "#c026d3"; ctx.beginPath(); ctx.arc(cxp, cyp, 3.5 * this.k, 0, 2 * Math.PI); ctx.fill();
+      ctx.strokeStyle = "rgba(192,38,211,0.5)"; ctx.setLineDash([4 * this.k, 3 * this.k]); ctx.lineWidth = this.k; const mid = tf(L.x0, C.cy - Math.sqrt(Math.max(0, C.R * C.R - (L.x0 - C.cx) ** 2))); ctx.beginPath(); ctx.moveTo(cxp, cyp); ctx.lineTo(mid[0], mid[1]); ctx.stroke(); ctx.setLineDash([]);
+      // etiqueta FS
+      ctx.fillStyle = "#c026d3"; ctx.font = `bold ${13 * this.k}px Segoe UI`; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+      ctx.fillText(`${L.method === "bishop" ? "Bishop" : "Fellenius"}  FS = ${L.fs.toFixed(3)}`, cxp, cyp - 8 * this.k);
+      ctx.restore();
+    }
     if (this.showGeom && !this.active) {   // arrastrando un slider de geometría: las líneas se mueven EN VIVO sobre la gráfica (Jorge: "recién cuando suelto cambia")
       for (let i = 0; i < d.interfaces.length; i++) { const it = d.interfaces[i]; if (it.length < 2) continue; ctx.strokeStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.lineWidth = 2.2 * this.k; ctx.setLineDash(i === 0 ? [] : [6 * this.k, 4 * this.k]); ctx.beginPath(); it.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); ctx.setLineDash([]); for (const v of it) { const [px, py] = tf(v[0], v[1]); ctx.fillStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.fillRect(px - 3 * this.k, py - 3 * this.k, 6 * this.k, 6 * this.k); } }
       for (const ln of d.lines ?? []) { ctx.strokeStyle = "#c026d3"; ctx.lineWidth = 1.8 * this.k; ctx.setLineDash([5 * this.k, 4 * this.k]); ctx.beginPath(); ln.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); ctx.setLineDash([]); }

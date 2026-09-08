@@ -107,6 +107,9 @@
         <div id="edmsg" class="mats"></div>
       </div>
       <div class="mats" id="mats"></div>
+      <label>Método</label>
+      <select id="metodo" title="GeoFEM = elementos finitos (reducción de resistencia). Analítico = equilibrio límite por dovelas (módulo Slope Stability de GEO5)"><option value="fem">GeoFEM · elementos finitos (SRM)</option><option value="bishop">Analítico · Bishop (círculo)</option><option value="fellenius">Analítico · Fellenius (círculo)</option></select>
+      <div id="lemout" class="mats" style="margin:4px 0"></div>
       <label>Etapas a calcular</label>
       <select id="nstages"><option value="3">3 (peso propio · sobrecarga · ancla)</option><option value="2">2</option><option value="1">1 (solo peso propio)</option></select>
       <h2 style="margin-top:12px">Parámetros <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(recalcula solo)</span></h2>
