@@ -155,11 +155,24 @@ etapa +sobrecarga   geo5=1.48  q=35 en 22,-2.5 -> 29,-2.5    # 7 m: medido en la
 etapa +ancla        geo5=1.69  F=72 en 16,-5.75 ang=-17   # cabeza del ancla en la cara (medido en la fixture: N del T6)
 `;
 
-/** GEO5: una interfaz no puede estar por encima del terreno. Los vértices de las capas que suben sobre el terreno se
- *  bajan hasta él (queda escrito así en el .hgeo y así se dibuja). Devuelve cuántos vértices corrigió. */
+/** GEO5: una interfaz no puede estar por encima del terreno. Donde una capa sube sobre el terreno, la capa pasa a SEGUIR
+ *  el terreno (vértice a vértice, con el cruce exacto), no solo se bajan sus vértices (eso dejaba una cuña falsa por debajo).
+ *  Queda escrito así en el .hgeo y así se dibuja. Devuelve cuántas capas corrigió. */
 export function clampLayersToTerrain(def: SlopeDef): number {
   if (!def.margins || !def.interfaces[0]?.length) return 0;
   const terr = spanInterface(def.interfaces[0], def.margins.xmin, def.margins.xmax); let n = 0;
-  for (let k = 1; k < def.interfaces.length; k++) for (const p of def.interfaces[k]) { const zt = interfaceY(terr, p[0]); if (p[1] > zt + 1e-9) { p[1] = Math.round(zt * 1000) / 1000; n++; } }
+  for (let k = 1; k < def.interfaces.length; k++) {
+    const lay = def.interfaces[k]; if (lay.length < 2) continue;
+    if (!lay.some((p) => p[1] > interfaceY(terr, p[0]) + 1e-9)) continue;   // toda por debajo: se respeta tal cual
+    const x0 = lay[0][0], x1 = lay[lay.length - 1][0];
+    const xs = new Set<number>(); for (const p of lay) xs.add(p[0]); for (const p of terr) if (p[0] > x0 + 1e-9 && p[0] < x1 - 1e-9) xs.add(p[0]);
+    const X = [...xs].sort((a, b) => a - b), f = (x: number) => interfaceY(lay, x) - interfaceY(terr, x);
+    const out: Pt[] = []; const put = (x: number) => { const y = Math.min(interfaceY(lay, x), interfaceY(terr, x)); out.push([Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000]); };
+    for (let i = 0; i < X.length; i++) { put(X[i]); if (i + 1 < X.length) { const a = f(X[i]), b = f(X[i + 1]); if ((a < 0 && b > 0) || (a > 0 && b < 0)) put(X[i] + (X[i + 1] - X[i]) * a / (a - b)); } }
+    // quitar puntos colineales (y repetidos) para no ensuciar el .hgeo
+    const simp: Pt[] = [];
+    for (const p of out) { const q = simp[simp.length - 1]; if (q && Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-6) continue; if (simp.length >= 2) { const o = simp[simp.length - 2]; if (Math.abs((q[0] - o[0]) * (p[1] - o[1]) - (q[1] - o[1]) * (p[0] - o[0])) < 0.02) simp.pop(); } simp.push(p); }
+    def.interfaces[k] = simp; n++;
+  }
   return n;
 }
