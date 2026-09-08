@@ -79,7 +79,13 @@ function buildGeomSliders() {
   const g = $<HTMLDivElement>("gsliders");
   if (geomSliding && g.children.length) return;
   g.innerHTML = "";
-  if (!def) return;
+  if (!def) {   // malla importada de GEO5 (fija): la geometría se parametriza en su gemelo .hgeo (malla propia, mismos suelos y etapas)
+    if (selModel.value === "hgeo") return;
+    const b = document.createElement("button"); b.className = "tb"; b.id = "gParam"; b.style.cssText = "width:100%;margin:4px 0 6px";
+    b.textContent = "✎ parametrizar geometría (β, H, corona… → .hgeo)"; b.title = "abre este talud como .hgeo con malla propia: sliders de ángulo, altura, corona, pie y capas";
+    b.addEventListener("click", () => { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = DEMO04_HGEO; applyHgeo(); });
+    g.appendChild(b); return;
+  }
   if (!def.param) { buildDrawnSliders(g); return; }
   const pm = def.param;
   const rows: { key: keyof typeof pm; label: string; min: number; max: number; step: number }[] = [
@@ -129,6 +135,17 @@ function buildDrawnSliders(g: HTMLDivElement) {
   ter.forEach((p, k) => {
     if (k > 0 && k < ter.length - 1) push(`x${k}`, `P${k + 1} x [m]`, ter[k - 1][0], ter[k + 1][0], 0.1, p[0], (v) => { ter[k][0] = v; });
     push(`z${k}`, `P${k + 1} z [m]`, zBot, zTop, 0.1, p[1], (v) => { ter[k][1] = v; });
+  });
+  // caras inclinadas del terreno: ángulo β y altura H (lo que se parametriza en un talud). β mueve en x el vértice alto de la
+  // cara (H/tanβ desde el pie); H sube o baja ese vértice y todos los que siguen (la corona entera), como en `talud H=…`.
+  const caras = ter.slice(0, -1).map((p, k) => ({ k, dx: ter[k + 1][0] - p[0], dz: ter[k + 1][1] - p[1] })).filter((c) => c.dx > 0.05 && Math.abs(c.dz) > 0.3);
+  if (caras.length) head("talud (caras inclinadas)");
+  caras.forEach(({ k, dx, dz }, n) => {
+    const sub = "₁₂₃₄₅₆₇₈₉"[n] ?? String(n + 1), H = Math.abs(dz), beta = Math.atan2(H, dx) * 180 / Math.PI;
+    const xmin = ter[k][0] + 0.3, xmax = k + 2 < ter.length ? ter[k + 2][0] - 0.3 : m.xmax;
+    push(`beta${n}`, `β${sub} [°]`, 5, 85, 0.5, Math.round(beta * 10) / 10, (v) => { ter[k + 1][0] = Math.min(xmax, Math.max(xmin, ter[k][0] + H / Math.tan(v * Math.PI / 180))); });
+    const z0 = ter.slice(k + 1).map((p) => p[1]);
+    push(`H${n}`, `H${sub} [m]`, 0.5, zTop - zBot - 1, 0.1, Math.round(H * 10) / 10, (v) => { const dzn = Math.sign(dz) * (v - H); for (let j = k + 1; j < ter.length; j++) ter[j][1] = Math.min(zTop, Math.max(zBot, z0[j - k - 1] + dzn)); });
   });
   if (d.interfaces.length > 1) head("capas (cota del techo en el centro)");
   const xmid = (m.xmin + m.xmax) / 2;

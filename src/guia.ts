@@ -23,7 +23,7 @@ export const PASOS: Paso[] = [
 ];
 
 export class Guia {
-  el: HTMLDivElement; cerrada = false; private saltados = new Set<string>();
+  el: HTMLDivElement; cerrada = true; private saltados = new Set<string>();
   constructor(parent: HTMLElement, private usar: (cmd: string) => void, private tool: (t: string) => void) {
     this.el = document.createElement("div"); this.el.id = "guia"; this.el.hidden = true; parent.appendChild(this.el);
   }
