@@ -10,6 +10,7 @@ import { FieldKind, nodalField } from "./viewer/geo5scale";
 import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, interfaceY, spanInterface } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
+import { Guia } from "./guia";
 
 type Stage = { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean };
 
@@ -33,6 +34,7 @@ let worker: Worker | null = null;
 let timer: number | undefined;
 let busy = false;
 const draw = new DrawTools(drawCanvas);
+const guia = new Guia(document.querySelector(".stack")!, (cmd) => { const i = $<HTMLInputElement>("cmdin"); i.value = cmd; i.focus(); i.select(); }, (t) => setTool(t as Tool));
 
 // ---- sliders ----
 type Slider = { id: string; label: string; min: number; max: number; step: number; value: number };
@@ -212,7 +214,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
       draw.sheetTop = top; draw.setDef(def); draw.setMap(plot!.mapping());
       (window as unknown as { __geoMap: unknown }).__geoMap = plot!.mapping();
       edMsg.textContent = !def.interfaces[0]?.length ? "borrador: falta el terreno (dibújalo con «interfaz» o escríbelo)" : "borrador: falta al menos un suelo"; edMsg.style.color = "var(--oro)";
-      draw.prompt(); return;
+      draw.prompt(); guia.actualizar(def, edText.value); return;
     }
     const { model: m, stats } = meshSlope(def);
     m.MATNAMES = def.soils.map((s) => s.name);
@@ -225,6 +227,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
     dSoil.value = draw.state.soil;
     draw.setDef(def);
     setBase(m, only);
+    guia.actualizar(def, edText.value);
   } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; }
 }
 function applyHgeo() { try { applyDef(parseHgeo(edText.value, { draft: true }), true); } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; } }
@@ -328,7 +331,8 @@ draw.onPrompt = (p) => {   // tras cada orden: prompt + la barra refleja lo escr
 };
 draw.onTool = (t) => setTool(t);
 // ---- ARCHIVO: nuevo / abrir / guardar (.hgeo). Un modelo = un fichero de texto. ----
-function nuevoModelo() { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = "# modelo nuevo"; draw.state.soil = ""; applyHgeo(); draw.command("interfaz"); }
+$<HTMLButtonElement>("gAyuda").addEventListener("click", () => { guia.abrir(); guia.actualizar(def, edText.value); });
+function nuevoModelo() { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = "# modelo nuevo"; draw.state.soil = ""; guia.abrir(true); applyHgeo(); draw.command("interfaz"); }
 $<HTMLButtonElement>("fNuevo").addEventListener("click", nuevoModelo);
 $<HTMLButtonElement>("fAbrir").addEventListener("click", () => $<HTMLInputElement>("fFile").click());
 $<HTMLInputElement>("fFile").addEventListener("change", async (e) => {

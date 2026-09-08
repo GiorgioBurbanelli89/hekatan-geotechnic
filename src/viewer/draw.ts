@@ -97,7 +97,7 @@ export class DrawTools {
       this.echo(`> ${line}`); this.snapKind = null; this.pick([Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000], true); return;
     }
     this.echo(`Orden: ${line}`);
-    if (c in tools) { this.cur = []; this.onTool?.(tools[c]); this.prompt(); return; }
+    if (c in tools && toks.length === 1) { this.cur = []; this.onTool?.(tools[c]); this.prompt(); return; }   // con argumentos (`interfaz 0,-14 16,-14 …`, `asignar ARCILLA en 30,-18`) es una línea del .hgeo
     if (c === "u" || c === "deshacer" || c === "undo" || c === "z") { this.undo(); this.prompt(); return; }
     if (c === "f3") { this.state.osnap = !this.state.osnap; this.status(`snap a objetos ${this.state.osnap ? "ON" : "OFF"}`); return; }
     if (c === "f8" || c === "orto") { this.state.ortho = !this.state.ortho; this.status(`orto ${this.state.ortho ? "ON" : "OFF"}`); return; }

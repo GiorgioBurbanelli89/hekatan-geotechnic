@@ -93,6 +93,7 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
     if (!def.soils.length) throw new Error("falta al menos un suelo");
   }
   if (!def.stages.length) def.stages.push({ name: "peso propio", surcharges: [], anchors: [] });
+  else if (def.stages[0].name.startsWith("+")) def.stages.unshift({ name: "peso propio", surcharges: [], anchors: [] });   // `etapa +sobrecarga` escrita a mano sin `etapa peso propio` antes: la etapa 1 (peso propio) siempre está
   return def;
 }
 
