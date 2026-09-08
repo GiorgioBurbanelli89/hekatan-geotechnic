@@ -5,4 +5,4 @@ interfaz 0,-10 19,-7 19.94,1 30,1 34,-4 40,-4
 suelo LIMO_ARENOSO E=20000 nu=0.3 phi=26 c=10 gamma=18
 suelo ARCILLA E=8000 nu=0.35 phi=18 c=15 gamma=17
 malla 2
-etapa peso propio
+etapa peso propio geo5=1.39   # GEO5 2024 FEM, malla propia de GEO5 edge 2 m (tools/hgeo_to_geo5.py, 8-sep-2026); Hekatan 1.3717

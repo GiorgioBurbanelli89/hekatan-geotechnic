@@ -304,9 +304,15 @@ class Geo5:
         while time.time() - t0 < 900:   # mientras calcula, el botón Analyze se vuelve «Terminate»
             time.sleep(2.0); self.dismiss_modals()
             if any(c.window_text().startswith("&Analyze") for c in self.buttons()): break
-        self.dismiss_modals(); self.shot("analysis_%s" % tag)
-        txt = [t for t in self.texts(self.main) if any(k in t for k in ("afety", "FS", "onverge", "error", "Error", "performed", "ended"))]
-        print("   textos:", txt[:8]); return txt
+        self.dismiss_modals(); fn = self.shot("analysis_%s" % tag)
+        # el panel de resultados de GEO5 no es texto de ventana: OCR de Windows (tools/ocr_win.ps1) sobre el recorte del panel
+        ps1 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ocr_win.ps1")
+        try: ocr = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1, fn, "630", "1170", "1500", "340"], capture_output=True, text=True, timeout=120).stdout.strip().splitlines()
+        except Exception as e: ocr = ["(OCR fallo: %s)" % e]
+        ocr = [l.strip() for l in ocr if l.strip()]
+        m = re.search(r"FS\s*=\s*([0-9]+[.,][0-9]+)", " ".join(ocr))
+        fs = float(m.group(1).replace(",", ".")) if m else None
+        print("   GEO5 dice:", " | ".join(ocr)); print("   FS GEO5 =", fs); return {"fs": fs, "texto": ocr}
     def save_as(self, path):
         """File → Save as (Shift+Ctrl+S). El diálogo es propio de GEO5 (TEnvOpenDialogForm): se teclea en el campo File name
         una ruta SIN ESPACIOS (C:\\Users\\j-b-j\\geo5_out\\…; el control Delphi pierde los espacios) y luego se copia al destino."""
@@ -370,10 +376,13 @@ def run(hgeo, out_gmk, keep=False):
         else: g.add_stage()
         for sc in st["surcharges"]: g.surcharge(sc)
         for an in st["anchors"]: g.anchor(an)
-        r = g.analyze("etapa%d" % (i + 1)); print("   resultado:", r); res.append((st["name"], r))
+        r = g.analyze("etapa%d" % (i + 1)); res.append((st["name"], r))
     if hacer("guardar"): print("7) guardar", out_gmk); g.save_as(out_gmk)
-    with open(os.path.splitext(out_gmk)[0] + "_geo5.txt", "w", encoding="utf-8") as f:
-        for nm, r in res: f.write("%s: %s\n" % (nm, " | ".join(r)))
+    if res:
+        with open(os.path.splitext(out_gmk)[0] + "_geo5.txt", "w", encoding="utf-8") as f:
+            f.write("# %s -> GEO5 2024 FEM (GeoFEM), estabilidad por reduccion de c-phi, malla propia de GEO5 (edge %g m)\n" % (os.path.basename(hgeo), m["h"]))
+            for nm, r in res: f.write("%s: FS_GEO5 = %s   [%s]\n" % (nm, r["fs"], " / ".join(r["texto"])))
+        print("   resultados ->", os.path.splitext(out_gmk)[0] + "_geo5.txt")
     print("listo:", out_gmk)
 
 if __name__ == "__main__":
