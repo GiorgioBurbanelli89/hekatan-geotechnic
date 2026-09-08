@@ -239,6 +239,7 @@ function setBase(m: GeoModel, only?: number[]) {
   selN.innerHTML = m.stages.map((_, i) => `<option value="${i + 1}">${i + 1}</option>`).reverse().join("");
   selN.value = String(m.stages.length);
   selStage.innerHTML = m.stages.map((s, i) => `<option value="${i}">${s.name}</option>`).join("");
+  buildStageTabs();
   if (!only) selStage.value = "0"; selStep.innerHTML = "";
   dStage.innerHTML = m.stages.map((s, i) => `<option value="${i}">${s.name}</option>`).join("");
   plot.draw({ field: "dx", vals: new Float64Array(m.X.length), title: m.name || "", stage: 0, showMesh: true });
@@ -298,6 +299,17 @@ function appendLog(line: string) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+const etabs = $<HTMLDivElement>("etabs");
+/** Pestañas de etapa sobre la gráfica (como [1][2][3] de GEO5): clic = ver esa etapa. Muestran el FS cuando está. */
+function buildStageTabs() {
+  if (!model) { etabs.innerHTML = ""; return; }
+  const vis = visibleStage();
+  etabs.innerHTML = model.stages.map((st, i) => {
+    const r = stages[i]; const fs = r && !r.stale ? (r.steps.length ? `<span class="fs">FS ${r.fs.toFixed(2)}</span>` : `<span class="fs" style="color:#e5382b">✖</span>`) : "";
+    return `<button data-st="${i}" class="${i === vis ? "on" : ""}">${i + 1}. ${st.name}${fs}</button>`;
+  }).join("");
+  etabs.querySelectorAll<HTMLButtonElement>("button").forEach((b) => { b.onclick = () => { selStage.value = b.dataset.st!; selStage.dispatchEvent(new Event("change")); }; });
+}
 function fsTable() {
   const rows = stages.map((s) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok"${s.steps.length ? "" : ' style="color:#e5382b"'}>${s.steps.length ? s.fs.toFixed(4) : "< 1 ✖ falla"}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
   fsEl.innerHTML = `<table><tr><th>etapa</th><th>FS</th><th>GEO5</th><th>t</th></tr>${rows}</table>` + (busy ? `<div style="color:var(--oro);margin-top:4px">calculando…</div>` : "");
@@ -372,7 +384,7 @@ function run(idx: number[]) {
     else if (m.type === "stage") {
       stages[m.index] = { ...(m.result as Stage), stale: false };
       calcStage();
-      fsTable(); if (m.index === visibleStage()) { fillStepSelect(); redraw(); }
+      fsTable(); buildStageTabs(); if (m.index === visibleStage()) { fillStepSelect(); redraw(); }
     } else if (m.type === "done") { busy = false; calcDone(false); fsTable(); appendLog(`(navegador: ${m.seconds.toFixed(1)} s · ${((performance.now() - t0) / 1000).toFixed(1)} s con el render)`); }
     else if (m.type === "error") { busy = false; calcDone(true); fsTable(); appendLog("ERROR: " + m.message); }
   };
@@ -460,7 +472,7 @@ selN.addEventListener("change", () => { const n = parseInt(selN.value); const fa
 selModel.addEventListener("change", () => { if (selModel.value === "hgeo") { edWrap.hidden = false; if (!edText.value.trim()) edText.value = DEMO04_HGEO; applyHgeo(); } else loadFixture(selModel.value); });
 edApply.addEventListener("click", applyHgeo);
 edText.addEventListener("keydown", (ev) => { if (ev.ctrlKey && ev.key === "Enter") applyHgeo(); });
-selStage.addEventListener("change", () => { const i = visibleStage(); if (!stages[i] || stages[i]!.stale) run([i]); else { fillStepSelect(); redraw(); } });
+selStage.addEventListener("change", () => { const i = visibleStage(); buildStageTabs(); if (!stages[i] || stages[i]!.stale) run([i]); else { fillStepSelect(); redraw(); } });
 for (const el of [selField, selStep, chkMesh, inpDef]) el.addEventListener("change", redraw);
 inpDef.addEventListener("input", redraw);
 edText.value = DEMO04_HGEO;
