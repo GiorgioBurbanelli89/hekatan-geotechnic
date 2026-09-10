@@ -9,6 +9,7 @@ type Mod = {
   geoLog?: (s: string) => void;
   _geofem_create: (nn: number, ne: number, X: number, Y: number, ELE: number, EMAT: number, nfixed: number, FIXED: number, nmat: number, MAT: number) => number;
   _geofem_set_mat: (h: number, MAT: number) => void;
+  _geofem_set_rigid: (h: number, rigid: number, n: number) => void;
   _geofem_band: (h: number) => number; _geofem_nfree: (h: number) => number;
   _geofem_gravity: (h: number) => number; _geofem_nsteps: (h: number) => number;
   _geofem_ngp: (h: number) => number; _geofem_state1: (h: number, sig: number, epl: number, eps: number, u1: number) => void;
@@ -49,6 +50,8 @@ export class GeoFemWasm {
     mod.HEAP32.set(m.ELE.flat(), pE >> 2); mod.HEAP32.set(m.EMAT, pM >> 2); mod.HEAP32.set(m.FIXED, pF >> 2);
     mod.HEAPF64.set(m.MAT.flat(), pMat >> 3);
     const h = mod._geofem_create(nn, ne, pX, pY, pE, pM, m.FIXED.length, pF, nmat, pMat);
+    // materiales RÍGIDOS (muro = «Rigid body» de GEO5: región elástica que la SRM no reduce)
+    if (m.RIGID?.some((r) => r)) { const pR = mod._geofem_alloc_i(nmat); mod.HEAP32.set(m.RIGID.map((r) => (r ? 1 : 0)), pR >> 2); mod._geofem_set_rigid(h, pR, nmat); mod._geofem_free(pR); }
     for (const p of [pX, pY, pE, pM, pF, pMat]) mod._geofem_free(p);
     return new GeoFemWasm(mod, h, m, log);
   }

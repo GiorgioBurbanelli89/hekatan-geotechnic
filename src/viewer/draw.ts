@@ -4,13 +4,16 @@
 //   asignar    clic dentro de una región → suelo elegido en el desplegable
 //   sobrecarga dos clics sobre el terreno → q [kPa]
 //   ancla      un clic (cabeza) → F [kN] y ángulo
+//   muro       dos clics: el pie de la cara vista (sobre el terreno) y la coronación (de ahí sale H). Mete un
+//              MURO CANTILEVER de hormigón como «Rigid body» de GEO5; las dimensiones se predimensionan con H
+//              y luego se ajustan con los sliders.
 //   mover      arrastra un vértice de interfaz (snap)
 //   borrar     clic en un vértice (lo quita) o en una interfaz (la borra si no es el terreno)
 //   Ctrl+Z deshace. Cada cambio reescribe el .hgeo y remalla (como los sliders: sin botón).
 import type { Pt, SlopeDef, StageDef } from "../model/dsl";
-import { interfaceY, spanInterface } from "../model/dsl";
+import { interfaceY, spanInterface, effectiveTerrain, wallDims, wallPolygon, wallGround, wallLevels } from "../model/dsl";
 
-export type Tool = "ver" | "interfaz" | "asignar" | "sobrecarga" | "ancla" | "mover" | "borrar";
+export type Tool = "ver" | "interfaz" | "asignar" | "sobrecarga" | "ancla" | "muro" | "mover" | "borrar";
 export type DrawState = { tool: Tool; grid: number; snap: boolean; osnap: boolean; ortho: boolean; soil: string; q: number; F: number; ang: number; stage: number };
 type SnapKind = "extremo" | "medio" | "interseccion" | "perpendicular" | "cercano" | "rejilla" | "margen" | null;
 
@@ -79,6 +82,7 @@ export class DrawTools {
       : t === "asignar" ? `ASIGNAR ${this.state.soil || "(elige suelo)"}  punto dentro de la región:`
       : t === "sobrecarga" ? (n === 0 ? `SOBRECARGA q=${this.state.q} kPa  primer punto sobre el terreno:` : "SOBRECARGA  segundo punto:")
       : t === "ancla" ? `ANCLA F=${this.state.F} kN ang=${this.state.ang}°  cabeza (x,y):`
+      : t === "muro" ? (n === 0 ? "MURO  pie de la cara vista, sobre el terreno (x,y):" : "MURO  coronación (solo cuenta la z) → H:")
       : t === "mover" ? "MOVER  arrastra un vértice:" : "BORRAR  vértice o interfaz:";
     this.onPrompt?.(p);
   }
@@ -89,7 +93,7 @@ export class DrawTools {
     const low = line.toLowerCase(), toks = low.split(/\s+/), c = toks[0];
     const tools: Record<string, Tool> = { i: "interfaz", interfaz: "interfaz", interface: "interfaz", l: "interfaz", linea: "interfaz", line: "interfaz", pl: "interfaz", polilinea: "interfaz", pline: "interfaz",
       a: "asignar", asignar: "asignar", h: "asignar", hatch: "asignar", sombrear: "asignar", q: "sobrecarga", sobrecarga: "sobrecarga", carga: "sobrecarga", load: "sobrecarga",
-      an: "ancla", ancla: "ancla", anchor: "ancla", m: "mover", mover: "mover", move: "mover", b: "borrar", borrar: "borrar", e: "borrar", erase: "borrar", v: "ver", ver: "ver", esc: "ver" };
+      an: "ancla", ancla: "ancla", anchor: "ancla", mu: "muro", muro: "muro", wall: "muro", w: "muro", m: "mover", mover: "mover", move: "mover", b: "borrar", borrar: "borrar", e: "borrar", erase: "borrar", v: "ver", ver: "ver", esc: "ver" };
     // coordenada: x,y · @dx,dy (relativa al último punto) · @d<ang (polar, como AutoCAD)
     const mc = line.match(/^(@?)\s*(-?\d+(?:\.\d+)?)\s*[,;]\s*(-?\d+(?:\.\d+)?)$/), mp = line.match(/^@\s*(-?\d+(?:\.\d+)?)\s*<\s*(-?\d+(?:\.\d+)?)$/);
     if (mc || mp) {
@@ -186,12 +190,26 @@ export class DrawTools {
         else this.status("segundo punto de la sobrecarga");
         break;
       }
+      case "muro": {
+        const ty = terrainY(d, p[0]); if (!Number.isFinite(ty)) { this.status("primero el terreno (la primera interfaz)"); return; }
+        if (!this.cur.length) { this.cur.push([p[0], ty]); this.render(); this.status(`pie del muro en x=${p[0]}; ahora la coronación (solo cuenta su z)`); break; }
+        const pie = this.cur[0], H = Math.round((p[1] - pie[1]) * 100) / 100;
+        this.cur = [];
+        if (H < 0.5) { this.status("el muro tiene que subir al menos 0.5 m sobre el terreno"); this.render(); break; }
+        this.push();
+        const pm = wallDims(H); pm.x = pie[0];
+        const soil = this.ensureHormigon(d);
+        d.walls.push({ soil, pm });
+        this.commit(`muro ${soil} en x=${pie[0]} con H=${H} m (fuste ${pm.fuste} · zapata ${pm.zapata} · dedo ${pm.dedo} · talón ${pm.talon}) — Rigid body: no se reduce en la SRM`);
+        break;
+      }
       case "ancla": { this.push(); const st = this.stageForLoad("+ancla"); st.anchors.push({ F: this.state.F, p: [p[0], p[1]], ang: this.state.ang }); this.commit(`ancla ${this.state.F} kN en ${p[0]},${p[1]} (etapa ${this.state.stage + 1})`); break; }
       case "mover": { const hit = this.hitVertex(p); if (hit) { this.push(); this.drag = hit; if (hit.it === 0) delete d.param; } break; }
       case "borrar": {
         const hit = this.hitVertex(p);
         if (hit) { this.push(); const it = d.interfaces[hit.it]; if (hit.it === 0) delete d.param; if (it.length > 2) it.splice(hit.k, 1); else if (hit.it > 0) d.interfaces.splice(hit.it, 1); this.commit("vértice borrado"); break; }
         const k = this.hitInterface(p); if (k > 0) { this.push(); d.interfaces.splice(k, 1); this.commit("interfaz borrada"); break; }
+        const mu = this.hitWall(p); if (mu >= 0) { this.push(); const w = d.walls.splice(mu, 1)[0]; this.commit(`muro ${w.soil} borrado`); break; }
         const ln = this.hitLine(p); if (ln >= 0) { this.push(); d.lines.splice(ln, 1); this.commit("línea libre borrada"); }
         break;
       }
@@ -234,6 +252,22 @@ export class DrawTools {
     for (let i = 0; i < this.def.interfaces.length; i++) for (let k = 0; k < this.def.interfaces[i].length; k++) { const v = this.def.interfaces[i][k]; if (Math.hypot(v[0] - p[0], v[1] - p[1]) < tol) return { it: i, k }; }
     return null;
   }
+  /** El hormigón del muro: se reusa el suelo rígido que haya, y si no hay se añade uno (E, ν, γ de hormigón). */
+  private ensureHormigon(d: SlopeDef): string {
+    const ya = d.soils.find((s) => s.rigido) ?? d.soils.find((s) => /hormig|muro|concret/i.test(s.name));
+    if (ya) { ya.rigido = true; return ya.name; }
+    d.soils.push({ name: "HORMIGON", E: 30000000, nu: 0.2, phi: 0, c: 0, gamma: 24, psi: 0, rigido: true });   // H30: E≈30 GPa = 3e7 kPa
+    return "HORMIGON";
+  }
+  /** índice del muro que contiene el punto (para borrarlo) */
+  private hitWall(p: Pt): number {
+    const d = this.def; if (!d?.walls?.length) return -1;
+    for (let i = 0; i < d.walls.length; i++) {
+      const w = d.walls[i], z = wallGround(d, w), { zb, ztop } = wallLevels(w.pm, z);
+      if (p[0] > w.pm.x - w.pm.dedo - 0.3 && p[0] < w.pm.x + w.pm.fuste + w.pm.talon + 0.3 && p[1] > zb - 0.3 && p[1] < ztop + 0.3) return i;
+    }
+    return -1;
+  }
   private hitLine(p: Pt): number {
     if (!this.def?.lines) return -1; const tol = this.state.grid * 0.45;
     const dseg = (a: Pt, b: Pt) => { const L2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2; const t = L2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / L2)) : 0; return Math.hypot(p[0] - a[0] - t * (b[0] - a[0]), p[1] - a[1] - t * (b[1] - a[1])); };
@@ -275,6 +309,14 @@ export class DrawTools {
       ctx.fillText(`${L.method === "bishop" ? "Bishop" : "Fellenius"}  FS = ${L.fs.toFixed(3)}`, cxp, cyp - 8 * this.k);
       ctx.restore();
     }
+    // MUROS ya puestos: bloque de hormigón gris con su contorno (se ve al dibujar y al arrastrar un slider)
+    if ((this.active || this.showGeom) && d.walls?.length && d.margins) {
+      for (const w of d.walls) {
+        const poly = wallPolygon(w.pm, wallGround(d, w));
+        ctx.beginPath(); poly.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.closePath();
+        ctx.fillStyle = "rgba(150,150,150,0.55)"; ctx.fill(); ctx.strokeStyle = "#4a4a4a"; ctx.lineWidth = 2 * this.k; ctx.stroke();
+      }
+    }
     if (this.showGeom && !this.active) {   // arrastrando un slider de geometría: las líneas se mueven EN VIVO sobre la gráfica (Jorge: "recién cuando suelto cambia")
       for (let i = 0; i < d.interfaces.length; i++) { const it = d.interfaces[i]; if (it.length < 2) continue; ctx.strokeStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.lineWidth = 2.2 * this.k; ctx.setLineDash(i === 0 ? [] : [6 * this.k, 4 * this.k]); ctx.beginPath(); it.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); ctx.setLineDash([]); for (const v of it) { const [px, py] = tf(v[0], v[1]); ctx.fillStyle = i === 0 ? "#d08a3e" : "#2c7be5"; ctx.fillRect(px - 3 * this.k, py - 3 * this.k, 6 * this.k, 6 * this.k); } }
       for (const ln of d.lines ?? []) { ctx.strokeStyle = "#c026d3"; ctx.lineWidth = 1.8 * this.k; ctx.setLineDash([5 * this.k, 4 * this.k]); ctx.beginPath(); ln.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); ctx.setLineDash([]); }
@@ -308,6 +350,19 @@ export class DrawTools {
       for (const p of this.cur) { const [px, py] = tf(p[0], p[1]); ctx.fillStyle = "#e5382b"; ctx.beginPath(); ctx.arc(px, py, 3.5 * this.k, 0, 2 * Math.PI); ctx.fill(); }
     }
     // FANTASMA de la carga bajo el cursor: al usar «sobrecarga» o «ancla» se ve DÓNDE caería antes de hacer clic (Jorge 8-sep-2026)
+    if (this.mouse && this.state.tool === "muro") {   // FANTASMA del muro: se ve el bloque que caería antes de cerrar los dos clics
+      const k = this.k, x = this.cur[0] ? this.cur[0][0] : this.mouse[0], z = terrainY(d, x);
+      if (Number.isFinite(z)) {
+        const H = this.cur[0] ? Math.max(0.5, this.mouse[1] - z) : 4;
+        const pm = wallDims(Math.round(H * 100) / 100); pm.x = x;
+        const poly = wallPolygon(pm, z);
+        ctx.beginPath(); poly.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.closePath();
+        ctx.fillStyle = "rgba(150,150,150,0.35)"; ctx.fill(); ctx.strokeStyle = "#4a4a4a"; ctx.lineWidth = 1.6 * k; ctx.setLineDash([5 * k, 4 * k]); ctx.stroke(); ctx.setLineDash([]);
+        const [lx, ly] = tf(pm.x + pm.fuste + pm.talon, z + H / 2);   // a media altura: arriba está el cursor con su etiqueta
+        ctx.fillStyle = "#3a3a3a"; ctx.font = `${11 * k}px Segoe UI`; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+        ctx.fillText(`muro H = ${H.toFixed(2)} m · fuste ${pm.fuste.toFixed(2)} · B ${(pm.dedo + pm.fuste + pm.talon).toFixed(2)} m`, lx + 6 * k, ly - 4 * k);
+      }
+    }
     if (this.mouse && (this.state.tool === "sobrecarga" || this.state.tool === "ancla")) {
       const k = this.k;
       if (this.state.tool === "sobrecarga") {
@@ -369,7 +424,8 @@ function footOnSegment(p: Pt, a: Pt, b: Pt): Pt | null {
   const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2; if (t < 0 || t > 1) return null;
   return [a[0] + t * dx, a[1] + t * dy];
 }
-function terrainY(d: SlopeDef, x: number): number { const m = d.margins!; if (!d.interfaces[0]?.length) return NaN; return interfaceY(spanInterface(d.interfaces[0], m.xmin, m.xmax), x); }
+/** terreno donde se APOYAN las cargas y los muros = el EFECTIVO (sube por la cara del muro y sigue por su relleno) */
+function terrainY(d: SlopeDef, x: number): number { if (!d.interfaces[0]?.length || !d.margins) return NaN; return interfaceY(effectiveTerrain(d), x); }
 const fmt = (v: number) => String(Math.round(v * 1000) / 1000);
 export function regionOf(d: SlopeDef, p: Pt): number {
   const m = d.margins!;

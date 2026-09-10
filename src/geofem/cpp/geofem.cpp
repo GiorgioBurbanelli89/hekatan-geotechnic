@@ -4,6 +4,7 @@
 //
 // API C (ver geofemWasm.ts):
 //   int    geofem_create(nn, ne, X, Y, ELE(6*ne), EMAT(ne), nfixed, FIXED, nmat, MAT(6*nmat))
+//   void   geofem_set_rigid(h, rigid(nmat), nmat)   // 1 = region elastica (muro: Rigid body de GEO5)
 //   void   geofem_set_mat(h, MAT)                     // φ y c por corrida (E, ν, γ requieren create)
 //   double geofem_run_stage(h, F(ndof), recomputeGravity, out_u, out_uel, out_steps_srf, out_steps_u, max_steps)
 //          devuelve FS; escribe u, uel y los peldaños convergidos (n en geofem_nsteps)
@@ -88,6 +89,7 @@ static double vdot(const double* a, const double* b, int n) { double s = 0; for 
 struct GeoFem {
   int nn, ne, ndof, nfree, band;
   vector<double> X, Y; vector<int> ELE, EMAT; vector<double> MAT; int nmat;
+  vector<int> rigid;        // 1 = material RÍGIDO (muro de hormigón = «Rigid body» de GEO5): región elástica, la SRM no lo reduce
   vector<int> free_, map_;
   vector<double> D4;        // (nmat+1)*16
   vector<double> Bc, dJw; vector<int> edof;
@@ -306,6 +308,9 @@ struct GeoFem {
     const int maxit = 100;
     std::vector<std::array<double, 2>> ab(nmat + 1, {0.0, 0.0});   // un par (alpha,k) por suelo, TODOS (antes ab[3] fijo: con 3+ suelos leía basura)
     for (int mm = 0; mm < nmat; mm++) {
+      // RIGID BODY de GEO5 (muro de hormigón): región ELÁSTICA. Con k = ∞ queda f = J + a*I1 - k < 0 siempre, así
+      // que el return-map no se activa nunca y la reducción de resistencia no le toca: sostiene el talud sin plastificar.
+      if (mm < (int)rigid.size() && rigid[mm]) { ab[mm + 1][0] = 0.0; ab[mm + 1][1] = 1e30; continue; }
       double phi = std::atan(std::tan(MAT[mm * 6 + 2] * 3.141592653589793 / 180) / SRF), c = MAT[mm * 6 + 3] / SRF;
       dpAb(phi, c, ab[mm + 1][0], ab[mm + 1][1]);
     }
@@ -408,6 +413,8 @@ int geofem_create(int nn, int ne, const double* X, const double* Y, const int* E
   handles.push_back(g);
   return (int)handles.size() - 1;
 }
+// materiales RÍGIDOS (muros): 1 por material, en el mismo orden que MAT. Se llama justo tras geofem_create.
+EMSCRIPTEN_KEEPALIVE void geofem_set_rigid(int h, const int* rigid, int n) { GeoFem* g = handles[h]; g->rigid.assign(rigid, rigid + n); }
 EMSCRIPTEN_KEEPALIVE void geofem_set_mat(int h, const double* MAT) { GeoFem* g = handles[h]; std::memcpy(g->MAT.data(), MAT, sizeof(double) * 6 * g->nmat); }
 EMSCRIPTEN_KEEPALIVE int geofem_band(int h) { return handles[h]->band; }
 EMSCRIPTEN_KEEPALIVE int geofem_nfree(int h) { return handles[h]->nfree; }

@@ -12,7 +12,7 @@ Deja capturas en tests/shots/geo5/<nombre>/ y escribe <salida>.txt con el FS que
 """
 import os, sys, time, subprocess, re, io
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from hgeo_parse import parse_hgeo, geo5_interfaces, complete_assign
+from hgeo_parse import parse_hgeo, geo5_interfaces, geo5_free_lines, complete_assign, wall_inner_point, wall_ground
 from pywinauto import Application, Desktop, mouse
 from pywinauto.keyboard import send_keys
 from PIL import ImageGrab
@@ -210,13 +210,22 @@ class Geo5:
         d = None
         for m in self.modals():
             if m.class_name() == "TG5SoilDlgSoil": d = m
+        rigido = bool(s.get("rigido"))
         if d is None:
             self.btn("Add").click(); d = self.dialog("TG5SoilDlgSoil")
-            # modelo Drucker-Prager: el desplegable (TEnvDropDown en 653,569) se abre por mensaje y se elige el 5º con teclas
+            # el desplegable de modelo (TEnvDropDown en 653,569) se abre por mensaje y se elige con teclas.
+            # Drucker-Prager = 5o de la lista (medido en la GUI). Un MURO (Rigid body) va ELASTICO: se elige el
+            # PRIMERO de la lista. OJO: eso NO esta verificado en la GUI todavia -> hay que mirar la captura
+            # suelo_*.png y comprobar que el modelo dice "Elastic" (si no, ajustar el numero de {DOWN}).
             dd = [c for c in d.descendants() if c.class_name() == "TEnvDropDown" and c.is_visible() and abs(c.rectangle().left - 653) < 8 and abs(c.rectangle().top - 569) < 8][0]
-            self.front(d); dd.click_input(); time.sleep(0.6); send_keys("{HOME}{DOWN 4}{ENTER}"); time.sleep(0.9)
+            self.front(d); dd.click_input(); time.sleep(0.6)
+            send_keys("{HOME}{ENTER}" if rigido else "{HOME}{DOWN 4}{ENTER}"); time.sleep(0.9)
+            if rigido: print("   OJO: %s es RIGIDO (muro) -> modelo = 1er elemento del desplegable; comprueba en la captura que dice Elastic" % s["name"])
         E = s["E"] / 1000.0
-        campos = [(654, 444, s["name"]), (715, 660, s["gamma"]), (715, 702, E), (715, 828, s["nu"]), (715, 957, s["gamma"]), (1435, 444, E), (1435, 486, s["phi"]), (1435, 528, s["c"]), (1435, 570, 0)]
+        if rigido:   # hormigon: solo nombre, peso y elasticidad (phi y c no existen en un material elastico)
+            campos = [(654, 444, s["name"]), (715, 660, s["gamma"]), (715, 702, E), (715, 828, s["nu"]), (715, 957, s["gamma"]), (1435, 444, E)]
+        else:
+            campos = [(654, 444, s["name"]), (715, 660, s["gamma"]), (715, 702, E), (715, 828, s["nu"]), (715, 957, s["gamma"]), (1435, 444, E), (1435, 486, s["phi"]), (1435, 528, s["c"]), (1435, 570, 0)]
         for intento in range(3):
             for (l, t, v) in campos: self.put_at(d, l, t, v)
             vacios = [(l, t) for (l, t, v) in campos if not self.field_text(d, l, t).strip()]
@@ -359,14 +368,18 @@ def run(hgeo, out_gmk, keep=False):
     if hacer("geometria"):
         print("2) rango + %d interfaces (capas cortadas donde tocan el terreno, como exige GEO5)" % len(ifs)); g.ranges(m["margins"], ifs)
         for k, it in enumerate(ifs): print("   interfaz %d: %s" % (k + 1, " ".join("%g,%g" % p for p in it))); g.interface(it, k + 1)
-        for k, ln in enumerate(m["lines"]): print("   línea libre", k + 1); g.free_line(ln, k + 1)
+        fls = geo5_free_lines(m)   # incluye el contorno ENTERRADO de cada muro (cierra la region del hormigon)
+        for k, ln in enumerate(fls): print("   linea libre %d: %s" % (k + 1, " ".join("%g,%g" % q for q in ln))); g.free_line(ln, k + 1)
     if hacer("suelos"):
         print("3) %d suelos" % len(m["soils"]))
         for s in m["soils"]: g.soil(s)
         g.soils_done()
     if hacer("asignar"):
-        asg = complete_assign(m); print("4) asignar:", ", ".join("%s en %g,%g" % (a["soil"], a["p"][0], a["p"][1]) for a in asg))
-        g.calibrate(m["margins"], m["interfaces"][0]); g.assign(m["soils"], asg)
+        asg = complete_assign(m)
+        for w in m.get("walls", []):   # el MURO es su propia region (cerrada por su linea libre): se le asigna el hormigon
+            q = wall_inner_point(w["pm"], wall_ground(m, w)); asg.append({"soil": w["soil"], "p": (round(q[0], 2), round(q[1], 2))})
+        print("4) asignar:", ", ".join("%s en %g,%g" % (a["soil"], a["p"][0], a["p"][1]) for a in asg))
+        g.calibrate(m["margins"], ifs[0]); g.assign(m["soils"], asg)
     if hacer("malla"): print("5) malla h=%g" % m["h"]); g.mesh(m["h"])
     if hacer("malla"): topo = os.path.splitext(out_gmk)[0] + "_topo.gmk"; print("5b) guardar topología:", topo); g.save_as(topo)
     res = []

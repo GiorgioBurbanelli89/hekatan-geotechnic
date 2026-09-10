@@ -7,7 +7,7 @@ import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
 import { FieldKind, FIELD_LABEL, FIELD_UNIT, nodalField, stressField, isStressField } from "./viewer/geo5scale";
-import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign } from "./model/dsl";
+import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
 import { criticalCircle, LemMethod } from "./lem/slices";
@@ -93,8 +93,9 @@ function buildGeomSliders() {
     const nota = document.createElement("div"); nota.className = "mats"; nota.textContent = "malla exacta de GEO5: al mover un slider de geometría se pasa al mismo talud con malla propia (.hgeo)"; g.appendChild(nota);
     return;
   }
-  if (!def.param) { buildDrawnSliders(g); buildLoadSliders(g); return; }
+  if (!def.param) { buildDrawnSliders(g); buildWallSliders(g); buildLoadSliders(g); return; }
   buildParamSliders(g, def.param, () => def);
+  buildWallSliders(g);
   buildLoadSliders(g);
 }
 /** Sliders del talud PARAMÉTRICO (`talud H= beta= corona= xpie=`). `ensure()` devuelve el def a modificar (en la fixture Demo04
@@ -123,6 +124,39 @@ function buildParamSliders(g: HTMLDivElement, pm: NonNullable<SlopeDef["param"]>
     });
     inp.addEventListener("change", () => { geomSliding = false; draw.showGeom = false; draw.render(); window.setTimeout(buildGeomSliders, 350); });
   }
+}
+/** MUROS del modelo (Rigid body): x del fuste, altura vista H y las dimensiones de la sección (fuste, zapata,
+ *  dedo, talón). Mover uno rehace el terreno efectivo (cara vista + relleno retenido), remalla y recalcula. */
+function buildWallSliders(g: HTMLDivElement) {
+  const d = def; if (!d?.walls?.length || !d.margins) return;
+  const m = d.margins;
+  d.walls.forEach((w, i) => {
+    const h = document.createElement("div"); h.className = "sl"; h.style.display = "block"; h.style.color = "var(--oro)"; h.style.fontWeight = "600"; h.style.marginTop = "6px";
+    h.textContent = `muro ${i + 1} · ${w.soil} (rígido)`; g.appendChild(h);
+    const rows: { key: keyof typeof w.pm; label: string; min: number; max: number; step: number }[] = [
+      { key: "x", label: "x cara vista [m]", min: m.xmin + 1, max: m.xmax - 1, step: 0.1 },
+      { key: "H", label: "altura H [m]", min: 1, max: 12, step: 0.1 },
+      { key: "fuste", label: "fuste [m]", min: 0.2, max: 1.5, step: 0.05 },
+      { key: "zapata", label: "zapata [m]", min: 0.2, max: 1.5, step: 0.05 },
+      { key: "dedo", label: "dedo (puntera) [m]", min: 0, max: 4, step: 0.1 },
+      { key: "talon", label: "talón [m]", min: 0, max: 6, step: 0.1 },
+      { key: "emp", label: "base bajo el terreno [m]", min: 0.3, max: 4, step: 0.1 },
+    ];
+    for (const r of rows) {
+      const key = `w${i}_${r.key}`;
+      const row = document.createElement("div"); row.className = "sl";
+      row.innerHTML = `<span class="n">${r.label}</span><input type="range" id="gs_${key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${w.pm[r.key]}"><span class="v" id="gv_${key}">${w.pm[r.key]}</span>`;
+      g.appendChild(row);
+      const inp = row.querySelector("input") as HTMLInputElement;
+      inp.addEventListener("input", () => {
+        geomSliding = true; $<HTMLSpanElement>("gv_" + key).textContent = inp.value; w.pm[r.key] = parseFloat(inp.value);
+        for (const st of d.stages) delete st.geo5;
+        draw.showGeom = true; draw.setDef(d); draw.render();
+        clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
+      });
+      inp.addEventListener("change", () => { geomSliding = false; draw.showGeom = false; draw.render(); window.setTimeout(buildGeomSliders, 350); });
+    }
+  });
 }
 /** CARGAS de cada etapa del modelo .hgeo: q de cada sobrecarga, F y ángulo de cada ancla. Reescriben el .hgeo y recalculan
  *  la etapa visible (Jorge: "¿y los parámetros de valor de carga?"). En la fixture Demo04 esas cargas ya tienen sus sliders q/ancla. */
@@ -253,7 +287,7 @@ function setBase(m: GeoModel, only?: number[]) {
 async function loadFixture(url: string) {
   const baseUrl = import.meta.env.BASE_URL || "./";
   const m = (await (await fetch(baseUrl + url)).json()) as GeoModel;
-  def = null; edWrap.hidden = true; pasos.actualizar(null); setTool("ver"); draw.setDef({ outline: [], soils: [], layers: [], h: 1, stages: [], interfaces: [], lines: [], assign: [], comments: [] });
+  def = null; edWrap.hidden = true; pasos.actualizar(null); setTool("ver"); draw.setDef({ outline: [], soils: [], layers: [], h: 1, stages: [], interfaces: [], lines: [], assign: [], walls: [], comments: [] });
   setBase(m);
 }
 
@@ -402,7 +436,7 @@ function setTool(t: Tool) {
   if (t !== "ver") pasos.tool(t);   // al dibujar salen los PASOS, en el paso de esa herramienta
   if (t !== "ver" && selModel.value !== "hgeo") { selModel.value = "hgeo"; edWrap.hidden = false; if (!edText.value.trim()) edText.value = DEMO04_HGEO; applyHgeo(); }
   draw.prompt();
-  dStatus.textContent = { ver: "", interfaz: "interfaz: clic a clic de margen a margen; Enter o doble clic termina, Esc cancela, Retroceso quita el último", asignar: "asignar: clic dentro de una región", sobrecarga: "sobrecarga: dos clics sobre el terreno", ancla: "ancla: clic en la cabeza", mover: "mover: arrastra un vértice", borrar: "borrar: clic en un vértice o en una interfaz" }[t];
+  dStatus.textContent = { ver: "", interfaz: "interfaz: clic a clic de margen a margen; Enter o doble clic termina, Esc cancela, Retroceso quita el último", asignar: "asignar: clic dentro de una región", sobrecarga: "sobrecarga: dos clics sobre el terreno", ancla: "ancla: clic en la cabeza", muro: "muro: clic en el pie de la cara vista y otro en la coronación (H); Rigid body de GEO5 (el hormigón no se reduce en la SRM)", mover: "mover: arrastra un vértice", borrar: "borrar: clic en un vértice o en una interfaz" }[t];
   draw.render();
 }
 document.querySelectorAll<HTMLButtonElement>(".tb[data-tool]").forEach((b) => b.addEventListener("click", () => setTool(b.dataset.tool as Tool)));
@@ -425,7 +459,8 @@ function runLem() {
     const t0 = performance.now(); const r = criticalCircle(def!, met as LemMethod, 40);
     if (!r) { draw.lem = null; lemOut.textContent = "no se encontró superficie de falla (revisa el terreno y los suelos)"; draw.render(); return; }
     draw.lem = { circle: r.circle, slices: r.slices, fs: r.fs, method: r.method, x0: r.x0, x1: r.x1 };
-    lemOut.innerHTML = `<b style="color:#c026d3">${met === "bishop" ? "Bishop" : "Fellenius"} FS = ${r.fs.toFixed(3)}</b> · círculo (${r.circle.cx.toFixed(1)}, ${r.circle.cy.toFixed(1)}) R=${r.circle.R.toFixed(1)} · ${r.slices.length} dovelas · ${((performance.now() - t0) / 1000).toFixed(2)} s`;
+    const avisoMuro = def!.walls?.length ? `<br><span style="color:var(--oro)">con muro: la superficie CIRCULAR no puede cortar el hormigón, así que este FS queda del lado ALTO (con el muro el mecanismo real baja por el trasdós y sigue la base: es una superficie POLIGONAL, pendiente). Fíate del FS de elementos finitos.</span>` : "";
+    lemOut.innerHTML = `<b style="color:#c026d3">${met === "bishop" ? "Bishop" : "Fellenius"} FS = ${r.fs.toFixed(3)}</b> · círculo (${r.circle.cx.toFixed(1)}, ${r.circle.cy.toFixed(1)}) R=${r.circle.R.toFixed(1)} · ${r.slices.length} dovelas · ${((performance.now() - t0) / 1000).toFixed(2)} s` + avisoMuro;
     redraw(); draw.render();
   }, 30);
 }

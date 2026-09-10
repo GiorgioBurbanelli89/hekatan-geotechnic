@@ -2,7 +2,7 @@
 // de suelos, rótulos de suelo, cargas de la etapa y barra de color. Calca talud_plot_lib.plot_stage.
 import { FIELD_LABEL, FIELD_UNIT, FieldKind, geo5Cmap, geo5Levels, gridField } from "./geo5scale";
 
-export type PlotModel = { X: number[]; Y: number[]; ELE: number[][]; EMAT: number[]; MAT: number[][]; Fs: number[]; Fa: number[]; MATNAMES?: string[] };
+export type PlotModel = { X: number[]; Y: number[]; ELE: number[][]; EMAT: number[]; MAT: number[][]; Fs: number[]; Fa: number[]; MATNAMES?: string[]; RIGID?: boolean[] };
 
 export type PlotOptions = {
   field: FieldKind;
@@ -151,6 +151,14 @@ export class SlopePlot {
     if (o.showMesh) { ctx.beginPath(); ctx.strokeStyle = this.dark ? "rgba(255,255,255,0.35)" : "rgba(60,60,60,0.45)"; ctx.lineWidth = 0.5 * k; for (const e of this.edges) line(e.a, e.b); ctx.stroke(); }
     ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = 1.6 * k; ctx.setLineDash([6 * k, 4 * k]); for (const e of this.edges) if (e.mats.size === 2) line(e.a, e.b); ctx.stroke(); ctx.setLineDash([]);
     ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = 1.4 * k; for (const e of this.edges) if (e.count === 1) line(e.a, e.b); ctx.stroke();
+    // MURO (región rígida): su contorno se remarca en gris hormigón, para verlo dentro del mapa de color
+    const rig = this.m.RIGID;
+    if (rig?.some((r) => r)) {
+      const esMuro = (mm: number) => !!rig[mm - 1];
+      ctx.beginPath(); ctx.strokeStyle = this.dark ? "#cfcfcf" : "#3a3a3a"; ctx.lineWidth = 2.4 * k;
+      for (const e of this.edges) { const M = [...e.mats]; if (M.some(esMuro) && (e.count === 1 || M.some((mm) => !esMuro(mm)))) line(e.a, e.b); }
+      ctx.stroke();
+    }
     // deformada (opcional): contorno desplazado
     if (o.deformScale && o.u && o.uel) {
       ctx.beginPath(); ctx.strokeStyle = "#c0392b"; ctx.lineWidth = 1.2 * k;
@@ -176,6 +184,10 @@ export class SlopePlot {
       const [cxm, cym] = cen(mi + 1);
       const nm = this.m.MATNAMES?.[mi] ?? `SUELO ${mi + 1}`;
       // capas finas: cajas alternadas en x para que no se pisen
+      if (this.m.RIGID?.[mi]) {   // MURO: φ y c no significan nada, y el rótulo iría encima del propio muro → a su izquierda
+        box(cxm - 4.5, cym, [nm + " (rígido)", `E=${(MAT[mi][0] / 1000).toFixed(0)} MPa · γ=${MAT[mi][4].toFixed(0)} kN/m³`, "sin reducción SRM"]);
+        continue;
+      }
       box(cxm + [0, -8, 8, -16, 16][mi % 5], cym - (mi === 1 ? 2.5 : 0), [nm, `φ=${MAT[mi][2].toFixed(1)}°  c=${MAT[mi][3].toFixed(0)} kPa`, `γ=${MAT[mi][4].toFixed(0)} kN/m³`]);
     }
     // cargas de la etapa

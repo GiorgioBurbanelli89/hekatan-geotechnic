@@ -7,7 +7,7 @@
 // mallador es otro. Con la misma h las mallas se parecen (arista media 2.31 en la Demo04) pero no son
 // iguales, así que el FS puede moverse en el 2º-3º decimal: se compara contra GEO5, no se copia.
 import type { GeoModel } from "../geofem/solver";
-import { interfaceY, spanInterface, outlineFromInterfaces, clampLayersToTerrain, autoAssign, type Pt, type SlopeDef } from "../model/dsl";
+import { interfaceY, spanInterface, outlineFromInterfaces, clampLayersToTerrain, autoAssign, effectiveTerrain, wallChain, wallPolygon, wallGround, pointInPolygon, type Pt, type SlopeDef } from "../model/dsl";
 
 type Tri = { a: number; b: number; c: number; dead?: boolean };
 export let meshDebug: (msg: string) => void = () => {};
@@ -51,7 +51,8 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   const chains: Pt[][] = [outline.concat([outline[0]])];
   for (const L of def.layers) chains.push(clipPolyline(L.poly, outline));
   // GEO5: las interfaces (salvo el terreno, que ya es contorno) son restricciones internas de margen a margen
-  const spans: Pt[][] = def.margins ? def.interfaces.map((it) => spanInterface(it, def.margins!.xmin, def.margins!.xmax)) : [];
+  // el terreno (interfaz 0) que ve la malla es el EFECTIVO: sube por la cara vista del muro y sigue por su relleno
+  const spans: Pt[][] = def.margins ? def.interfaces.map((it, k) => (k === 0 ? effectiveTerrain(def) : spanInterface(it, def.margins!.xmin, def.margins!.xmax))) : [];
   // Una capa NO puede ir por encima del terreno (GEO5 la recorta contra él): de cada capa solo entran los tramos
   // estrictamente por debajo; donde toca o sube sobre el terreno se corta en el cruce exacto, y ese cruce pasa a ser
   // vértice del contorno (si no, el tramo coincidente con el borde rompía la triangulación: FS=1.0000 divergiendo).
@@ -62,17 +63,47 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   // LÍNEAS LIBRES (GEO5 Free line): polilíneas cualesquiera recortadas al dominio; sus extremos sobre el contorno pasan a ser
   // vértices del contorno. Cierran regiones (componentes de la malla separadas por líneas) que reciben su propio suelo.
   const freeChains: Pt[][] = [];
+  const soilIdx = new Map(def.soils.map((s1, i) => [s1.name, i + 1]));
   for (const ln of def.lines ?? []) { const ch = clipPolyline(ln, outline); if (ch.length < 2) continue; for (const e of [ch[0], ch[ch.length - 1]]) insertOnOutline(outline, e, 1e-3); freeChains.push(ch); chains.push(ch); }
+  // MUROS (Rigid body de GEO5): el contorno ENTERRADO entra como cadena restringida (la coronación y la cara
+  // vista ya son borde del dominio, porque el terreno efectivo pasa por ellas). Los dos extremos de la cadena
+  // son vértices del terreno, así que no hay tramo que se pise con el borde.
+  const wallPolys: { poly: Pt[]; mat: number }[] = [];
+  for (const w of def.walls ?? []) {
+    const si = soilIdx.get(w.soil); if (!si || !(w.pm.H > 0)) continue;
+    const z = wallGround(def, w);
+    const ch = wallChain(w.pm, z);
+    for (const e of [ch[0], ch[ch.length - 1]]) insertOnOutline(outline, e, 1e-3);
+    chains.push(ch);
+    wallPolys.push({ poly: wallPolygon(w.pm, z), mat: si });
+    // OJO: el hormigón NO entra en def.assign. La asignación de GEO5 va por REGIONES (nº de interfaces encima) y el
+    // muro vive dentro de la región 1: un `asignar HORMIGON` le robaría el suelo a toda esa región (RELLENO=0 elementos).
+    // El muro se asigna por polígono, más abajo.
+  }
   chains[0] = outline.concat([outline[0]]);   // el contorno con los cruces insertados
+  // TAMAÑO LOCAL DE ELEMENTO (malla graduada). Un muro de 0.40 m de fuste dentro de una malla de h=1.8 m es un
+  // rasgo mucho más pequeño que h: con un solo h global el refinamiento de Ruppert se dispara (miles de puntos de
+  // Steiner, corte por tiempo y malla rota). Se le da al muro su propio tamaño (su espesor mínimo) y se vuelve al
+  // h global con una pendiente de 0.5 m por metro de distancia: refinado donde hace falta, grueso en el resto.
+  const zonas: { poly: Pt[]; h: number }[] = wallPolys.map((w, i) => ({ poly: w.poly, h: Math.min(h, Math.max(0.25, Math.min((def.walls ?? [])[i]?.pm.fuste ?? h, (def.walls ?? [])[i]?.pm.zapata ?? h))) }));
+  const dPoly = (x: number, y: number, poly: Pt[]) => {
+    let d = Infinity;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const a = poly[j], b = poly[i], L2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2;
+      const t = L2 ? Math.max(0, Math.min(1, ((x - a[0]) * (b[0] - a[0]) + (y - a[1]) * (b[1] - a[1])) / L2)) : 0;
+      d = Math.min(d, Math.hypot(x - a[0] - t * (b[0] - a[0]), y - a[1] - t * (b[1] - a[1])));
+    }
+    return pointInPoly(x, y, poly) ? 0 : d;
+  };
+  const hAt = (x: number, y: number) => { let s1 = h; for (const z of zonas) if (z.h < h) s1 = Math.min(s1, z.h + 0.5 * dPoly(x, y, z.poly)); return s1; };
   // región de GEO5 = nº de interfaces por encima del punto (el terreno cuenta): asignación por punto
   const regionOf = (x: number, y: number) => spans.reduce((n, sp) => n + (interfaceY(sp, x) > y + 1e-9 ? 1 : 0), 0);
   const regionSoil = new Map<number, number>();
-  const soilIdx = new Map(def.soils.map((s, i) => [s.name, i + 1]));
   for (const a of def.assign) { const si = soilIdx.get(a.soil); if (si) regionSoil.set(regionOf(a.p[0], a.p[1]), si); }
   // pre-partición a h (partes iguales, ≥1)
   for (const ch of chains) for (let i = 0; i + 1 < ch.length; i++) {
     const a = ch[i], b = ch[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-9) continue;
-    const n = Math.max(1, Math.round(L / h));
+    const n = Math.max(1, Math.round(L / hAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)));   // junto al muro, tramos más cortos
     let prev = addPt(a);
     for (let k = 1; k <= n; k++) { const t = k / n; const id = addPt([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]); if (id !== prev) S.push([prev, id]); prev = id; }
   }
@@ -153,20 +184,21 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   const triArea = (t: Tri) => Math.abs(cross(P[t.b][0] - P[t.a][0], P[t.b][1] - P[t.a][1], P[t.c][0] - P[t.a][0], P[t.c][1] - P[t.a][1])) / 2;
 
   // ---- refinamiento de Ruppert: ángulo mínimo 25° y área ≤ 1.4·(√3/4)h² ----
-  const amax = 1.4 * (Math.sqrt(3) / 4) * h * h;
-  let steiner = 0;
+  const amax = 1.4 * (Math.sqrt(3) / 4) * h * h;                                        // tope global (referencia)
+  const amaxAt = (t: Tri) => { const x = (P[t.a][0] + P[t.b][0] + P[t.c][0]) / 3, y = (P[t.a][1] + P[t.b][1] + P[t.c][1]) / 3; const hl = hAt(x, y); return 1.4 * (Math.sqrt(3) / 4) * hl * hl; };
+  let steiner = 0, cortado = false;
   const tStart = performance.now();          // tope de tiempo: una geometría degenerada (dos interfaces que se
   enforce();                                 // tocan) no puede colgar el navegador: se entrega lo que haya
   meshDebug(`tras enforce: interiores ${interior().length}, área ${interior().reduce((a, t) => a + triArea(t), 0).toFixed(2)} de ${domArea.toFixed(2)}`);
   for (let iter = 0; iter < 5000; iter++) {
     const live = interior();
     let worst: Tri | null = null, score = 0;
-    if (performance.now() - tStart > 2500) { meshDebug("refinamiento cortado por tiempo (2.5 s): geometría degenerada"); break; }
+    if (performance.now() - tStart > 2500) { meshDebug("refinamiento cortado por tiempo (2.5 s): geometría degenerada"); cortado = true; break; }
     for (const t of live) {
-      const ar = triArea(t);
-      if (ar < 2e-3 * amax) continue;          // astillas junto a interfaces que se tocan: no se refinan más
+      const ar = triArea(t), am = amaxAt(t);
+      if (ar < 2e-3 * am) continue;            // astillas junto a interfaces que se tocan: no se refinan más
       const mn = Math.min(...angles(t));
-      const sc = (mn < 25 ? (25 - mn) / 25 : 0) + (ar > amax ? ar / amax - 1 : 0);
+      const sc = (mn < 25 ? (25 - mn) / 25 : 0) + (ar > am ? ar / am - 1 : 0);
       if (sc > score) { score = sc; worst = t; }
     }
     if (!worst) break;
@@ -203,6 +235,7 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   const midOf = new Map<string, number>();
   const mid = (u: number, v: number) => { const k = u < v ? u + "," + v : v + "," + u; let m = midOf.get(k); if (m === undefined) { m = X.length; X.push((X[u] + X[v]) / 2); Y.push((Y[u] + Y[v]) / 2); midOf.set(k, m); } return m; };
   const ELE: number[][] = [], EMAT: number[] = [], avisos: string[] = [];
+  if (cortado) avisos.push("el refinamiento se cortó a los 2.5 s: la malla puede estar incompleta (sube «malla» o simplifica la geometría)");
   for (const t of tris) {
     const a = ren(t.a), b = ren(t.b), c = ren(t.c);
     ELE.push([a, b, c, mid(a, b), mid(b, c), mid(c, a)]);
@@ -241,6 +274,26 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
     }
     tris.forEach((_, i) => { const si = compSoil.get(comp[i]); if (si) EMAT[i] = si; });
   }
+  // el HORMIGÓN del muro manda sobre cualquier región (va después de las líneas libres a propósito)
+  for (const { poly, mat } of wallPolys) tris.forEach((t, i) => {
+    const gx = (P[t.a][0] + P[t.b][0] + P[t.c][0]) / 3, gy = (P[t.a][1] + P[t.b][1] + P[t.c][1]) / 3;
+    if (pointInPolygon(gx, gy, poly)) EMAT[i] = mat;
+  });
+  // NUDOS HUÉRFANOS: puntos que no pertenecen a ningún T6 (los deja un refinamiento cortado por tiempo, o el
+  // recorte del dominio). Sus gdl quedan sin rigidez y la matriz sale SINGULAR: el solver divergía en la primera
+  // iteración y la app mostraba «FS = 1.0000» sin explicación. Se eliminan y se renumeran.
+  {
+    const usado = new Uint8Array(X.length);
+    for (const e of ELE) for (const i of e) usado[i] = 1;
+    let huerf = 0; for (let i = 0; i < X.length; i++) if (!usado[i]) huerf++;
+    if (huerf) {
+      const ren2 = new Int32Array(X.length).fill(-1); const X2: number[] = [], Y2: number[] = [];
+      for (let i = 0; i < X.length; i++) if (usado[i]) { ren2[i] = X2.length; X2.push(X[i]); Y2.push(Y[i]); }
+      for (const e of ELE) for (let k = 0; k < e.length; k++) e[k] = ren2[e[k]];
+      X.length = 0; X.push(...X2); Y.length = 0; Y.push(...Y2);
+      avisos.push(`${huerf} nudos sin elemento eliminados (malla incompleta: baja «malla» o revisa la geometría)`);
+    }
+  }
   const nn = X.length, ndof = 2 * nn;
   // ---- apoyos (GEO5): base MX+MY, laterales MX ----
   const FIXED: number[] = [];
@@ -264,6 +317,8 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   const model: GeoModel = {
     name: "hgeo", X, Y, ELE, EMAT, FIXED, Fg: new Array(ndof).fill(0), Fs: new Array(ndof).fill(0), Fa: new Array(ndof).fill(0),
     MAT: def.soils.map((s) => [s.E, s.nu, s.phi, s.c, s.gamma, s.psi]), recomputeGravity: true, loads, stages,
+    MATNAMES: def.soils.map((s) => s.name),
+    RIGID: def.soils.map((s) => !!s.rigido),   // muro de hormigón: región elástica, la SRM no le reduce c ni φ
   };
   // estadísticas
   let mn = 180, sumL = 0, nL = 0, ar = 0;

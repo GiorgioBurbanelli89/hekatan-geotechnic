@@ -7,7 +7,7 @@
 //   Bishop simplificado:          FS = Σ[(c·b + (W − u·b)·tanφ)/mα] / Σ[W·sinα],  mα = cosα + sinα·tanφ/FS   (iterativo)
 // W = peso de la dovela (Σ γ·área por capa), α = inclinación de la base (tangente al círculo), b = ancho, l = b/cosα,
 // u = presión de poros en la base (Ru·γ·h ó nivel freático; 0 sin agua). c, φ = del suelo en la base de la dovela.
-import { SlopeDef, Pt, spanInterface, interfaceY, regionAt } from "../model/dsl";
+import { SlopeDef, Pt, spanInterface, interfaceY, regionAt, effectiveTerrain, wallPolygon, wallGround, pointInPolygon } from "../model/dsl";
 
 export type LemMethod = "fellenius" | "bishop";
 export type Circle = { cx: number; cy: number; R: number };
@@ -15,11 +15,24 @@ export type Slice = { xm: number; b: number; alpha: number; W: number; c: number
 export type LemResult = { fs: number; method: LemMethod; circle: Circle; slices: Slice[]; x0: number; x1: number; iters?: number };
 
 const soilAt = (def: SlopeDef, x: number, y: number) => {
+  for (const w of def.walls ?? []) if (pointInPolygon(x, y, wallPolygon(w.pm, wallGround(def, w)))) {   // dentro del muro manda el hormigón
+    const h = def.soils.find((s) => s.name === w.soil); if (h) return h;
+  }
   // región de GEO5 (nº de interfaces por encima) → suelo asignado; sin asignación, el primer suelo
   const reg = regionAt(def, x, y);
   const a = def.assign.find((a) => regionAt(def, a.p[0], a.p[1]) === reg);
   return def.soils.find((s) => s.name === (a?.soil ?? def.soils[0]?.name)) ?? def.soils[0];
 };
+/** ¿La base del círculo atraviesa un MURO? Un muro de hormigón no se corta: en el módulo analítico la superficie
+ *  de rotura tiene que pasar por delante o por debajo de él, así que ese círculo se descarta (como un Rigid body
+ *  en GEO5). Si no se descartara, las dovelas con base en el hormigón entrarían con c=0 y φ=0 del .hgeo y darían
+ *  un FS falsamente bajo. */
+function cortaMuro(def: SlopeDef, yBot: (x: number) => number, x0: number, x1: number): boolean {
+  const ws = def.walls ?? []; if (!ws.length) return false;
+  const polys = ws.map((w) => wallPolygon(w.pm, wallGround(def, w)));
+  for (let i = 0; i <= 120; i++) { const x = x0 + (x1 - x0) * i / 120, y = yBot(x); for (const P of polys) if (pointInPolygon(x, y, P)) return true; }
+  return false;
+}
 
 /** Peso de la columna vertical en x entre el círculo (yb) y el terreno (yt): Σ γ·Δh por capa que atraviesa. */
 function columnWeight(def: SlopeDef, spans: Pt[][], x: number, yb: number, yt: number): { W: number } {
@@ -36,8 +49,8 @@ function columnWeight(def: SlopeDef, spans: Pt[][], x: number, yb: number, yt: n
 
 /** Dovelas de un círculo: intersección con el terreno (entrada x0 y salida x1) y N columnas. Devuelve null si no corta bien. */
 export function sliceCircle(def: SlopeDef, cir: Circle, n = 40): { slices: Slice[]; x0: number; x1: number } | null {
-  const m = def.margins!; const terr = spanInterface(def.interfaces[0], m.xmin, m.xmax);
-  const spans = def.interfaces.map((it) => spanInterface(it, m.xmin, m.xmax));
+  const m = def.margins!; const terr = effectiveTerrain(def);   // el terreno que ve el método analítico incluye el muro y su relleno
+  const spans = def.interfaces.map((it, k) => (k === 0 ? terr : spanInterface(it, m.xmin, m.xmax)));
   // el círculo corta el terreno donde (yterr − cy)² + (x − cx)² = R²  →  buscamos los dos x de corte por barrido de signo
   const f = (x: number) => { const dx = x - cir.cx, yt = interfaceY(terr, x); return dx * dx + (yt - cir.cy) ** 2 - cir.R * cir.R; };
   const xs: number[] = []; const N = 400;
@@ -46,6 +59,7 @@ export function sliceCircle(def: SlopeDef, cir: Circle, n = 40): { slices: Slice
   if (xs.length < 2) return null;
   const x0 = xs[0], x1 = xs[xs.length - 1]; if (x1 - x0 < 1e-3) return null;
   const yBot = (x: number) => cir.cy - Math.sqrt(Math.max(0, cir.R * cir.R - (x - cir.cx) ** 2));   // rama INFERIOR del círculo
+  if (cortaMuro(def, yBot, x0, x1)) return null;   // la rotura no puede cortar el hormigón del muro
   const slices: Slice[] = [];
   for (let i = 0; i < n; i++) {
     const xa = x0 + (x1 - x0) * i / n, xb = x0 + (x1 - x0) * (i + 1) / n, xm = (xa + xb) / 2, b = xb - xa;
@@ -80,7 +94,7 @@ export function fsCircle(def: SlopeDef, cir: Circle, method: LemMethod, n = 40):
 
 /** BÚSQUEDA de la superficie crítica: barre una malla de centros (arriba del talud) y radios; devuelve el FS mínimo. */
 export function criticalCircle(def: SlopeDef, method: LemMethod, n = 40): LemResult | null {
-  const m = def.margins!; const terr = spanInterface(def.interfaces[0], m.xmin, m.xmax);
+  const m = def.margins!; const terr = effectiveTerrain(def);
   const xmin = m.xmin, xmax = m.xmax, ytopMax = Math.max(...terr.map((p) => p[1])), ybotMin = m.bottom;
   const H = ytopMax - ybotMin, W = xmax - xmin;
   let best: LemResult | null = null;

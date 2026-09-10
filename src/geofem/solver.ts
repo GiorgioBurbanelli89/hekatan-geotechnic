@@ -24,6 +24,7 @@ export type GeoModel = {
   recomputeGravity?: boolean;   // true = Fg = gravedad recalculada de MAT[:,4] (sliders de γ)
   loads?: Record<string, number[]>;   // vectores de carga con nombre (del mallador: L1, L2, …)
   MATNAMES?: string[];       // nombres de los suelos (rótulos del visor)
+  RIGID?: boolean[];         // material RÍGIDO (muro de hormigón = «Rigid body» de GEO5): región elástica, la SRM no lo reduce
   stages: { name: string; loads: string[]; geo5?: number }[];
 };
 
@@ -89,6 +90,7 @@ export class GeoFem {
   constructor(m: GeoModel, log: Log = () => {}) {
     this.log = log;
     this.X = m.X; this.Y = m.Y; this.ELE = m.ELE; this.EMAT = m.EMAT; this.MAT = m.MAT;
+    this.rigid = m.RIGID ?? (m.MATNAMES ?? []).map((n) => /muro|hormig|concret|wall/i.test(n));   // Rigid body: región elástica que la SRM no reduce
     const nn = (this.nn = m.X.length), ne = (this.ne = m.ELE.length), ndof = (this.ndof = 2 * nn);
     const fixed = new Uint8Array(ndof); for (const d of m.FIXED) fixed[d] = 1;
     // renumeración RCM para la banda
@@ -100,9 +102,9 @@ export class GeoFem {
     this.map = new Int32Array(ndof).fill(-1); for (let k = 0; k < order.length; k++) this.map[order[k]] = k;
     let n1 = 0, n2 = 0; for (let e = 0; e < ne; e++) if (m.EMAT[e] === 1) n1++; else n2++;
     log(`MALLA GEO5: ${nn} nodos, ${ne} T6 (SOIL_1=${n1}, SOIL_2=${n2}), ${m.FIXED.length} gdl fijos`);
-    for (let mm = 0; mm < 2; mm++) {
-      const M = m.MAT[mm];
-      log(`MAT SOIL_${mm + 1}: E=${M[0].toFixed(0)} nu=${M[1].toFixed(2)} phi=${M[2].toFixed(2)} c=${M[3].toFixed(2)} gamma=${M[4].toFixed(1)} psi=${M[5].toFixed(1)}`);
+    for (let mm = 0; mm < m.MAT.length; mm++) {
+      const M = m.MAT[mm], nm = m.MATNAMES?.[mm] ?? `SOIL_${mm + 1}`;
+      log(`MAT ${nm}: E=${M[0].toFixed(0)} nu=${M[1].toFixed(2)} phi=${M[2].toFixed(2)} c=${M[3].toFixed(2)} gamma=${M[4].toFixed(1)} psi=${M[5].toFixed(1)}${this.rigid[mm] ? "  [RÍGIDO: región elástica, sin reducción SRM]" : ""}`);
     }
     // constitutivo elástico (4 comp: xx yy zz xy)
     for (let mm = 0; mm < m.MAT.length; mm++) {
@@ -244,6 +246,7 @@ export class GeoFem {
 
   private resetState(): void { this.SIG.fill(0); this.hasDep.fill(0); this.EPL.fill(0); }
   private EPL!: Float64Array; private Dinv!: Float64Array[];
+  private rigid: boolean[] = [];   // material rígido (muro): la SRM no le reduce c ni φ
 
   /** Fuerzas internas con σ = retorno(SIG + De·B·du). Si commit: guarda σ y la tangente del retorno. */
   private assembleInc(du: Float64Array, ab: [number, number][], commit: boolean, Fi: Float64Array): void {
@@ -280,6 +283,9 @@ export class GeoFem {
     const maxit = 100;
     const ab: [number, number][] = [];
     for (let mm = 0; mm < this.MAT.length; mm++) {   // TODOS los suelos (antes tope 2: con 3+ suelos leía fuera del arreglo)
+      // RIGID BODY de GEO5 (muro de hormigón): región ELÁSTICA. k = ∞ deja f = J + αI₁ − k < 0 siempre, así que el
+      // return-map nunca se activa y la SRM no le reduce nada: el muro sostiene el talud pero no plastifica.
+      if (this.rigid[mm]) { ab[mm + 1] = [0, 1e30]; continue; }
       const phi = Math.atan(Math.tan(this.MAT[mm][2] * Math.PI / 180) / SRF), c = this.MAT[mm][3] / SRF;
       ab[mm + 1] = this.dpAb(phi, c);
     }
@@ -375,6 +381,7 @@ export class GeoFem {
   run(m: GeoModel, stageIdx: number[] = m.stages.map((_, i) => i), onStage?: (r: StageResult, index: number) => void): StageResult[] {
     const t0 = performance.now();
     this.MAT = m.MAT;
+    this.rigid = m.RIGID ?? (m.MATNAMES ?? []).map((n) => /muro|hormig|concret|wall/i.test(n));
     const results: StageResult[] = [];
     // Con sliders de γ la gravedad de la fixture ya no vale: se usa la recalculada (N·ρ·detJ·w por
     // punto de Gauss, la misma cuenta que comprueba la fixture en el constructor).

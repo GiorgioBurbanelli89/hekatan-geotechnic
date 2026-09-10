@@ -1,0 +1,15 @@
+# Muro cantilever al pie del talud = «Rigid body» de GEO5 (region elastica: la SRM no reduce el hormigon)
+margenes xmin=0 xmax=40 fondo=-20
+interfaz 0,-9 12,-9 22,-3 40,-3
+interfaz 0,-14 18,-13 40,-12.5
+suelo LIMO      E=25000    nu=0.3  phi=32 c=20 gamma=19
+suelo ARCILLA   E=12000    nu=0.35 phi=24 c=25 gamma=18
+suelo HORMIGON  E=30000000 nu=0.2  phi=0  c=0  gamma=24
+asignar LIMO en 6,-11
+asignar ARCILLA en 20,-16
+muro HORMIGON x=12 H=4 fuste=0.35 zapata=0.35 talon=1.5 dedo=0.6 emp=0.9
+malla 1.6
+etapa peso propio
+etapa +sobrecarga q=25 en 24,-3 -> 34,-3   # en la corona, detras del relleno: FS 1.93 -> 1.76
+# OJO: la MISMA q puesta sobre el talon (13,-5 -> 18.5,-5) SUBE el FS a 2.32: ahi la carga aplasta el talon
+#      del muro y lo estabiliza, en vez de empujar la masa que desliza. La carga no es buena ni mala: importa DONDE.

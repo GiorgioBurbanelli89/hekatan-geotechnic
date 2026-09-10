@@ -42,7 +42,7 @@ export class Pasos {
   cerrar() { this.cerrado = true; this.el.hidden = true; }
   /** la herramienta activa manda: el paso actual es el de esa herramienta */
   tool(t: string) {
-    const map: Record<string, PasoId> = { interfaz: "terreno", asignar: "asignar", sobrecarga: "etapas", ancla: "etapas", mover: "terreno", borrar: "terreno" };
+    const map: Record<string, PasoId> = { interfaz: "terreno", asignar: "asignar", sobrecarga: "etapas", ancla: "etapas", mover: "terreno", borrar: "terreno", muro: "terreno" };
     if (map[t]) { this.cur = map[t]; this.abrir(); }
   }
   /** el modelo cambió: marca lo hecho y, si el paso actual acaba de completarse, salta al siguiente pendiente */
@@ -80,7 +80,8 @@ export class Pasos {
         <details class="pr" ${d.interfaces.length ? "" : "open"}><summary>rango del modelo (GEO5: <i>Set ranges</i>): x de izquierda a derecha y profundidad</summary>
         <div class="pf"><label>x mín <input id="pm_xmin" type="number" step="1" value="${m.xmin}"></label><label>x máx <input id="pm_xmax" type="number" step="1" value="${m.xmax}"></label><label>fondo z <input id="pm_fondo" type="number" step="0.5" value="${m.bottom}"></label></div>
         <div class="pb"><button id="pm_ok">aplicar rango</button></div></details>
-        <div class="pb"><button class="pt" data-tool="interfaz">✎ dibujar ${d.interfaces[0]?.length ? "otra capa" : "el terreno"}</button><button class="pt" data-tool="mover">✥ mover</button><button class="pt" data-tool="borrar">✕ borrar</button></div>
+        <div class="pb"><button class="pt" data-tool="interfaz">✎ dibujar ${d.interfaces[0]?.length ? "otra capa" : "el terreno"}</button><button class="pt" data-tool="muro">▉ muro (2 clics)</button><button class="pt" data-tool="mover">✥ mover</button><button class="pt" data-tool="borrar">✕ borrar</button></div>
+        ${d.interfaces[0]?.length ? `<div class="mut">MURO CANTILEVER (GEO5: <i>Rigid body</i>): clic en el pie de la cara vista y otro en la coronación. El hormigón es una región ELÁSTICA: la reducción de resistencia no le toca, retiene el relleno y cambia los desplazamientos y la superficie de falla. Los esfuerzos M/V/N del fuste son el otro modelo de GEO5 (<i>Beam</i>) y no salen de aquí.${(d.walls ?? []).length ? ` Puesto${d.walls.length > 1 ? "s" : ""}: ${d.walls.map((w) => `${w.soil} en x=${num(w.pm.x)} H=${num(w.pm.H)} m`).join(" · ")}` : ""}</div>` : ""}
         ${usar(d.interfaces[0]?.length ? "interfaz 0,-17 30,-16.5 60,-15" : "interfaz 0,-14 16,-14 24,-9 32,-9 40,-3 60,-3")}
         <ul class="pli">${its || "<li class='mut'>todavía no hay terreno</li>"}</ul>
         <div class="pb"><button class="pn" data-go="suelos">siguiente: suelos ▸</button></div>`;

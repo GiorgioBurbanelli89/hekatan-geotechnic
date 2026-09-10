@@ -17,7 +17,7 @@ def _kv(toks):
     return d
 
 def parse_hgeo(text):
-    m = {"margins": None, "interfaces": [], "lines": [], "soils": [], "assign": [], "h": 2.5, "stages": [], "title": ""}
+    m = {"margins": None, "interfaces": [], "lines": [], "soils": [], "assign": [], "walls": [], "h": 2.5, "stages": [], "title": ""}
     for raw in text.splitlines():
         line = raw.split("#", 1)[0].strip()
         if raw.strip().startswith("#") and not m["title"]: m["title"] = raw.strip("# ").strip()
@@ -28,9 +28,16 @@ def parse_hgeo(text):
         elif cmd in ("interfaz", "interface"): m["interfaces"].append(_pts(toks[1:]))
         elif cmd in ("linea", "línea", "line", "libre"): m["lines"].append(_pts(toks[1:]))
         elif cmd == "suelo":
-            o = _kv(toks[2:]); m["soils"].append({"name": toks[1], "E": float(o.get("e", 20000)), "nu": float(o.get("nu", 0.3)), "phi": float(o.get("phi", 25)), "c": float(o.get("c", 5)), "gamma": float(o.get("gamma", 18))})
+            o = _kv(toks[2:]); m["soils"].append({"name": toks[1], "E": float(o.get("e", 20000)), "nu": float(o.get("nu", 0.3)), "phi": float(o.get("phi", 25)), "c": float(o.get("c", 5)), "gamma": float(o.get("gamma", 18)),
+                                                  "rigido": str(o.get("rigido", o.get("rigid", ""))).lower() in ("1", "si", "sí", "true", "yes")})
         elif cmd == "asignar":
             i = toks.index("en"); m["assign"].append({"soil": toks[1], "p": _pts([toks[i + 1]])[0]})
+        elif cmd in ("muro", "wall"):
+            o = _kv(toks[2:]); H = float(o.get("h", 4)); dd = wall_dims(H)
+            m["walls"].append({"soil": toks[1], "pm": {"x": float(o.get("x", o.get("xpie", 10))), "H": H,
+                "fuste": float(o.get("fuste", dd["fuste"])), "zapata": float(o.get("zapata", dd["zapata"])),
+                "talon": float(o.get("talon", o.get("talón", dd["talon"]))), "dedo": float(o.get("dedo", dd["dedo"])),
+                "emp": float(o.get("emp", dd["emp"]))}})
         elif cmd == "malla": m["h"] = float(toks[1])
         elif cmd == "etapa":
             nm = []; i = 1
@@ -46,6 +53,9 @@ def parse_hgeo(text):
     if not m["stages"]: m["stages"].append({"name": "peso propio", "surcharges": [], "anchors": []})
     elif m["stages"][0]["name"].startswith("+"): m["stages"].insert(0, {"name": "peso propio", "surcharges": [], "anchors": []})
     if m["margins"] is None: m["margins"] = {"xmin": 0.0, "xmax": 40.0, "bottom": -20.0}
+    for w in m["walls"]:                       # Rigid body de GEO5: el hormigón del muro es una región elástica
+        for s0 in m["soils"]:
+            if s0["name"] == w["soil"]: s0["rigido"] = True
     return m
 
 if __name__ == "__main__":
@@ -91,15 +101,93 @@ def below_terrain(layer, terr):
     if len(cur) >= 2: out.append(cur)
     return out
 
+# ---- MURO CANTILEVER = «Rigid body» de GEO5 (mismas cuentas que src/model/dsl.ts) ----
+MURO_BAT = 0.06   # talud de la cara vista: una interfaz de GEO5 es y(x), no admite vertical exacta
+
+def wall_dims(H):
+    """predimensionado: B ~ 0.6H, fuste y zapata ~ H/12, dedo ~ B/4, 0.5 m de suelo sobre la zapata"""
+    r = lambda v, p=0.05: round(round(v / p) * p, 3)
+    fuste = max(0.3, r(H / 12.0)); zapata = max(0.3, r(H / 12.0)); B = r(0.6 * H, 0.1)
+    dedo = max(0.2, r(B / 4.0, 0.1)); talon = max(0.3, r(B - dedo - fuste, 0.1))
+    return {"x": 0.0, "H": H, "fuste": fuste, "zapata": zapata, "talon": talon, "dedo": dedo, "emp": r(zapata + 0.5, 0.1)}
+
+def wall_levels(pm, z):
+    emp = max(pm["emp"], pm["zapata"] + 0.2)
+    return {"z": z, "zb": z - emp, "ztf": z - emp + pm["zapata"], "ztop": z + pm["H"], "xb": pm["x"] + MURO_BAT}
+
+def wall_polygon(pm, z):
+    L = wall_levels(pm, z); x = pm["x"]; xf = x + pm["fuste"]
+    return [(x - pm["dedo"], L["zb"]), (xf + pm["talon"], L["zb"]), (xf + pm["talon"], L["ztf"]), (xf, L["ztf"]),
+            (xf, L["ztop"]), (L["xb"], L["ztop"]), (x, z), (x, L["ztf"]), (x - pm["dedo"], L["ztf"])]
+
+def wall_chain(pm, z):
+    """contorno ENTERRADO del muro: en GEO5 entra como Free line y cierra la región del hormigón"""
+    L = wall_levels(pm, z); x = pm["x"]; xf = x + pm["fuste"]
+    return [(xf, L["ztop"]), (xf, L["ztf"]), (xf + pm["talon"], L["ztf"]), (xf + pm["talon"], L["zb"]),
+            (x - pm["dedo"], L["zb"]), (x - pm["dedo"], L["ztf"]), (x, L["ztf"]), (x, z)]
+
+def wall_inner_point(pm, z):
+    L = wall_levels(pm, z); return (pm["x"] + pm["fuste"] / 2.0, (max(L["ztf"], z) + L["ztop"]) / 2.0)
+
+def _simplify(P, tol=1e-4):
+    out = []
+    for q in P:
+        if out and abs(out[-1][0] - q[0]) < 1e-6 and abs(out[-1][1] - q[1]) < 1e-6: continue
+        if len(out) >= 2:
+            o, a = out[-2], out[-1]
+            if abs((a[0] - o[0]) * (q[1] - o[1]) - (a[1] - o[1]) * (q[0] - o[0])) < tol: out.pop()
+        out.append((q[0], q[1]))
+    return out
+
+def effective_terrain(m):
+    """terreno natural + la cara vista de cada muro y su relleno retenido (lo que se manda a GEO5)"""
+    mg = m["margins"]
+    if not m["interfaces"] or not m["interfaces"][0]: return []
+    terr = span(m["interfaces"][0], mg["xmin"], mg["xmax"])
+    for w in sorted(m.get("walls", []), key=lambda w: w["pm"]["x"]):
+        pm = w["pm"]
+        if pm["H"] <= 0 or pm["x"] <= mg["xmin"] or pm["x"] >= mg["xmax"]: continue
+        z = interface_y(terr, pm["x"]); L = wall_levels(pm, z); ztop = L["ztop"]; xf = pm["x"] + pm["fuste"]
+        out = [q for q in terr if q[0] < pm["x"] - 1e-9]
+        out += [(pm["x"], z), (L["xb"], ztop), (xf, ztop)]
+        corte = None
+        for i in range(len(terr) - 1):
+            a, b = terr[i], terr[i + 1]
+            if b[0] <= xf + 1e-9: continue
+            xa = max(a[0], xf); za = interface_y(terr, xa); zbb = b[1]
+            if za >= ztop - 1e-9: corte = xa; break
+            if zbb >= ztop - 1e-9: corte = xa + (b[0] - xa) * (ztop - za) / ((zbb - za) or 1.0); break
+        if corte is not None:
+            out.append((corte, ztop)); out += [q for q in terr if q[0] > corte + 1e-9]
+        else: out.append((mg["xmax"], ztop))
+        terr = _simplify(out)
+    return [(round(q[0], 3), round(q[1], 3)) for q in terr]
+
+def wall_ground(m, w):
+    """terreno en la cara delantera del muro (los muros de más a la izquierda ya cambiaron el terreno)"""
+    antes = [o for o in m.get("walls", []) if o["pm"]["x"] < w["pm"]["x"]]
+    mm = dict(m); mm["walls"] = antes
+    terr = effective_terrain(mm) if antes else span(m["interfaces"][0], m["margins"]["xmin"], m["margins"]["xmax"])
+    return interface_y(terr, w["pm"]["x"])
+
+def geo5_free_lines(m):
+    """líneas libres para GEO5: las del .hgeo + el contorno enterrado de cada muro"""
+    out = [list(ln) for ln in m.get("lines", [])]
+    for w in m.get("walls", []):
+        out.append([(round(q[0], 3), round(q[1], 3)) for q in wall_chain(w["pm"], wall_ground(m, w))])
+    return out
+
 def geo5_interfaces(m):
-    """[terreno de margen a margen] + tramos bajo el terreno de cada capa"""
-    mg = m["margins"]; terr = span(m["interfaces"][0], mg["xmin"], mg["xmax"]); out = [terr]
+    """[terreno EFECTIVO de margen a margen] + tramos bajo el terreno de cada capa"""
+    mg = m["margins"]; terr = effective_terrain(m) or span(m["interfaces"][0], mg["xmin"], mg["xmax"]); out = [terr]
     for lay in m["interfaces"][1:]:
         for ch in below_terrain(span(lay, mg["xmin"], mg["xmax"]), terr): out.append(ch)
     return out
 
 def region_at(m, x, y):
-    mg = m["margins"]; return sum(1 for it in m["interfaces"] if interface_y(span(it, mg["xmin"], mg["xmax"]), x) > y + 1e-9)
+    mg = m["margins"]
+    return sum(1 for k, it in enumerate(m["interfaces"])
+               if interface_y(effective_terrain(m) if k == 0 and m.get("walls") else span(it, mg["xmin"], mg["xmax"]), x) > y + 1e-9)
 
 def complete_assign(m):
     """GEO5 exige suelo en TODAS las regiones. Regiones por interfaces (1 = bajo el terreno, k+1 = bajo la capa k):
