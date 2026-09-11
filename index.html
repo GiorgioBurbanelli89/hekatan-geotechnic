@@ -134,6 +134,10 @@
         </div>
         <label><input type="checkbox" id="wPasivo" style="width:auto" /> contar el empuje pasivo delante de la puntera</label>
         <div id="wout" class="mats"></div>
+        <div class="row">
+          <div><label>malla del sólido [m]</label><input id="wMs" type="number" value="0.2" step="0.05" min="0.05" title="tamaño de elemento del hexaedro; el fuste y la zapata tienen que caber en un número entero de elementos" /></div>
+          <div><label>longitud del muro [m]</label><input id="wL" type="number" value="1" step="0.5" min="0.5" title="longitud en la dirección y; 1 m = el muro por metro lineal, que es lo que calcula la verificación 2D" /></div>
+        </div>
         <button class="run" id="wSolido" style="margin-top:6px" title="el mismo muro mallado con SÓLIDOS H8 (el motor de Hekatan Struct, verificado nudo a nudo contra SAP2000; sus modos incompatibles = C3D8I de Abaqus)">▣ resolver el muro en sólidos H8 (3D)</button>
         <div id="wsolout" class="mats"></div>
       </div>

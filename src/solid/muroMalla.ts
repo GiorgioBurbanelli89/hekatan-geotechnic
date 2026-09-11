@@ -45,6 +45,16 @@ export interface MuroSolidoParams {
   gammaC?: number;
   /** 1 = el relleno pesa sobre el TALON: presion gamma·H + q0 en la cara superior de la zapata detras del alzado */
   relleno?: number;
+  /**
+   * true = rejilla POR TRAMOS: la puntera, el fuste, el talon, la zapata y el alzado reciben cada uno su
+   * numero entero de divisiones (>=1) de tamaño ~ms, asi que sus caras caen EXACTAS en la malla.
+   *
+   * Con la rejilla uniforme (el defecto) las caras se redondean a la columna mas cercana: con B = 2.45 m y
+   * ms = 0.2, dx = 0.2042 y un fuste de 0.35 m se CONSTRUYE de 0.408 m — un 17 % mas gordo y un 58 % mas de
+   * inercia. La uniforme se mantiene porque es la que usan las referencias de SAP2000 que validan el solver
+   * (misma malla en los dos programas); para calcular EL MURO que se ha pedido, `ajustada`.
+   */
+  ajustada?: boolean;
 }
 
 export interface MuroSolidoMalla {
@@ -61,17 +71,37 @@ export interface MuroSolidoMalla {
 
 const rd = (v: number) => Math.round(v * 1e6) / 1e6;
 
+/** coordenadas de corte de un tramo [a, a+largo] en trozos de ~ms (al menos uno), SIN repetir el primero */
+function cortes(a: number, largo: number, ms: number): number[] {
+  const n = Math.max(1, Math.round(largo / ms)), out: number[] = [];
+  for (let i = 1; i <= n; i++) out.push(a + (largo * i) / n);
+  return out;
+}
+
 export function mallaMuroSolido(p: MuroSolidoParams): MuroSolidoMalla {
   const B = p.toe + p.t + p.heel, Ztop = p.tf + p.H;
-  const nx = Math.max(1, Math.round(B / p.ms)), ny = Math.max(1, Math.round(p.L / p.ms)), nz = Math.max(1, Math.round(Ztop / p.ms));
-  const dx = B / nx, dy = p.L / ny, dz = Ztop / nz;
-  // el alzado y la zapata caen en columnas/filas ENTERAS de la rejilla
-  const i0 = Math.round(p.toe / dx), i1 = Math.round((p.toe + p.t) / dx), kf = Math.round(p.tf / dz);
+  const ny = Math.max(1, Math.round(p.L / p.ms)), dy = p.L / ny;
+  // ---- las líneas de la rejilla en x y en z ----
+  let X: number[], Z: number[];
+  if (p.ajustada) {
+    // por TRAMOS: cada pieza con su número entero de divisiones → sus caras caen exactas
+    X = [0, ...cortes(0, p.toe, p.ms), ...cortes(p.toe, p.t, p.ms), ...cortes(p.toe + p.t, p.heel, p.ms)];
+    Z = [0, ...cortes(0, p.tf, p.ms), ...cortes(p.tf, p.H, p.ms)];
+  } else {
+    const nxu = Math.max(1, Math.round(B / p.ms)), nzu = Math.max(1, Math.round(Ztop / p.ms));
+    X = Array.from({ length: nxu + 1 }, (_, i) => (B * i) / nxu);
+    Z = Array.from({ length: nzu + 1 }, (_, k) => (Ztop * k) / nzu);
+  }
+  X = X.map(rd); Z = Z.map(rd);
+  const nx = X.length - 1, nz = Z.length - 1;
+  // el alzado y la zapata caen en columnas/filas ENTERAS de la rejilla (con `ajustada`, exactas)
+  const cerca = (arr: number[], v: number) => { let b = 0; for (let i = 1; i < arr.length; i++) if (Math.abs(arr[i] - v) < Math.abs(arr[b] - v)) b = i; return b; };
+  const i0 = cerca(X, p.toe), i1 = cerca(X, p.toe + p.t), kf = cerca(Z, p.tf);
   const dentro = (i: number, k: number) => k < kf || (i >= i0 && i < i1);   // elemento (i,k) es material
   const ids = new Map<string, number>(); const nodes: Vec3[] = [];
   const nodo = (i: number, j: number, k: number) => {
     const key = `${i},${j},${k}`; let id = ids.get(key);
-    if (id === undefined) { id = nodes.length; ids.set(key, id); nodes.push([rd(i * dx), rd(j * dy), rd(k * dz)]); }
+    if (id === undefined) { id = nodes.length; ids.set(key, id); nodes.push([X[i], rd(j * dy), Z[k]]); }
     return id;
   };
   const elements: Hex8[] = [];
@@ -87,9 +117,10 @@ export function mallaMuroSolido(p: MuroSolidoParams): MuroSolidoMalla {
   const loads = new Map<number, [number, number, number]>(); let empujeTotal = 0;
   const caraTrasera = new Set<number>();
   for (let k = kf; k < nz; k++) for (let j = 0; j < ny; j++) {
-    const zc = (k + 0.5) * dz - p.tf;                // profundidad medida desde la coronación: H - zc
+    const dzk = Z[k + 1] - Z[k];
+    const zc = (Z[k] + Z[k + 1]) / 2 - p.tf;         // profundidad medida desde la coronación: H - zc
     const pres = p.Ka * (p.gamma * (p.H - zc) + p.q0);   // kN/m²
-    const F = pres * dy * dz; empujeTotal += F;
+    const F = pres * dy * dzk; empujeTotal += F;
     for (const [jj, kk] of [[j, k], [j + 1, k], [j + 1, k + 1], [j, k + 1]] as [number, number][]) {
       const id = ids.get(`${i1},${jj},${kk}`)!; caraTrasera.add(id);
       const f = loads.get(id) ?? [0, 0, 0]; f[0] -= F / 4; loads.set(id, f);
@@ -98,15 +129,22 @@ export function mallaMuroSolido(p: MuroSolidoParams): MuroSolidoMalla {
   // peso propio: rho·V a partes iguales entre los 8 nudos de cada hexaedro (lumped, como el HRZ del H8)
   let pesoPropio = 0;
   if ((p.gammaC ?? 0) > 0) {
-    const Fe = (p.gammaC ?? 0) * dx * dy * dz;
-    for (const e of elements) { pesoPropio += Fe; for (const id of e) { const f = loads.get(id) ?? [0, 0, 0]; f[2] -= Fe / 8; loads.set(id, f); } }
+    // cada hexaedro con SU volumen (con la rejilla por tramos los elementos no son todos iguales)
+    let e = 0;
+    for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      if (!dentro(i, k)) continue;
+      const Fe = (p.gammaC ?? 0) * (X[i + 1] - X[i]) * dy * (Z[k + 1] - Z[k]);
+      pesoPropio += Fe;
+      for (const id of elements[e]) { const f = loads.get(id) ?? [0, 0, 0]; f[2] -= Fe / 8; loads.set(id, f); }
+      e++;
+    }
   }
   // el relleno sobre el talon: presion gamma·H + q0 en la cara superior de la zapata, x de (toe+t) a B
   let pesoRelleno = 0;
   if ((p.relleno ?? 0) >= 0.5 && kf < nz) {
     const q = p.gamma * p.H + p.q0;
     for (let j = 0; j < ny; j++) for (let i = i1; i < nx; i++) {
-      const F = q * dx * dy; pesoRelleno += F;
+      const F = q * (X[i + 1] - X[i]) * dy; pesoRelleno += F;
       for (const [ii, jj] of [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]] as [number, number][]) {
         const id = ids.get(`${ii},${jj},${kf}`); if (id === undefined) continue;
         const f = loads.get(id) ?? [0, 0, 0]; f[2] -= F / 4; loads.set(id, f);

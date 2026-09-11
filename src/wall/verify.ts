@@ -56,6 +56,8 @@ export type VerifResult = {
   geom: { B: number; Hf: number; Htot: number; xTalon: number };
   suelos: { relleno: Soil; base: Soil };
   K: { Ka: number; delta: number; Kp?: number };
+  /** sobrecarga que se ha usado [kPa] (la de la etapa, o la que se pasó a mano) */
+  q: number;
   fuerzas: Fuerza[];
   N: number; Hd: number; Mest: number; Mdes: number;
   e: number; sigma: { max: number; min: number; reparto: "rectangular" | "triangular" };
@@ -204,7 +206,7 @@ export function verificarMuro(def: SlopeDef, w: Wall, opts: Partial<VerifOpts> =
   else avisos.push("capacidad portante NO verificada: hace falta dar R_d del terreno de apoyo (aquí no se calcula; en GEO5 sale del módulo Spread Footing)");
 
   return {
-    geom: { B, Hf, Htot, xTalon }, suelos: { relleno, base }, K: { Ka, delta, Kp },
+    geom: { B, Hf, Htot, xTalon }, suelos: { relleno, base }, K: { Ka, delta, Kp }, q,
     fuerzas, N, Hd, Mest, Mdes, e, sigma: { max: sMax, min: sMin, reparto: dentroNucleo ? "rectangular" : "triangular" },
     chequeos, avisos,
   };
