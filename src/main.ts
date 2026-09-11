@@ -7,12 +7,13 @@ import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
 import { FieldKind, FIELD_LABEL, FIELD_UNIT, nodalField, stressField, isStressField } from "./viewer/geo5scale";
-import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims } from "./model/dsl";
+import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, MURO_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
 import { criticalCircle, LemMethod } from "./lem/slices";
 import { Pasos } from "./pasos";
 import { hgeoToDxf, recetaGeo5 } from "./model/dxf";
+import { actualizarMuro, engancharMuro } from "./wall/panel";
 
 type Stage = { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean; u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number };
 
@@ -287,7 +288,7 @@ function setBase(m: GeoModel, only?: number[]) {
 async function loadFixture(url: string) {
   const baseUrl = import.meta.env.BASE_URL || "./";
   const m = (await (await fetch(baseUrl + url)).json()) as GeoModel;
-  def = null; edWrap.hidden = true; pasos.actualizar(null); setTool("ver"); draw.setDef({ outline: [], soils: [], layers: [], h: 1, stages: [], interfaces: [], lines: [], assign: [], walls: [], comments: [] });
+  def = null; edWrap.hidden = true; pasos.actualizar(null); actualizarMuro(null); setTool("ver"); draw.setDef({ outline: [], soils: [], layers: [], h: 1, stages: [], interfaces: [], lines: [], assign: [], walls: [], comments: [] });
   setBase(m);
 }
 
@@ -309,7 +310,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
       draw.sheetTop = top; draw.setDef(def); draw.setMap(plot!.mapping());
       (window as unknown as { __geoMap: unknown }).__geoMap = plot!.mapping();
       edMsg.textContent = !def.interfaces[0]?.length ? "borrador: falta el terreno (dibújalo con «interfaz» o escríbelo)" : "borrador: falta al menos un suelo"; edMsg.style.color = "var(--oro)";
-      draw.prompt(); pasos.actualizar(def); return;
+      draw.prompt(); pasos.actualizar(def); actualizarMuro(def, visibleStage()); return;
     }
     const { model: m, stats } = meshSlope(def);
     if (stats.avisos.length) dStatus.textContent = stats.avisos.join(" · ");   // p. ej. "ARCILLA asignado a la región de la línea libre"
@@ -323,7 +324,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
     dSoil.value = draw.state.soil;
     draw.setDef(def);
     setBase(m, only);
-    pasos.actualizar(def); if (selMetodo.value !== "fem") runLem();
+    pasos.actualizar(def); actualizarMuro(def, visibleStage()); if (selMetodo.value !== "fem") runLem();
   } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; }
 }
 function applyHgeo() { try { applyDef(parseHgeo(edText.value, { draft: true }), true); } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; } }
@@ -530,12 +531,16 @@ draw.onChange = (d) => {
 
 btn.addEventListener("click", () => run(base!.stages.map((_, i) => i).slice(0, parseInt(selN.value))));
 selN.addEventListener("change", () => { const n = parseInt(selN.value); const falta = base!.stages.map((_, i) => i).slice(0, n).filter((i) => !stages[i] || stages[i]!.stale); if (falta.length) run(falta); });
-selModel.addEventListener("change", () => { if (selModel.value === "hgeo") { edWrap.hidden = false; if (!edText.value.trim()) edText.value = DEMO04_HGEO; applyHgeo(); } else loadFixture(selModel.value); });
+selModel.addEventListener("change", () => {
+  if (selModel.value === "muro") { edWrap.hidden = false; edText.value = MURO_HGEO; applyHgeo(); return; }   // ejemplo del muro, de un clic
+  if (selModel.value === "hgeo") { edWrap.hidden = false; if (!edText.value.trim()) edText.value = DEMO04_HGEO; applyHgeo(); } else loadFixture(selModel.value);
+});
 edApply.addEventListener("click", applyHgeo);
 edText.addEventListener("keydown", (ev) => { if (ev.ctrlKey && ev.key === "Enter") applyHgeo(); });
-selStage.addEventListener("change", () => { const i = visibleStage(); buildStageTabs(); if (!stages[i] || stages[i]!.stale) run([i]); else { fillStepSelect(); redraw(); } });
+selStage.addEventListener("change", () => { const i = visibleStage(); buildStageTabs(); actualizarMuro(def, i); if (!stages[i] || stages[i]!.stale) run([i]); else { fillStepSelect(); redraw(); } });
 for (const el of [selField, selStep, chkMesh, inpDef]) el.addEventListener("change", redraw);
 inpDef.addEventListener("input", redraw);
+engancharMuro(() => actualizarMuro(def, visibleStage()));
 edText.value = DEMO04_HGEO;
 setTool("ver");
 loadFixture(selModel.value);

@@ -100,7 +100,7 @@
         <input type="file" id="fFile" accept=".hgeo,.txt" hidden>
       </div>
       <label>Ejemplo</label>
-      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option></select>
+      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option></select>
       <div id="editor" hidden>
         <textarea id="hgeo" spellcheck="false" rows="11"></textarea>
         <div class="row"><button class="run" id="apply" style="margin-top:6px">✎ Aplicar (Ctrl+Enter)</button></div>
@@ -118,6 +118,25 @@
       <label><input type="checkbox" id="auto" checked style="width:auto" /> recalcular al mover</label>
       <button class="run" id="run">⟳ Recalcular todas las etapas</button>
       <div class="fs" id="fs"></div>
+      <div id="murowrap" hidden>
+        <h2 style="margin-top:14px">Muro de contención <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(GEO5: Cantilever Wall)</span></h2>
+        <div class="row">
+          <div><label>Teoría del empuje</label><select id="wTeoria" title="las que calcula GEO5 (extraído de CantileverWall_5.dll)"><option value="coulomb">Coulomb (activo)</option><option value="mazindrani">Mazindrani (Rankine con talud)</option><option value="reposo">en reposo · Jáky K0</option></select></div>
+          <div><label>δ trasdós [°]</label><input id="wDelta" type="text" value="auto" title="fricción en el plano ficticio del talón; «auto» = φ del relleno (suelo contra suelo)" /></div>
+        </div>
+        <div class="row">
+          <div><label>β relleno [°]</label><input id="wBeta" type="number" value="0" step="1" /></div>
+          <div><label>R_d terreno [kPa]</label><input id="wRd" type="number" value="0" step="25" title="capacidad portante de cálculo del apoyo; 0 = no se verifica (aquí no se calcula)" /></div>
+        </div>
+        <div class="row">
+          <div><label>SF vuelco</label><input id="wSfV" type="number" value="1.5" step="0.1" /></div>
+          <div><label>SF deslizamiento</label><input id="wSfS" type="number" value="1.5" step="0.1" /></div>
+        </div>
+        <label><input type="checkbox" id="wPasivo" style="width:auto" /> contar el empuje pasivo delante de la puntera</label>
+        <div id="wout" class="mats"></div>
+        <button class="run" id="wSolido" style="margin-top:6px" title="el mismo muro mallado con SÓLIDOS H8 (el motor de Hekatan Struct, verificado nudo a nudo contra SAP2000; sus modos incompatibles = C3D8I de Abaqus)">▣ resolver el muro en sólidos H8 (3D)</button>
+        <div id="wsolout" class="mats"></div>
+      </div>
       <h2 style="margin-top:14px">Vista</h2>
       <div class="row">
         <div><label>Etapa</label><select id="stage"></select></div>

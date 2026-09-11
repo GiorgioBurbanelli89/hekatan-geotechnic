@@ -43,6 +43,44 @@ Comprobación: `npx tsx tests/muro_check.ts examples/muro_cantilever.hgeo` compa
 malla — talud natural, el mismo relleno retenido pero TODO de suelo, y relleno + muro — y verifica que el
 hormigón no plastifica (ε_pl = 0 exacto en sus puntos de Gauss).
 
+## El muro de contención, por los tres caminos
+
+Un muro de contención se pregunta tres cosas distintas y el programa las responde por separado:
+
+| pregunta | camino | dónde |
+|---|---|---|
+| ¿vuelca, desliza, aplasta el terreno? | cuerpo rígido + empuje de Coulomb | panel **Muro de contención** (`src/wall/verify.ts`) |
+| ¿cuánto se mueve y por dónde falla el talud CON el muro? | GeoFEM T6, muro = *Rigid body* | la gráfica de siempre (`src/geofem/`) |
+| ¿cuánto flexa el muro y qué tensión hay dentro? | **sólidos H8 en 3D** | botón *resolver el muro en sólidos H8* (`src/solid/`) |
+
+### Verificación analítica (el módulo *Cantilever Wall* de GEO5)
+
+Extraído de `CantileverWall_5.dll` (GEO5 2024): las teorías que calcula son **Coulomb, Caquot-Kerisel,
+Müller-Breslau, Mazindrani y Absi** (activo `g5ap_*` y pasivo `g5pp_*`), en reposo **Jáky**; verifica
+`Coef_overturning_wall`, `Coef_sliding_wall`, `Coef_bearingcapacity_wall`, `AllowableEccentricity` y
+`Coef_resist_slip_surface`; y reparte la presión bajo la zapata en **rectangular o triangular**
+(`Souc_obd_*` / `Souc_troj`). Implementado: Coulomb (activo y pasivo), Mazindrani, Jáky, y las cuatro
+verificaciones con el reparto de presión de los dos tipos. Todo sale del propio `.hgeo`: el relleno es el
+suelo detrás del talón, el apoyo el de bajo la zapata, y la sobrecarga la de la etapa.
+
+Comprobado (`npx tsx tests/muro_verif.ts`): Coulomb con δ=0 y trasdós vertical **se reduce a Rankine a
+1e-16**, Kp = 1/Ka, Mazindrani con β=0 = Rankine, Jáky = 1−sinφ, δ↑ baja Ka y β↑ lo sube.
+
+### Sólidos H8 en 3D
+
+`src/solid/cpp/hex8_wasm.cpp` es el **mismo fichero** de Hekatan Struct, copiado sin tocar y compilado
+aquí solo (`build_wasm_solid.sh`). Su opción de modos incompatibles (Wilson-Taylor) es el
+*Incompatible Bending Modes* que SAP2000 trae **activado por defecto**:
+
+$$\text{H8 con modos incompatibles} = \text{SAP2000 Solid (InComp)} = \text{Abaqus } \mathtt{C3D8I}$$
+$$\text{H8 clásico} = \text{SAP2000 sin modos} = \text{Abaqus } \mathtt{C3D8}$$
+
+Comprobado (`npx tsx tests/muro_solido_sap.ts`) contra SAP2000 por OAPI, **nudo a nudo**, con las mismas
+referencias que arbitran en Struct: peor diferencia **4e-9 %** en los tres casos (empuje, H8 clásico, y
+peso propio + relleno sobre el talón), 612 nudos y 330 hexaedros.
+**ETABS no entra en esta comparación: ETABS no tiene elementos sólidos** (`SolidObj` solo existe en la
+OAPI de SAP2000). Los árbitros de sólidos son SAP2000 y Abaqus.
+
 ```
 npm install
 npm run dev        # http://localhost:4700
@@ -51,6 +89,9 @@ npm run build      # dist/ para GitHub Pages (DEPLOY_BASE=/hekatan-geotechnic/)
 ```
 ```
 npx tsx tests/run_hgeo.ts examples/muro_cantilever.hgeo    # cualquier .hgeo por la cadena completa
-node tests/check_muro.mjs                                  # el muro dibujado con el ratón, en el navegador
+npx tsx tests/muro_verif.ts                                # empujes y verificación del muro (casos exactos)
+npx tsx tests/muro_solido_sap.ts                           # solidos H8 nudo a nudo contra SAP2000
+node tests/check_muro.mjs                                  # el muro dibujado con el raton, en el navegador
+node tests/check_muro_panel.mjs                            # el panel de verificacion + los solidos, en el navegador
 ```
 Verificación: `cmp_iterlogs_key.py matlab_exact_3et.log tests/out/demo04_ts.log` → 142/142 iteraciones a 0.0e+00.
