@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hekatan Geotechnic · GeoFEM</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 28 L2 14 L12 14 L22 4 L30 4 L30 28 Z' fill='%23d08a3e'/%3E%3C/svg%3E" />
+  <style>
+    :root { --oro: #d3a53c; --terra: #d08a3e; --bg: #14110a; --panel: #1e1a12; --txt: #f3ead0; --mut: #b9ad8c; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px "Segoe UI", Arial, sans-serif; background: radial-gradient(circle at 30% 0%, #241d10, #14110a 55%, #0b0906); color: var(--txt); min-height: 100vh; }
+    header { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #3a3020; background: rgba(0,0,0,.25); }
+    header h1 { margin: 0; font: 600 20px Georgia, serif; background: linear-gradient(#fff3c4, #f2cf5e 55%, #c9972f); -webkit-background-clip: text; background-clip: text; color: transparent; letter-spacing: .5px; }
+    header h1 span { color: var(--terra); -webkit-text-fill-color: var(--terra); }
+    header .sub { color: var(--mut); font-size: 12px; }
+    main { display: grid; grid-template-columns: 300px 1fr; gap: 12px; padding: 12px 18px; }
+    .panel { background: var(--panel); border: 1px solid #3a3020; border-radius: 8px; padding: 12px; }
+    .panel h2 { margin: 0 0 8px; font-size: 13px; color: var(--oro); text-transform: uppercase; letter-spacing: 1px; }
+    label { display: block; margin: 6px 0 2px; color: var(--mut); font-size: 12px; }
+    select, input, button { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid #4a3f28; background: #0f0c07; color: var(--txt); font: inherit; }
+    button.run { margin-top: 10px; background: linear-gradient(#f2cf5e, #c9972f); color: #1b1408; font-weight: 700; border: 0; cursor: pointer; }
+    button.run:disabled { opacity: .5; cursor: wait; }
+    .row { display: flex; gap: 8px; } .row > * { flex: 1; }
+    .sl { display: grid; grid-template-columns: 78px 1fr 58px; gap: 6px; align-items: center; margin: 3px 0; font-size: 12px; }
+    .sl input[type=range] { width: 100%; padding: 0; accent-color: var(--oro); }
+    .sl .v { text-align: right; font: 12px Consolas, monospace; color: var(--txt); }
+    .sl .n { color: var(--mut); }
+    textarea#hgeo { width: 100%; font: 11.5px Consolas, monospace; background: #0b0906; color: #f3ead0; border: 1px solid #4a3f28; border-radius: 6px; padding: 6px; resize: vertical; white-space: pre; overflow-x: auto; margin-top: 6px; }
+    .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 12px; }
+    .tools .tl { color: var(--oro); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; margin-right: 4px; }
+    .tools .tb { width: auto; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+    .tools .tb.on { background: linear-gradient(#f2cf5e, #c9972f); color: #1b1408; font-weight: 700; border-color: transparent; }
+    .tools .sep { width: 1px; height: 22px; background: #4a3f28; margin: 0 4px; }
+    .tools .il { display: inline-flex; align-items: center; gap: 4px; margin: 0; color: var(--mut); }
+    .tools .il input, .tools .il select { padding: 3px 5px; font-size: 12px; }
+    .tools .il input[type=checkbox] { width: auto; }
+    .stack { position: relative; max-width: calc((100vh - 330px) * 1180 / 700); min-width: 560px; margin: 0 auto; }   /* cabe en pantalla con la línea de órdenes debajo */
+    .stack canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
+    #draw { position: absolute; left: 0; top: 0; background: transparent; cursor: crosshair; }
+    #etabs { display: flex; gap: 4px; margin: 2px 0 4px; flex-wrap: wrap; }
+    #etabs button { padding: 4px 12px; border-radius: 6px 6px 0 0; border: 1px solid #4a3f28; border-bottom: 0; background: #14110a; color: var(--mut); font: 12.5px "Segoe UI", Arial; cursor: pointer; }
+    #etabs button.on { background: var(--oro); color: #14110a; font-weight: 600; }
+    #etabs button .fs { margin-left: 6px; font-size: 11px; opacity: .85; }
+    #etabs button.on .fs { opacity: 1; }
+    #calc { position: absolute; left: 12px; top: 10px; z-index: 7; padding: 6px 12px; border-radius: 6px; font: 600 14px Consolas, monospace; pointer-events: none; box-shadow: 0 2px 10px #0008; }
+    #calc.on { background: #d3a53c; color: #14110a; } #calc.ok { background: #245a2c; color: #bfffc8; } #calc.err { background: #7a1f1f; color: #ffd0d0; }
+    #pasos { margin: 0 0 10px; background: #14110a; border: 1px solid var(--oro); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--txt); }
+    #pasos button { width: auto; padding: 3px 8px; font-size: 12px; border-radius: 4px; border: 0; background: var(--oro); color: #14110a; font-weight: 600; cursor: pointer; }
+    #pasos button.pn, #pasos button.pt, #pasos button.px, #pasos #ps_cancel { background: #3a3020; color: var(--txt); font-weight: 500; }
+    #pasos .ph { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; } #pasos .ph b { color: var(--oro); text-transform: uppercase; letter-spacing: .04em; } #pasos .pg { color: var(--mut); margin-left: auto; font-size: 11.5px; }
+    #pasos .px { padding: 0 5px; font-size: 14px; }
+    #pasos .pl { list-style: none; margin: 0 0 8px; padding: 0; border: 1px solid #3a3020; border-radius: 6px; overflow: hidden; }
+    #pasos .pl li { display: flex; align-items: center; gap: 8px; padding: 3px 8px; cursor: pointer; color: var(--mut); border-bottom: 1px solid #2a2316; } #pasos .pl li:last-child { border-bottom: 0; }
+    #pasos .pl li .k { width: 18px; height: 18px; border-radius: 50%; background: #2a2316; color: var(--mut); font-size: 11px; display: inline-flex; align-items: center; justify-content: center; }
+    #pasos .pl li.ok { color: #9fd9a8; } #pasos .pl li.ok .k { background: #245a2c; color: #bfffc8; }
+    #pasos .pl li.cur { background: #2a2316; color: var(--oro); font-weight: 600; } #pasos .pl li.cur .k { background: var(--oro); color: #14110a; }
+    #pasos .pl li .g { margin-left: auto; font-size: 10.5px; color: #7d7259; font-style: italic; font-weight: 400; }
+    #pasos .pq { line-height: 1.35; margin-bottom: 6px; } #pasos .mut { color: var(--mut); font-size: 11.5px; }
+    #pasos .pf { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 6px; margin-bottom: 6px; } #pasos .pf label { display: block; font-size: 11px; color: var(--mut); }
+    #pasos .pf input, #pasos .pf select { width: 100%; padding: 3px 5px; font-size: 12px; margin-top: 1px; } #pasos .ps6 label:first-child { grid-column: 1 / 3; }
+    #pasos .pr { margin-bottom: 6px; } #pasos .pr summary { cursor: pointer; color: var(--mut); font-size: 11.5px; margin-bottom: 4px; }
+    #pasos .pb { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 6px; }
+    #pasos .pe { display: flex; gap: 6px; align-items: center; background: #0b0906; border: 1px solid #4a3f28; border-radius: 5px; padding: 3px 6px; margin-bottom: 6px; }
+    #pasos .pe code { flex: 1; min-width: 0; font: 11.5px Consolas, monospace; color: #f3ead0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    #pasos .pli { list-style: none; margin: 0 0 6px; padding: 0; max-height: 150px; overflow: auto; } #pasos .pli li { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-bottom: 1px solid #2a2316; cursor: pointer; }
+    #pasos .pli li.cur { background: #2a2316; } #pasos .pli li .mut { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #pasos .pdel { background: transparent; color: #b55; padding: 0 4px; margin-left: auto; font-weight: 700; }
+    .fs { margin-top: 10px; font-size: 13px; }
+    .fs table { width: 100%; border-collapse: collapse; } .fs td, .fs th { padding: 3px 4px; border-bottom: 1px solid #332b1b; text-align: right; } .fs th:first-child, .fs td:first-child { text-align: left; }
+    .fs .ok { color: #7ee08a; font-weight: 600; }
+    #cmd { margin-top: 6px; background: #0b0906; border: 1px solid #8a6a2a; border-radius: 6px; font: 13px Consolas, monospace; color: #cfc4a6; position: sticky; bottom: 6px; z-index: 5; box-shadow: 0 0 0 3px #0b0906, 0 -6px 18px #000a; }
+    #cmdhist { padding: 4px 8px 0; min-height: 3.4em; max-height: 5.2em; overflow: hidden; white-space: pre; }
+    #cmdhist div { line-height: 1.3; opacity: .85; } #cmdhist div:last-child { opacity: 1; color: #f3ead0; }
+    .cmdrow { display: flex; align-items: center; gap: 6px; padding: 3px 8px 5px; border-top: 1px solid #332b1b; }
+    #cmdprompt { color: var(--oro); white-space: nowrap; font-weight: 600; }
+    #cmdin { flex: 1; width: auto; border: 0; background: transparent; padding: 2px 4px; font: inherit; color: #f3ead0; outline: none; }
+    #plot { width: 100%; height: auto; background: #fff; border-radius: 6px; display: block; }
+    #hover { font: 12px Consolas, monospace; color: var(--mut); margin-top: 6px; min-height: 16px; }
+    #log { font: 11.5px Consolas, monospace; white-space: pre; overflow: auto; height: 220px; background: #0b0906; border: 1px solid #3a3020; border-radius: 6px; padding: 8px; color: #cfc6a8; margin-top: 10px; }
+    #log .srm { color: #f2cf5e; } #log .fsl { color: #7ee08a; font-weight: 700; } #log .div { color: #e5382b; }
+    .mats { font-size: 12px; color: var(--mut); margin-top: 8px; line-height: 1.5; }
+    .mats b { color: var(--txt); }
+    footer { padding: 8px 18px; color: #7d7259; font-size: 11px; border-top: 1px solid #2a2316; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  </style>
+  <script type="module" crossorigin src="/hekatan-geotechnic/assets/index-DvSNpXFn.js"></script>
+</head>
+<body>
+  <header>
+    <svg width="34" height="34" viewBox="0 0 32 32"><path d="M2 28 L2 14 L12 14 L22 4 L30 4 L30 28 Z" fill="#d08a3e"/><path d="M12 14 L22 4" stroke="#fff3c4" stroke-width="1.5"/></svg>
+    <div><h1>Hekatan <span>Geotechnic</span></h1><div class="sub">GeoFEM · estabilidad de taludes por reducción de resistencia (T6 · Drucker-Prager · SRM) · réplica de GEO5 verificada a 12 cifras</div></div>
+  </header>
+  <main>
+    <aside class="panel">
+      <h2>Modelo</h2>
+      <div class="row" id="archivo" style="gap:6px;margin-bottom:6px">
+        <button id="fNuevo" class="tb" title="hoja en blanco: margenes + dibujar el terreno" style="width:100%">▢ Nuevo</button>
+        <button id="fAbrir" class="tb" title="abrir un fichero .hgeo" style="width:100%">📂 Abrir</button>
+        <button id="fGuardar" class="tb" title="guardar el modelo como .hgeo" style="width:100%">💾 Guardar</button>
+        <button id="fDxf" class="tb" title="exportar la geometría a DXF para GEO5 (Interfaces → Import DXF) + un .txt con los pasos: suelos, asignación, malla, cargas" style="width:100%">📐 DXF GEO5</button>
+        <input type="file" id="fFile" accept=".hgeo,.txt" hidden>
+      </div>
+      <label>Ejemplo</label>
+      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option></select>
+      <div id="editor" hidden>
+        <textarea id="hgeo" spellcheck="false" rows="11"></textarea>
+        <div class="row"><button class="run" id="apply" style="margin-top:6px">✎ Aplicar (Ctrl+Enter)</button></div>
+        <div id="edmsg" class="mats"></div>
+      </div>
+      <div class="mats" id="mats"></div>
+      <label>Método</label>
+      <select id="metodo" title="GeoFEM = elementos finitos (reducción de resistencia). Analítico = equilibrio límite por dovelas (módulo Slope Stability de GEO5)"><option value="fem">GeoFEM · elementos finitos (SRM)</option><option value="bishop">Analítico · Bishop (círculo)</option><option value="fellenius">Analítico · Fellenius (círculo)</option></select>
+      <div id="lemout" class="mats" style="margin:4px 0"></div>
+      <label>Etapas a calcular</label>
+      <select id="nstages"><option value="3">3 (peso propio · sobrecarga · ancla)</option><option value="2">2</option><option value="1">1 (solo peso propio)</option></select>
+      <h2 style="margin-top:12px">Parámetros <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(recalcula solo)</span></h2>
+      <div id="gsliders"></div>
+      <div id="sliders"></div>
+      <label><input type="checkbox" id="auto" checked style="width:auto" /> recalcular al mover</label>
+      <button class="run" id="run">⟳ Recalcular todas las etapas</button>
+      <div class="fs" id="fs"></div>
+      <div id="murowrap" hidden>
+        <h2 style="margin-top:14px">Muro de contención <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(GEO5: Cantilever Wall)</span></h2>
+        <div class="row">
+          <div><label>Teoría del empuje</label><select id="wTeoria" title="las que calcula GEO5 (extraído de CantileverWall_5.dll)"><option value="coulomb">Coulomb (activo)</option><option value="mazindrani">Mazindrani (Rankine con talud)</option><option value="reposo">en reposo · Jáky K0</option></select></div>
+          <div><label>δ trasdós [°]</label><input id="wDelta" type="text" value="auto" title="fricción en el plano ficticio del talón; «auto» = φ del relleno (suelo contra suelo)" /></div>
+        </div>
+        <div class="row">
+          <div><label>β relleno [°]</label><input id="wBeta" type="number" value="0" step="1" /></div>
+          <div><label>R_d terreno [kPa]</label><input id="wRd" type="number" value="0" step="25" title="capacidad portante de cálculo del apoyo; 0 = no se verifica (aquí no se calcula)" /></div>
+        </div>
+        <div class="row">
+          <div><label>SF vuelco</label><input id="wSfV" type="number" value="1.5" step="0.1" /></div>
+          <div><label>SF deslizamiento</label><input id="wSfS" type="number" value="1.5" step="0.1" /></div>
+        </div>
+        <label><input type="checkbox" id="wPasivo" style="width:auto" /> contar el empuje pasivo delante de la puntera</label>
+        <div id="wout" class="mats"></div>
+        <div class="row">
+          <div><label>malla del sólido [m]</label><input id="wMs" type="number" value="0.2" step="0.05" min="0.05" title="tamaño de elemento del hexaedro; el fuste y la zapata tienen que caber en un número entero de elementos" /></div>
+          <div><label>longitud del muro [m]</label><input id="wL" type="number" value="1" step="0.5" min="0.5" title="longitud en la dirección y; 1 m = el muro por metro lineal, que es lo que calcula la verificación 2D" /></div>
+        </div>
+        <button class="run" id="wSolido" style="margin-top:6px" title="el mismo muro mallado con SÓLIDOS H8 (el motor de Hekatan Struct, verificado nudo a nudo contra SAP2000; sus modos incompatibles = C3D8I de Abaqus)">▣ resolver el muro en sólidos H8 (3D)</button>
+        <div id="wsolout" class="mats"></div>
+      </div>
+      <h2 style="margin-top:14px">Vista</h2>
+      <div class="row">
+        <div><label>Etapa</label><select id="stage"></select></div>
+        <div><label>Campo</label><select id="field" title="los mismos resultados que GEO5 FEM (Variable)"><optgroup label="Mecanismo de falla (u(SRF) − u_el)"><option value="dx">Displacement d_x [mm]</option><option value="dz">Displacement d_z [mm]</option><option value="d">Displacement resultant |d| [mm]</option></optgroup><optgroup label="Estado de tensión (SRF = 1)"><option value="sx">Effective stress σ_x,eff [kPa]</option><option value="sz">Effective stress σ_z,eff [kPa]</option><option value="sxt">Total stress σ_x,tot [kPa]</option><option value="szt">Total stress σ_z,tot [kPa]</option><option value="txz">Shear stress τ_xz [kPa]</option><option value="J">Equivalent deviatoric stress J [kPa]</option><option value="u">Total pore pressure u_tot [kPa] (sin agua = 0)</option><option value="Ed">Equivalent deviatoric strain E_d [%]</option><option value="Edpl">Plastic equiv. deviatoric strain E_d,pl [%]</option></optgroup></select></div>
+      </div>
+      <div class="row">
+        <div><label>Peldaño (SRF)</label><select id="step"></select></div>
+        <div><label>Deformada ×</label><input id="defscale" type="number" value="0" min="0" step="10" /></div>
+      </div>
+      <label><input type="checkbox" id="mesh" checked style="width:auto" /> malla T6</label>
+    </aside>
+    <section class="panel">
+      <div class="tools">
+        <span class="tl">Dibujar</span>
+        <button data-tool="ver" class="tb on" title="solo ver (hover con valores)">👁 ver</button>
+        <button data-tool="interfaz" class="tb" title="polilínea de margen a margen; la 1ª es el terreno. Enter/doble clic termina, Esc cancela">╱ interfaz</button>
+        <button data-tool="asignar" class="tb" title="clic dentro de una región → suelo">◉ asignar</button>
+        <button data-tool="sobrecarga" class="tb" title="dos clics sobre el terreno">⇊ sobrecarga</button>
+        <button data-tool="ancla" class="tb" title="clic en la cabeza del ancla">➶ ancla</button>
+        <button data-tool="muro" class="tb" title="muro cantilever de hormigón (Rigid body de GEO5): clic en el pie de la cara vista y otro en la coronación">▉ muro</button>
+        <button data-tool="mover" class="tb" title="arrastra un vértice">✥ mover</button>
+        <button data-tool="borrar" class="tb" title="clic en vértice o interfaz">✕ borrar</button>
+        <button id="undo" class="tb" title="Ctrl+Z">↶ deshacer</button>
+        <button id="gAyuda" class="tb" title="pasos, como los frames de GEO5: interfaces (rango + terreno + capas), suelos, asignar, malla, etapas, análisis">? pasos</button>
+        <span class="sep"></span>
+        <label class="il">rejilla <input id="grid" type="number" value="1" min="0.1" step="0.5" style="width:56px"></label>
+        <label class="il"><input id="snap" type="checkbox" checked> rejilla F9</label>
+        <label class="il"><input id="osnap" type="checkbox" checked title="extremo · medio · intersección · perpendicular · cercano"> osnap F3</label>
+        <label class="il"><input id="ortho" type="checkbox"> orto F8/Shift</label>
+        <span class="sep"></span>
+        <label class="il">suelo <select id="dsoil" style="width:auto"></select></label>
+        <label class="il">q <input id="dq" type="number" value="35" style="width:56px"> kPa</label>
+        <label class="il">F <input id="dF" type="number" value="72" style="width:56px"> kN</label>
+        <label class="il">ang <input id="dang" type="number" value="-17" style="width:56px">°</label>
+        <label class="il">en etapa <select id="dstage" style="width:auto"></select></label>
+        <span class="il" style="margin-left:auto;color:var(--oro)">⌨ o escribe órdenes abajo en <b>Orden:</b> (talud desde 0: <b>nuevo</b>)</span>
+      </div>
+      <div id="etabs" title="etapa que se ve en la gráfica (como GEO5): clic para revisar cada etapa"></div>
+      <div class="stack">
+        <canvas id="plot" width="1180" height="700"></canvas>
+        <canvas id="draw" width="1180" height="700"></canvas>
+        <div id="calc" hidden></div>
+      </div>
+      <div id="dstatus" class="mats" style="margin-top:2px;min-height:16px"></div>
+      <div id="cmd" title="línea de órdenes (AutoCAD): herramienta (interfaz, asignar, sobrecarga, ancla, mover, borrar), coordenada x,y · @dx,dy · @d<ang, o una orden del .hgeo (margenes, suelo, malla, etapa)">
+        <div id="cmdhist"></div>
+        <div class="cmdrow"><span id="cmdprompt">Orden:</span><input id="cmdin" autocomplete="off" spellcheck="false" placeholder="escribe una orden o una coordenada x,y y pulsa Enter"></div>
+      </div>
+      <div id="hover">mueve el ratón sobre el talud para leer el valor</div>
+      <div id="log">Pulsa «Calcular FS». El cálculo corre en tu navegador (Web Worker); el log es el mismo que imprime el driver de Hekatan Python y coincide iteración a iteración con GEO5.</div>
+    </section>
+  </main>
+  <footer>Hekatan Engineers · Portoviejo, Ecuador · Todo lo que hay aquí está EXTRAÍDO del solver de GEO5 (FRGeoFEM) o MEDIDO en su course of analysis, nada es de libro.</footer>
+</body>
+</html>
