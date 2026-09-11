@@ -1,0 +1,10 @@
+# LADERA para poner un muro a media altura: el terreno sube de -9 a -2 y el suelo aguanta (phi=30 c=15)
+margenes xmin=0 xmax=40 fondo=-20
+interfaz 0,-9 10,-9 22,-2 40,-2
+interfaz 0,-14 20,-13 40,-12.5
+suelo LIMO      E=25000    nu=0.3  phi=30 c=15 gamma=19
+suelo ARCILLA   E=12000    nu=0.35 phi=24 c=25 gamma=18
+asignar LIMO en 5,-11
+asignar ARCILLA en 20,-16
+malla 1.8
+etapa peso propio

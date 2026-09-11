@@ -47,7 +47,7 @@ const clip = await page.evaluate(() => { const r = document.querySelector("main"
 const BEATS = `${SCHOOL}/frames_muro_beats.json`;
 const beats = existsSync(BEATS) ? JSON.parse(readFileSync(BEATS, "utf8")) : {};
 let cur = null, k = 0;
-const start = (name) => { cur = name; k = 0; rmSync(`${SCHOOL}/frames_mv_${name}`, { recursive: true, force: true }); mkdirSync(`${SCHOOL}/frames_mv_${name}`, { recursive: true }); beats[name] = 0; };
+const start = (name) => { page.evaluate(() => { const h = document.getElementById("cmdhist"); if (h) h.innerHTML = ""; }).catch(() => {}); cur = name; k = 0; rmSync(`${SCHOOL}/frames_mv_${name}`, { recursive: true, force: true }); mkdirSync(`${SCHOOL}/frames_mv_${name}`, { recursive: true }); beats[name] = 0; };
 const frame = async () => { const path = `${SCHOOL}/frames_mv_${cur}/f${String(k).padStart(3, "0")}.png`; try { await page.screenshot({ path, clip, timeout: 60000 }); } catch { await wait(800); await page.screenshot({ path, clip, timeout: 60000 }); } k++; beats[cur] = k; };
 const frames = async (n, ms = 120) => { for (let i = 0; i < n; i++) { await frame(); await wait(ms); } };
 const worldPx = (x, z) => page.evaluate((x, z) => { const [px, py] = window.__geoMap.tf(x, z); const c = document.getElementById("draw"); const r = c.getBoundingClientRect(); return { px: r.left + (px * r.width) / c.width, py: r.top + (py * r.height) / c.height }; }, x, z);
@@ -68,19 +68,34 @@ const arrastrar = async (id, v0, v1, pasos = 6) => {
 };
 
 // ════════ 1) CÓMO SE AÑADE UN CUERPO RÍGIDO: herramienta muro + dos clics ════════
-await cargar("examples/talud_1_inclinacion.hgeo");
+await cargar("examples/ladera.hgeo");
 await page.evaluate(() => window.__modo(""));
 start("rigido");
 await frames(3, 200);
 await clicSel('.tb[data-tool="muro"]');            // se elige la herramienta
 await frames(2, 200);
-await glide(12, -9, 3); await glide(12, -7.5, 3); await glide(12, -6.2, 4);   // el FANTASMA del muro sigue al cursor
-await clicMundo(12, -9);                            // 1er clic: el pie de la cara vista, sobre el terreno
+await glide(12, -7.6, 3); await glide(12, -6.5, 3); await glide(12, -5.5, 4);   // el pie sigue al cursor
+await clicMundo(12, -7.6);                          // 1er clic: el pie de la cara vista, sobre el terreno
 await frames(2, 200);
-await glide(12, -7.5, 3); await glide(12, -6.4, 4);  // subiendo: H crece en vivo
-await clicMundo(12, -6);                            // 2º clic: la coronación → H = 3 m
+await glide(12, -6, 3); await glide(12, -4.6, 4);    // subiendo: H crece en vivo
+await clicMundo(12, -4.6);                          // 2º clic: la coronación → H = 3 m
 await waitIdle(); await frames(4, 260);
 await clicSel('.tb[data-tool="ver"]'); await frames(2, 250);
+
+// ════════ 1b) EL MURO EMBEBIDO: el pie por debajo del terreno y se EXCAVA por delante ════════
+await page.evaluate(() => window.__modo(""));
+await cargar("examples/ladera.hgeo");
+start("embebido");
+await clicSel('.tb[data-tool="muro"]'); await frames(2, 200);
+await glide(16, -5.5, 3);                                   // el pie, sobre el terreno (en x=16 está a -5.5)
+await glide(16, -6.2, 3); await glide(16, -6.8, 3); await glide(16, -7.4, 4);   // BAJANDO: el pie sigue al cursor
+await clicMundo(16, -7);                                    // pie 1.5 m EMBEBIDO bajo el terreno
+await frames(2, 200);
+await glide(16, -4, 3); await glide(16, -2.2, 4);            // la coronación, al nivel del terreno de arriba
+await clicMundo(16, -2);
+await waitIdle(); await frames(5, 280);
+await clicSel('.tb[data-tool="ver"]'); await frames(3, 260);
+console.log("embebido:", (await page.$eval("#hgeo", (e) => e.value)).match(/^muro.*$/m)?.[0]);
 
 // ════════ 2) LOS SLIDERS DEL MURO ════════
 await page.evaluate(() => window.__modo("muro"));
