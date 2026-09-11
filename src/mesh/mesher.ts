@@ -186,6 +186,10 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   // ---- refinamiento de Ruppert: ángulo mínimo 25° y área ≤ 1.4·(√3/4)h² ----
   const amax = 1.4 * (Math.sqrt(3) / 4) * h * h;                                        // tope global (referencia)
   const amaxAt = (t: Tri) => { const x = (P[t.a][0] + P[t.b][0] + P[t.c][0]) / 3, y = (P[t.a][1] + P[t.b][1] + P[t.c][1]) / 3; const hl = hAt(x, y); return 1.4 * (Math.sqrt(3) / 4) * hl * hl; };
+  // tope de tiempo del refinamiento: una geometría degenerada no puede colgar el navegador. 2.5 s era demasiado
+  // justo (el muro de ejemplo malla en 1.2 s en Node pero en 2.6 s en el navegador y saltaba el aviso en un
+  // modelo perfectamente sano); 8 s sigue estando muy por debajo de lo que tarda el solver en ese mismo modelo.
+  const TOPE_MS = 8000;
   let steiner = 0, cortado = false;
   const tStart = performance.now();          // tope de tiempo: una geometría degenerada (dos interfaces que se
   enforce();                                 // tocan) no puede colgar el navegador: se entrega lo que haya
@@ -193,7 +197,7 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   for (let iter = 0; iter < 5000; iter++) {
     const live = interior();
     let worst: Tri | null = null, score = 0;
-    if (performance.now() - tStart > 2500) { meshDebug("refinamiento cortado por tiempo (2.5 s): geometría degenerada"); cortado = true; break; }
+    if (performance.now() - tStart > TOPE_MS) { meshDebug(`refinamiento cortado por tiempo (${TOPE_MS / 1000} s): geometría degenerada`); cortado = true; break; }
     for (const t of live) {
       const ar = triArea(t), am = amaxAt(t);
       if (ar < 2e-3 * am) continue;            // astillas junto a interfaces que se tocan: no se refinan más
@@ -235,7 +239,7 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   const midOf = new Map<string, number>();
   const mid = (u: number, v: number) => { const k = u < v ? u + "," + v : v + "," + u; let m = midOf.get(k); if (m === undefined) { m = X.length; X.push((X[u] + X[v]) / 2); Y.push((Y[u] + Y[v]) / 2); midOf.set(k, m); } return m; };
   const ELE: number[][] = [], EMAT: number[] = [], avisos: string[] = [];
-  if (cortado) avisos.push("el refinamiento se cortó a los 2.5 s: la malla puede estar incompleta (sube «malla» o simplifica la geometría)");
+  if (cortado) avisos.push("el refinamiento se cortó a los 8 s: la malla puede estar incompleta (sube «malla» o simplifica la geometría)");
   for (const t of tris) {
     const a = ren(t.a), b = ren(t.b), c = ren(t.c);
     ELE.push([a, b, c, mid(a, b), mid(b, c), mid(c, a)]);
