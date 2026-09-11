@@ -1,0 +1,10 @@
+# TALUD DE UNA SOLA INCLINACION, PARAMETRICO: la orden `talud` da los sliders de H, beta, corona y x del pie
+margenes xmin=0 xmax=40 fondo=-20
+talud xpie=12 zpie=-9 H=6 beta=30 corona=16 zfin=-3
+interfaz 0,-13 20,-12.5 40,-12
+suelo LIMO_ARENOSO E=22000 nu=0.3  phi=28 c=7 gamma=18.5
+suelo ARCILLA_FIRME E=11000 nu=0.35 phi=22 c=28 gamma=18
+asignar LIMO_ARENOSO en 6,-11
+asignar ARCILLA_FIRME en 20,-16
+malla 1.8
+etapa peso propio

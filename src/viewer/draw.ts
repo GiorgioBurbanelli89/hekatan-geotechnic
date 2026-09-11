@@ -82,7 +82,7 @@ export class DrawTools {
       : t === "asignar" ? `ASIGNAR ${this.state.soil || "(elige suelo)"}  punto dentro de la región:`
       : t === "sobrecarga" ? (n === 0 ? `SOBRECARGA q=${this.state.q} kPa  primer punto sobre el terreno:` : "SOBRECARGA  segundo punto:")
       : t === "ancla" ? `ANCLA F=${this.state.F} kN ang=${this.state.ang}°  cabeza (x,y):`
-      : t === "muro" ? (n === 0 ? "MURO  pie de la cara vista, sobre el terreno (x,y):" : "MURO  coronación (solo cuenta la z) → H:")
+      : t === "muro" ? (n === 0 ? "MURO  pie de la cara vista (x,y) — bájalo del terreno y el muro queda EMBEBIDO:" : "MURO  coronación (solo cuenta la z) → H:")
       : t === "mover" ? "MOVER  arrastra un vértice:" : "BORRAR  vértice o interfaz:";
     this.onPrompt?.(p);
   }
@@ -136,7 +136,11 @@ export class DrawTools {
   private snapPt(p: Pt, ref?: Pt): Pt {
     let [x, y] = p; this.snapKind = null;
     const tol = this.tolWorld();
-    if (this.state.osnap && this.def) {
+    // EL PIE DE UN MURO es una COTA LIBRE: el snap a objetos atrapaba el terreno (a 0.5 m ya está dentro de
+    // la tolerancia de 14 px) y no se podía bajar el pie para embeber el muro (Jorge: «no puedo bajar más»).
+    // Con la herramienta muro y sin punto previo solo ayudan la rejilla, el orto y los márgenes.
+    const pieDeMuro = this.state.tool === "muro" && !this.cur.length;
+    if (this.state.osnap && this.def && !pieDeMuro) {
       const segs = this.segments();
       // prioridad por NIVELES como AutoCAD: extremo/intersección > medio > perpendicular > cercano (el más
       // cercano siempre está más cerca que el extremo: si ganara por distancia nunca se atraparía un extremo)
@@ -192,12 +196,22 @@ export class DrawTools {
       }
       case "muro": {
         const ty = terrainY(d, p[0]); if (!Number.isFinite(ty)) { this.status("primero el terreno (la primera interfaz)"); return; }
-        if (!this.cur.length) { this.cur.push([p[0], ty]); this.render(); this.status(`pie del muro en x=${p[0]}; ahora la coronación (solo cuenta su z)`); break; }
+        if (!this.cur.length) {
+          // el pie va DONDE ESTÁ EL CURSOR: si lo bajas por debajo del terreno, el muro queda embebido y
+          // por delante se excava. Solo se pega al terreno si el cursor ya está pegado a él (medio cuadro
+          // de rejilla), que es el caso normal (Jorge: «no puedo bajar más y no puedo embeberlo»).
+          const pegaTerreno = Math.abs(p[1] - ty) < this.state.grid * 0.5;
+          const zPie = pegaTerreno ? ty : p[1];
+          this.cur.push([p[0], zPie]); this.render();
+          this.status(`pie del muro en ${p[0]},${fmt(zPie)}${pegaTerreno ? " (sobre el terreno)" : ` — EMBEBIDO ${fmt(ty - zPie)} m bajo el terreno: se excava por delante`}; ahora la coronación`);
+          break;
+        }
         const pie = this.cur[0], H = Math.round((p[1] - pie[1]) * 100) / 100;
         this.cur = [];
-        if (H < 0.5) { this.status("el muro tiene que subir al menos 0.5 m sobre el terreno"); this.render(); break; }
+        if (H < 0.5) { this.status("la coronación tiene que quedar al menos 0.5 m sobre el pie"); this.render(); break; }
         this.push();
         const pm = wallDims(H); pm.x = pie[0];
+        if (Math.abs(pie[1] - terrainY(d, pie[0])) > 1e-6) pm.z = pie[1];   // pie fuera del terreno: se guarda la cota
         const soil = this.ensureHormigon(d);
         d.walls.push({ soil, pm });
         this.commit(`muro ${soil} en x=${pie[0]} con H=${H} m (fuste ${pm.fuste} · zapata ${pm.zapata} · dedo ${pm.dedo} · talón ${pm.talon}) — Rigid body: no se reduce en la SRM`);
@@ -351,9 +365,21 @@ export class DrawTools {
     }
     // FANTASMA de la carga bajo el cursor: al usar «sobrecarga» o «ancla» se ve DÓNDE caería antes de hacer clic (Jorge 8-sep-2026)
     if (this.mouse && this.state.tool === "muro") {   // FANTASMA del muro: se ve el bloque que caería antes de cerrar los dos clics
-      const k = this.k, x = this.cur[0] ? this.cur[0][0] : this.mouse[0], z = terrainY(d, x);
-      if (Number.isFinite(z)) {
-        const H = this.cur[0] ? Math.max(0.5, this.mouse[1] - z) : 4;
+      const k = this.k;
+      if (!this.cur.length) {
+        // ANTES DEL PRIMER CLIC solo se marca el PIE, en el punto del cursor. Antes se dibujaba un bloque
+        // con H = 4 m fija colgado del terreno en la x del cursor: parecía que el muro no bajaba nunca.
+        const [px, py] = tf(this.mouse[0], this.mouse[1]);
+        const ty = terrainY(d, this.mouse[0]), enterrado = Number.isFinite(ty) && ty - this.mouse[1] > this.state.grid * 0.5;
+        ctx.strokeStyle = "#4a4a4a"; ctx.lineWidth = 2 * k; ctx.setLineDash([5 * k, 4 * k]);
+        ctx.beginPath(); ctx.moveTo(px - 26 * k, py); ctx.lineTo(px + 26 * k, py); ctx.stroke();       // la base del muro
+        if (Number.isFinite(ty)) { const [, tyy] = tf(this.mouse[0], ty); ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, tyy); ctx.stroke(); }   // hasta el terreno
+        ctx.setLineDash([]);
+        ctx.fillStyle = enterrado ? "#d08a3e" : "#3a3a3a"; ctx.font = `${11 * k}px Segoe UI`; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+        ctx.fillText(enterrado ? `pie del muro · EMBEBIDO ${(ty - this.mouse[1]).toFixed(2)} m (se excava por delante)` : "pie del muro, sobre el terreno", px + 8 * k, py - 5 * k);
+      } else {
+        const x = this.cur[0][0], z = this.cur[0][1];
+        const H = Math.max(0.5, this.mouse[1] - z);
         const pm = wallDims(Math.round(H * 100) / 100); pm.x = x;
         const poly = wallPolygon(pm, z);
         ctx.beginPath(); poly.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.closePath();

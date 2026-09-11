@@ -8,9 +8,12 @@
 //       pie plano → cara a beta° hasta H → corona → bajada a beta2° hasta zfin → plano hasta el margen
 //   suelo NOMBRE E=130347 nu=0.3 phi=22.7 c=9 gamma=18 [psi=0]
 //   asignar NOMBRE en x,y                    la región que contiene el punto es de ese suelo
-//   muro NOMBRE x=20 H=4 [fuste=0.4 zapata=0.4 talon=1.5 dedo=0.6 emp=0.9]   MURO CANTILEVER = RIGID BODY de GEO5:
+//   muro NOMBRE x=20 [z=-9] H=4 [fuste=0.4 zapata=0.4 talon=1.5 dedo=0.6 emp=0.9]   MURO CANTILEVER = RIGID BODY:
 //       región de hormigón que NO se reduce en la SRM (elástica). El terreno pasa por su cara vista y
 //       detrás queda el relleno retenido hasta la coronación. Sin `fuste=…` se predimensiona con H.
+//       `z` = cota del PIE de la cara vista; si falta, el muro se apoya en el terreno. Con `z` por debajo
+//       del terreno el muro queda EMBEBIDO: por delante se EXCAVA hasta esa cota y la pantalla sostiene
+//       el terreno de arriba (muro a media ladera).
 //   malla 2.3                                tamaño de arista objetivo [m]
 //   etapa NOMBRE [geo5=1.69] [q=35 en x1,y1 -> x2,y2] [F=72 en x,y ang=-17]
 //       cada etapa AÑADE sus cargas a las de la etapa anterior (peso propio siempre está)
@@ -21,7 +24,13 @@ export type Pt = [number, number];
 export type Soil = { name: string; E: number; nu: number; phi: number; c: number; gamma: number; psi: number; rigido?: boolean };
 /** Muro cantilever (GEO5 «Rigid body»): x = cara delantera del fuste, H = altura vista sobre el terreno de delante,
  *  fuste/zapata = espesores, talon/dedo = voladizos de la zapata, emp = profundidad de la BASE bajo el terreno. */
-export type WallParam = { x: number; H: number; fuste: number; zapata: number; talon: number; dedo: number; emp: number };
+export type WallParam = {
+  x: number; H: number; fuste: number; zapata: number; talon: number; dedo: number; emp: number;
+  /** cota del PIE de la cara vista. Si falta, el muro se apoya en el terreno natural en `x`. Si está por
+   *  DEBAJO del terreno, el muro queda EMBEBIDO: por delante se excava hasta esta cota y la pantalla
+   *  sostiene el terreno de arriba (es el caso de un muro a media ladera). */
+  z?: number;
+};
 export type Wall = { soil: string; pm: WallParam };
 export type Layer = { soil: string; side: "bajo" | "sobre"; poly: Pt[] };
 export type Surcharge = { q: number; a: Pt; b: Pt };
@@ -110,8 +119,22 @@ export function effectiveTerrain(def: SlopeDef): Pt[] {
   let terr = spanInterface(def.interfaces[0], m.xmin, m.xmax);
   for (const w of (def.walls ?? []).slice().sort((a, b) => a.pm.x - b.pm.x)) {
     const pm = w.pm; if (!(pm.H > 0) || pm.x <= m.xmin || pm.x >= m.xmax) continue;
-    const z = interfaceY(terr, pm.x), { ztop, xb } = wallLevels(pm, z), xf = pm.x + pm.fuste;
-    const out: Pt[] = terr.filter((p) => p[0] < pm.x - 1e-9);
+    const z = Number.isFinite(pm.z as number) ? (pm.z as number) : interfaceY(terr, pm.x);   // pie de la cara vista
+    const { ztop, xb } = wallLevels(pm, z), xf = pm.x + pm.fuste;
+    // EXCAVACIÓN por delante: si el terreno natural delante del muro está por ENCIMA del pie, se excava
+    // hasta la cota del pie desde donde el natural corta esa cota. Así la pantalla sostiene el terreno de
+    // arriba en vez de quedar flotando (con el pie sobre el terreno, esto no toca nada).
+    const out: Pt[] = [];
+    let xExc = pm.x;                                   // desde dónde empieza la excavación (por la izquierda)
+    for (let i = terr.length - 1; i > 0; i--) {
+      const b = terr[i], a = terr[i - 1]; if (a[0] >= pm.x - 1e-9) continue;
+      const xb2 = Math.min(b[0], pm.x), zb2 = interfaceY(terr, xb2);
+      if (zb2 <= z + 1e-9) { xExc = xb2; break; }                                   // el natural ya está bajo el pie
+      if (a[1] <= z + 1e-9) { xExc = a[0] + (xb2 - a[0]) * (z - a[1]) / ((zb2 - a[1]) || 1); break; }
+      xExc = a[0];
+    }
+    for (const p of terr) if (p[0] < xExc - 1e-9) out.push([p[0], p[1]]);
+    if (xExc < pm.x - 1e-9) out.push([xExc, z]);       // el fondo de la excavación, horizontal hasta el muro
     out.push([pm.x, z], [xb, ztop], [xf, ztop]);
     // relleno retenido: horizontal a ztop hasta que el terreno natural alcanza ese nivel
     let corte = -1;
@@ -142,6 +165,7 @@ export function pointInPolygon(x: number, y: number, poly: Pt[]): boolean {
 }
 /** Terreno natural en la cara delantera de un muro (los muros anteriores ya modificaron el terreno). */
 export function wallGround(def: SlopeDef, w: Wall): number {
+  if (Number.isFinite(w.pm.z as number)) return w.pm.z as number;      // cota del pie dada: el muro puede ir EMBEBIDO
   const m = def.margins!;
   const antes = (def.walls ?? []).filter((o) => o.pm.x < w.pm.x);       // un muro sobre el relleno de otro se apoya en ese relleno
   const terr = antes.length ? effectiveTerrain({ ...def, walls: antes }) : spanInterface(def.interfaces[0], m.xmin, m.xmax);
@@ -176,7 +200,7 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
         def.layers.push({ soil: toks[1], side: side === "sobre" || side === "encima" ? "sobre" : "bajo", poly: pts(toks.slice(3)) });
       } else if (cmd === "muro" || cmd === "wall") {
         const o = kv(toks.slice(2)), H = num(o.h ?? "4"), d = wallDims(H);
-        def.walls.push({ soil: toks[1], pm: { x: num(o.x ?? o.xpie ?? "10"), H, fuste: num(o.fuste ?? String(d.fuste)), zapata: num(o.zapata ?? String(d.zapata)), talon: num(o.talon ?? o["talón"] ?? String(d.talon)), dedo: num(o.dedo ?? String(d.dedo)), emp: num(o.emp ?? String(d.emp)) } });
+        def.walls.push({ soil: toks[1], pm: { x: num(o.x ?? o.xpie ?? "10"), H, ...(o.z ?? o.zpie ? { z: num((o.z ?? o.zpie)!) } : {}), fuste: num(o.fuste ?? String(d.fuste)), zapata: num(o.zapata ?? String(d.zapata)), talon: num(o.talon ?? o["talón"] ?? String(d.talon)), dedo: num(o.dedo ?? String(d.dedo)), emp: num(o.emp ?? String(d.emp)) } });
       } else if (cmd === "malla") def.h = num(toks[1]);
       else if (cmd === "etapa") {
         let i = 1; const nm: string[] = [];
@@ -239,7 +263,7 @@ export function serializeHgeo(def: SlopeDef): string {
   def.interfaces.forEach((it, k) => { if (k === 0 && def.param) { const q = def.param; L.push(`talud xpie=${r(q.xpie)} zpie=${r(q.zpie)} H=${r(q.H)} beta=${r(q.beta)} corona=${r(q.corona)} zfin=${r(q.zfin)} beta2=${r(q.beta2)}`); } else L.push(`interfaz ${it.map(p).join(" ")}`); });
   if (!def.interfaces.length && def.outline.length) L.push(`contorno ${def.outline.map(p).join(" ")}`);
   for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}`);
-  for (const w of def.walls ?? []) L.push(`muro ${w.soil} x=${r(w.pm.x)} H=${r(w.pm.H)} fuste=${r(w.pm.fuste)} zapata=${r(w.pm.zapata)} talon=${r(w.pm.talon)} dedo=${r(w.pm.dedo)} emp=${r(w.pm.emp)}`);
+  for (const w of def.walls ?? []) L.push(`muro ${w.soil} x=${r(w.pm.x)}${Number.isFinite(w.pm.z as number) ? ` z=${r(w.pm.z as number)}` : ""} H=${r(w.pm.H)} fuste=${r(w.pm.fuste)} zapata=${r(w.pm.zapata)} talon=${r(w.pm.talon)} dedo=${r(w.pm.dedo)} emp=${r(w.pm.emp)}`);
   for (const ln of def.lines ?? []) L.push(`linea ${ln.map(p).join(" ")}`);   // GEO5 Free line
   for (const a of def.assign) L.push(`asignar ${a.soil} en ${p(a.p)}`);
   for (const c of def.layers) L.push(`capa ${c.soil} ${c.side} ${c.poly.map(p).join(" ")}`);

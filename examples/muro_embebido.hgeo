@@ -1,0 +1,13 @@
+# MURO EMBEBIDO a media ladera: el pie va a z=-6, por DEBAJO del terreno (que ahi esta a -4.2),
+# asi que por delante se EXCAVA hasta -6 y la pantalla sostiene el terreno de arriba
+margenes xmin=0 xmax=40 fondo=-20
+interfaz 0,-9 10,-9 22,-2 40,-2
+interfaz 0,-14 20,-13 40,-12.5
+suelo LIMO      E=25000    nu=0.3  phi=30 c=15 gamma=19
+suelo ARCILLA   E=12000    nu=0.35 phi=24 c=25 gamma=18
+suelo HORMIGON  E=30000000 nu=0.2  phi=0  c=0  gamma=24
+asignar LIMO en 5,-11
+asignar ARCILLA en 20,-16
+muro HORMIGON x=16 z=-6 H=4 fuste=0.35 zapata=0.35 talon=1.5 dedo=0.6 emp=0.9
+malla 1.6
+etapa peso propio

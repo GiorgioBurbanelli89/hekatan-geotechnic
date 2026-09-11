@@ -7,7 +7,7 @@ import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
 import { FieldKind, FIELD_LABEL, FIELD_UNIT, nodalField, stressField, isStressField } from "./viewer/geo5scale";
-import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, MURO_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims } from "./model/dsl";
+import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, MURO_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims, effectiveTerrain } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
 import { criticalCircle, LemMethod } from "./lem/slices";
@@ -467,6 +467,7 @@ function runLem() {
 }
 selMetodo.addEventListener("change", runLem);
 (window as unknown as { __lem: () => unknown }).__lem = () => draw.lem;   // para el arnés puppeteer
+(window as unknown as { __terrEf: () => unknown }).__terrEf = () => (def ? effectiveTerrain(def).map((p) => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]) : null);
 $<HTMLInputElement>("snap").addEventListener("change", (e) => { draw.state.snap = (e.target as HTMLInputElement).checked; });
 $<HTMLInputElement>("osnap").addEventListener("change", (e) => { draw.state.osnap = (e.target as HTMLInputElement).checked; });
 $<HTMLInputElement>("ortho").addEventListener("change", (e) => { draw.state.ortho = (e.target as HTMLInputElement).checked; });

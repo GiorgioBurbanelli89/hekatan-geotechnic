@@ -1,0 +1,11 @@
+# TALUD DE DOS INCLINACIONES con berma: el terreno se dibuja y los sliders de cada CARA salen del modelo
+# (beta_1 H_1 para la cara de abajo, beta_2 H_2 para la de arriba), mas la x y la z de cada vertice
+margenes xmin=0 xmax=46 fondo=-22
+interfaz 0,-12 10,-12 17,-7 24,-7 29,-2 46,-2
+interfaz 0,-16 22,-15 46,-14.5
+suelo LIMO_ARENOSO E=22000 nu=0.3  phi=28 c=7 gamma=18.5
+suelo ARCILLA_FIRME E=11000 nu=0.35 phi=22 c=28 gamma=18
+asignar LIMO_ARENOSO en 5,-14
+asignar ARCILLA_FIRME en 24,-19
+malla 1.8
+etapa peso propio
