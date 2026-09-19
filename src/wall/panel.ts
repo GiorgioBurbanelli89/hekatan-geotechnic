@@ -8,6 +8,7 @@ import type { SlopeDef, Wall } from "../model/dsl";
 import { wallLevels, wallGround } from "../model/dsl";
 import { verificarMuro, type TeoriaEmpuje, type VerifResult } from "./verify";
 import { mallaMuroSolido, type MuroSolidoParams } from "../solid/muroMalla";
+import { resolverMuro2DUI } from "./panel2d";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const n3 = (v: number) => (Math.round(v * 1000) / 1000).toString();
@@ -75,6 +76,7 @@ function opcionesSeguras() { try { return opciones(); } catch { return {}; } }
 
 let ultimo: { def: SlopeDef; w: Wall; etapa: number } | null = null;
 let solidoHecho = false;   // ya se resolvió una vez → a partir de ahí se recalcula solo, como el resto de la app
+let muro2DHecho = false;   // lo mismo para la ventana 2D
 
 /** Rehace el panel con el modelo actual. Se llama cada vez que el modelo cambia (applyDef). */
 export function actualizarMuro(def: SlopeDef | null, etapa = 0): void {
@@ -91,6 +93,7 @@ export function actualizarMuro(def: SlopeDef | null, etapa = 0): void {
     ultimo = { def, w: def.walls[0], etapa };
     // si el sólido ya está resuelto, se vuelve a resolver con la geometría nueva (tarda ~0.2 s)
     if (solidoHecho) void resolverSolido();
+    if (muro2DHecho) void resolver2D();
   } catch (e) { out.innerHTML = `<span style="color:#e5382b">✖ ${(e as Error).message}</span>`; }
 }
 
@@ -131,4 +134,13 @@ export function engancharMuro(onCambio: () => void): void {
     el.addEventListener("input", onCambio);
   }
   $<HTMLButtonElement>("wSolido").addEventListener("click", () => void resolverSolido());
+  $<HTMLButtonElement>("w2Run").addEventListener("click", () => { muro2DHecho = true; void resolver2D(); });
+  for (const id of ["w2Corona", "w2Ms", "w2Bd", "w2Hd", "w2Xd", "w2Ks", "w2Inc"])
+    document.getElementById(id)!.addEventListener("change", () => { if (muro2DHecho) void resolver2D(); });
+}
+
+/** La tercera ventana (muro 2D en una sola área): el mismo muro y la misma verificación que las otras dos. */
+function resolver2D(): Promise<void> {
+  const ctx = ultimo ? { def: ultimo.def, w: ultimo.w, r: verificarMuro(ultimo.def, ultimo.w, opcionesSeguras(), ultimo.etapa) } : null;
+  return resolverMuro2DUI(ctx);
 }

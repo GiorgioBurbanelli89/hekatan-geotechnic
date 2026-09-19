@@ -140,6 +140,23 @@
         </div>
         <button class="run" id="wSolido" style="margin-top:6px" title="el mismo muro mallado con SÓLIDOS H8 (el motor de Hekatan Struct, verificado nudo a nudo contra SAP2000; sus modos incompatibles = C3D8I de Abaqus)">▣ resolver el muro en sólidos H8 (3D)</button>
         <div id="wsolout" class="mats"></div>
+        <h2 style="margin-top:12px;font-size:12px">Muro en 2D <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(una sola área · deformación plana · Q4 = Plane de SAP2000)</span></h2>
+        <div class="row">
+          <div><label>corona [m]</label><input id="w2Corona" type="number" value="0.25" step="0.05" min="0.05" title="espesor del fuste en la coronación: el trasdós es vertical y la cara vista se inclina" /></div>
+          <div><label>malla [m]</label><input id="w2Ms" type="number" value="0.1" step="0.025" min="0.025" /></div>
+        </div>
+        <div class="row">
+          <div><label>dentellón ancho [m]</label><input id="w2Bd" type="number" value="0.35" step="0.05" min="0" title="0 = sin dentellón (entonces el deslizamiento lo toma toda la base)" /></div>
+          <div><label>dentellón prof. [m]</label><input id="w2Hd" type="number" value="0.4" step="0.05" min="0" /></div>
+        </div>
+        <div class="row">
+          <div><label>dentellón x [m]</label><input id="w2Xd" type="text" value="auto" title="eje del dentellón; «auto» = bajo el fuste" /></div>
+          <div><label>k_s base [kN/m³]</label><input id="w2Ks" type="number" value="30000" step="5000" /></div>
+        </div>
+        <label><input type="checkbox" id="w2Inc" checked style="width:auto" /> modos incompatibles (Plane de SAP2000 por defecto)</label>
+        <button class="run" id="w2Run" style="margin-top:6px" title="la sección del muro como UNA sola área mallada con Q4 en deformación plana; empuje, rellenos y Winkler iguales a los del sólido">▭ resolver el muro en 2D (área)</button>
+        <canvas id="w2Cv" width="340" height="460" style="width:100%;margin-top:6px;background:#0b1220;border-radius:6px;display:none"></canvas>
+        <div id="w2out" class="mats"></div>
       </div>
       <h2 style="margin-top:14px">Vista</h2>
       <div class="row">
