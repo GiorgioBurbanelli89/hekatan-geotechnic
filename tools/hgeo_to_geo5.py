@@ -89,6 +89,16 @@ class Geo5:
         self.front(); mouse.click(coords=(X, Y)); time.sleep(0.6)
     def frame(self, name, stage=False): self.click(1918 if stage else 1905, (FR_STAGE if stage else FR_TOPO)[name]); time.sleep(0.6)
     def modals(self):
+        # Una ventana puede MORIR entre que Windows la lista y pywinauto la envuelve (el diálogo
+        # que se cierra solo). Eso lanzaba InvalidWindowHandle y tumbaba el driver (22-sep-2026).
+        try:
+            return self._modals()
+        except Exception:
+            time.sleep(0.3)
+            try: return self._modals()
+            except Exception: return []
+
+    def _modals(self):
         out = []
         for w in Desktop(backend="win32").windows():
             try:
@@ -253,12 +263,18 @@ class Geo5:
         pxmin, pxmax = min(cols), max(cols); k = (pxmax - pxmin) / (m["xmax"] - m["xmin"])
         # tramo horizontal del terreno más largo
         seg = max(((a, b) for a, b in zip(terrain, terrain[1:]) if abs(a[1] - b[1]) < 1e-9), key=lambda ab: abs(ab[1][0] - ab[0][0]), default=None)
-        if seg is None: raise RuntimeError("el terreno no tiene tramo horizontal para calibrar z")
+        if seg is None:
+            # Sin tramo horizontal en el terreno se calibra con el FONDO del modelo, que GEO5 dibuja
+            # como una línea morada horizontal de margen a margen y que siempre existe (22-sep-2026).
+            seg = (((m["xmin"] + 0.02 * (m["xmax"] - m["xmin"])), m["bottom"]),
+                   ((m["xmax"] - 0.02 * (m["xmax"] - m["xmin"])), m["bottom"]))
+            print("   (sin tramo horizontal en el terreno: se calibra z con el fondo del modelo)")
         xa, xb = sorted([seg[0][0], seg[1][0]]); cx0 = int(pxmin + (xa - m["xmin"]) * k) + 3; cx1 = int(pxmin + (xb - m["xmin"]) * k) - 3
         rows = [(sum(1 for x in range(cx0, cx1, 2) if purple(px[x, y])), y) for y in range(y0, y1)]
         need = 0.6 * (cx1 - cx0) / 2; cand = [y for n, y in rows if n >= need]
         if not cand: raise RuntimeError("no encuentro el tramo horizontal del terreno en la captura")
-        py = min(cand); z = seg[0][1]   # el MÁS ALTO: el fondo del modelo también es una línea horizontal morada (a z=fondo)
+        # con el terreno se coge la fila MÁS ALTA; calibrando con el fondo, la MÁS BAJA
+        py = (max if abs(seg[0][1] - m["bottom"]) < 1e-9 else min)(cand); z = seg[0][1]   # el MÁS ALTO: el fondo del modelo también es una línea horizontal morada (a z=fondo)
         self.map = (pxmin, k, py, z); print("   calibración: x=%g→px %d, %.2f px/m, z=%g→py %d" % (m["xmin"], pxmin, k, z, py))
     def world(self, x, z):
         pxmin, k, py, zr = self.map; m = self.m
