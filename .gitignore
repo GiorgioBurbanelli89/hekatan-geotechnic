@@ -8,3 +8,5 @@ tests/gif/
 tests/gif_draw/
 tests/video/
 tests/video_estado/
+
+*.mp4
