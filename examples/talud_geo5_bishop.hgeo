@@ -1,0 +1,9 @@
+# TALUD DEL TEST CONTRA GEO5 «Slope Stability» (22-sep-2026).
+# El mismo modelo tecleado en GEO5 por tools/geo5_talud.py: UN suelo, sin agua, sin sobrecarga.
+# Terreno: llano hasta x=12, talud de H=6 m a 30 grados, y llano hasta x=40.
+margenes xmin=0 xmax=40 fondo=-12
+interfaz 0,0 12,0 22.39,6 40,6
+suelo LIMO_ARENOSO E=22000 nu=0.3 phi=28 c=7 gamma=18.5
+asignar LIMO_ARENOSO en 20,-4
+malla 1.8
+etapa peso propio

@@ -1,0 +1,23 @@
+{
+ "circulo": {
+  "cx": 16,
+  "cy": 14,
+  "R": 15
+ },
+ "geo5": {
+  "bishop": 2.16,
+  "fellenius": 2.02
+ },
+ "hekatan": [
+  {
+   "metodo": "bishop",
+   "fs": 2.1585,
+   "dovelas": 40
+  },
+  {
+   "metodo": "fellenius",
+   "fs": 2.0126,
+   "dovelas": 40
+  }
+ ]
+}
