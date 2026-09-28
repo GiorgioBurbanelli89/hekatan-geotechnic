@@ -1,0 +1,19 @@
+# Muro en voladizo de Portoviejo (Manabi): el MISMO muro del video 1 (GEO5 Cantilever Wall), por elementos finitos
+# z = 0 en la coronacion del muro y del relleno. Terreno de delante a -2.40; base de la zapata a -3.00.
+# Geometria (m): fuste 2.60 x 0.40 (0.25 en coronacion), zapata 3.00 x 0.40, puntera 0.70, talon 1.90.
+# Suelos: estudio TSN-ES-2025-206 (sondeo 1). phi = el del estudio. gamma, nu y E = catalogo de GEO5
+#   SP  media: gamma 18.5, nu 0.28, Edef 15-35 MPa -> 25 ;  S-F media: gamma 17.5, nu 0.30, Edef 12-19 MPa -> 15.5
+# Hormigon: gamma 23 kN/m3 (el que trae GEO5 Cantilever Wall: peso del muro 47.04 kN/m).
+# OJO: la interfaz entre suelos va a -3.05 y no a -3.00: a -3.00 coincide con la base de la zapata y GEO5 no admite
+#      dos lineas superpuestas. -3.05 es ademas el nivel freatico del sondeo.
+margenes xmin=0 xmax=30 fondo=-12
+interfaz 0,-2.4 30,-2.4
+interfaz 0,-3.05 30,-3.05
+suelo ARENA_SP    E=25000    nu=0.28 phi=30    c=0 gamma=18.5
+suelo ARENA_SPSM  E=15500    nu=0.30 phi=29.97 c=0 gamma=17.5
+suelo HORMIGON    E=21166510 nu=0.2  phi=0     c=0 gamma=23
+asignar ARENA_SP en 20,-1.5
+asignar ARENA_SPSM en 15,-8
+muro HORMIGON x=10 H=2.4 fuste=0.40 zapata=0.40 talon=1.90 dedo=0.70 emp=0.6
+malla 0.8
+etapa peso propio
