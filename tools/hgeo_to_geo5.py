@@ -229,7 +229,9 @@ class Geo5:
             # suelo_*.png y comprobar que el modelo dice "Elastic" (si no, ajustar el numero de {DOWN}).
             dd = [c for c in d.descendants() if c.class_name() == "TEnvDropDown" and c.is_visible() and abs(c.rectangle().left - 653) < 8 and abs(c.rectangle().top - 569) < 8][0]
             self.front(d); dd.click_input(); time.sleep(0.6)
-            send_keys("{HOME}{ENTER}" if rigido else "{HOME}{DOWN 4}{ENTER}"); time.sleep(0.9)
+            # lista medida el 28-sep-2026: 0 elastic · 1 elastic modified · 2 Mohr-Coulomb · 3 Modified Mohr-Coulomb ·
+            # 4 Drucker-Prager · 5 Hoek-Brown · 6 Modified Cam Clay · 7 Hypoplastic clay. `modelo` en el suelo elige otro.
+            send_keys("{HOME}{ENTER}" if rigido else "{HOME}{DOWN %d}{ENTER}" % int(s.get("modelo", 4))); time.sleep(0.9)
             if rigido: print("   OJO: %s es RIGIDO (muro) -> modelo = 1er elemento del desplegable; comprueba en la captura que dice Elastic" % s["name"])
         E = s["E"] / 1000.0
         if rigido:   # hormigon: solo nombre, peso y elasticidad (phi y c no existen en un material elastico)
