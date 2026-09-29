@@ -256,7 +256,7 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
   const ren = (i: number) => (i < s0 ? i : i - 3);                    // salta los 3 del supertriángulo
   const midOf = new Map<string, number>();
   const mid = (u: number, v: number) => { const k = u < v ? u + "," + v : v + "," + u; let m = midOf.get(k); if (m === undefined) { m = X.length; X.push((X[u] + X[v]) / 2); Y.push((Y[u] + Y[v]) / 2); midOf.set(k, m); } return m; };
-  const ELE: number[][] = [], EMAT: number[] = [], avisos: string[] = [];
+  const ELE: number[][] = [], EMAT: number[] = [], REGK: number[] = [], avisos: string[] = [];   // REGK: región de cada elemento (para la actividad por etapas)
   if (cortado) avisos.push(`el refinamiento se cortó a los ${TOPE_MS / 1000} s: la malla puede estar incompleta (sube «malla» o simplifica la geometría)`);
   else if (agotado) avisos.push(`el refinamiento llegó al tope de ${MAXIT} puntos sin acabar: la malla no cumple el ángulo mínimo ni el tamaño`);
   for (const t of tris) {
@@ -264,6 +264,7 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     ELE.push([a, b, c, mid(a, b), mid(b, c), mid(c, a)]);
     const gx = (X[a] + X[b] + X[c]) / 3, gy = (Y[a] + Y[b] + Y[c]) / 3;
     let m = spans.length ? (regionSoil.get(regionOf(gx, gy)) ?? 1) : 1;
+    REGK.push(spans.length ? regionOf(gx, gy) : 0);
     for (const L of def.layers) { const yl = polyY(L.poly, gx); if ((L.side === "bajo" && gy < yl) || (L.side === "sobre" && gy > yl)) m = soilIdx.get(L.soil) ?? m; }
     EMAT.push(m);
   }
@@ -295,13 +296,13 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
       const t = tris[bi]; const px = Math.round((P[t.a][0] + P[t.b][0] + P[t.c][0]) / 3 * 100) / 100, py = Math.round((P[t.a][1] + P[t.b][1] + P[t.c][1]) / 3 * 100) / 100;
       def.assign.push({ soil, p: [px, py] }); compSoil.set(c, soilIdx.get(soil)!); avisos.push(`${soil} asignado a la región de la línea libre (en ${px},${py}; cámbialo en Asignar)`);
     }
-    tris.forEach((_, i) => { const si = compSoil.get(comp[i]); if (si) EMAT[i] = si; });
+    tris.forEach((_, i) => { const si = compSoil.get(comp[i]); if (si) EMAT[i] = si; REGK[i] = 1000 + comp[i]; });
   }
   // el HORMIGÓN del muro manda sobre cualquier región (va después de las líneas libres a propósito)
-  for (const { poly, mat } of wallPolys) tris.forEach((t, i) => {
+  wallPolys.forEach(({ poly, mat }, wi) => tris.forEach((t, i) => {
     const gx = (P[t.a][0] + P[t.b][0] + P[t.c][0]) / 3, gy = (P[t.a][1] + P[t.b][1] + P[t.c][1]) / 3;
-    if (pointInPolygon(gx, gy, poly)) EMAT[i] = mat;
-  });
+    if (pointInPolygon(gx, gy, poly)) { EMAT[i] = mat; REGK[i] = 100000 + wi; }
+  }));
   // NUDOS HUÉRFANOS: puntos que no pertenecen a ningún T6 (los deja un refinamiento cortado por tiempo, o el
   // recorte del dominio). Sus gdl quedan sin rigidez y la matriz sale SINGULAR: el solver divergía en la primera
   // iteración y la app mostraba «FS = 1.0000» sin explicación. Se eliminan y se renumeran.
@@ -329,6 +330,17 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
   const loads: Record<string, number[]> = {};
   const stages: GeoModel["stages"] = [];
   let acc: string[] = ["Fg"];
+  // ---- actividad por etapa (Activity de GEO5): se hereda; `inactiva`/`activa` señalan la región por un punto ----
+  const staged = def.stages.some((st) => st.activa?.length || st.inactiva?.length);
+  const regionEn = (p: Pt) => {
+    for (let e = 0; e < ELE.length; e++) {
+      const [a, b, c] = ELE[e];
+      const d1 = cross(X[b] - X[a], Y[b] - Y[a], p[0] - X[a], p[1] - Y[a]), d2 = cross(X[c] - X[b], Y[c] - Y[b], p[0] - X[b], p[1] - Y[b]), d3 = cross(X[a] - X[c], Y[a] - Y[c], p[0] - X[c], p[1] - Y[c]);
+      if ((d1 >= -1e-9 && d2 >= -1e-9 && d3 >= -1e-9) || (d1 <= 1e-9 && d2 <= 1e-9 && d3 <= 1e-9)) return REGK[e];
+    }
+    throw new Error(`el punto ${p[0]},${p[1]} de «activa/inactiva» no cae en ninguna región`);
+  };
+  let activo = new Array<number>(ELE.length).fill(1);
   def.stages.forEach((st, si) => {
     const F = new Float64Array(ndof);
     for (const sc of st.surcharges) surchargeLoad(F, sc.q, sc.a, sc.b, X, Y, bEdges);
@@ -336,13 +348,19 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     if (st.sismo) seismicLoad(F, st.sismo.kh, st.sismo.kv, st.sismo.borde ?? h, X, Y, ELE, EMAT, def.soils.map((s) => s.gamma));
     const name = `L${si + 1}`; loads[name] = Array.from(F);
     if (st.surcharges.length || st.anchors.length || st.sismo) acc = acc.concat([name]);
-    stages.push({ name: st.name, loads: acc.slice() as GeoModel["stages"][number]["loads"], geo5: st.geo5 });
+    if (staged) {
+      activo = activo.slice();
+      for (const q of st.inactiva ?? []) { const k = regionEn(q); REGK.forEach((r, e) => { if (r === k) activo[e] = 0; }); }
+      for (const q of st.activa ?? []) { const k = regionEn(q); REGK.forEach((r, e) => { if (r === k) activo[e] = 1; }); }
+    }
+    stages.push({ name: st.name, loads: acc.slice() as GeoModel["stages"][number]["loads"], geo5: st.geo5, ...(staged ? { active: activo } : {}) });
   });
   const model: GeoModel = {
     name: "hgeo", X, Y, ELE, EMAT, FIXED, Fg: new Array(ndof).fill(0), Fs: new Array(ndof).fill(0), Fa: new Array(ndof).fill(0),
     MAT: def.soils.map((s) => [s.E, s.nu, s.phi, s.c, s.gamma, s.psi]), recomputeGravity: true, loads, stages,
     MATNAMES: def.soils.map((s) => s.name),
     RIGID: def.soils.map((s) => !!s.rigido),   // muro de hormigón: región elástica, la SRM no le reduce c ni φ
+    ...(staged ? { staged: true, REGK } : {}),
   };
   // estadísticas
   let mn = 180, sumL = 0, nL = 0, ar = 0;

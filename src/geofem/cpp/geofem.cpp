@@ -99,6 +99,10 @@ struct GeoFem {
   vector<double> EPL, Dinv, SIG1, EPL1, EPS1, U1;
   vector<double> Fg2;
   int nstepsOut = 0;
+  // CONSTRUCCIÓN POR ETAPAS (Activity de GEO5): elemento activo o no. Un elemento inactivo no aporta rigidez, ni
+  // fuerza interna, ni peso. Los gdl de nudos que no tocan ningún elemento activo quedan «dormidos»: se les pone un
+  // muelle muy rígido (du = 0) para que la matriz no sea singular. Utot = desplazamiento acumulado desde la etapa 1.
+  vector<unsigned char> act, dormido; vector<double> Utot, EPSacc;   // EPSacc: ε acumulada por punto de Gauss, SOLO mientras el elemento está activo
 
   void rcm(vector<int>& perm) {
     vector<vector<int>> adj(nn);
@@ -192,6 +196,7 @@ struct GeoFem {
       }
       for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) Dinv[(size_t)mm * 16 + i * 4 + j] = A[i][4 + j];
     }
+    act.assign(ne, 1); dormido.assign(ndof, 0); Utot.assign(ndof, 0.0);
     Kel.init(nfree, band); Kt.init(nfree, band);
     assembleK(Kel, true);
     Kel.factor();
@@ -201,6 +206,7 @@ struct GeoFem {
     K.clear();
     double Ke[144], DB[36];
     for (int e = 0; e < ne; e++) {
+      if (!act.empty() && !act[e]) continue;
       const double* De = &D4[(size_t)EMAT[e] * 16];
       std::memset(Ke, 0, sizeof Ke);
       for (int q = 0; q < NG; q++) {
@@ -225,6 +231,7 @@ struct GeoFem {
         for (int c = 0; c < 12; c++) { int ic = map_[edof[e * 12 + c]]; if (ic >= 0) K.add(ir, ic, Ke[r * 12 + c]); }
       }
     }
+    for (int d = 0; d < (int)dormido.size(); d++) if (dormido[d] && map_[d] >= 0) K.add(map_[d], map_[d], 1e12);
   }
 
   static void dpAb(double phi, double c, double& al, double& k) {
@@ -279,6 +286,7 @@ struct GeoFem {
     std::fill(Fi, Fi + ndof, 0.0);
     double ue[12], deps[4], sig[4], Dep[16];
     for (int e = 0; e < ne; e++) {
+      if (!act[e]) continue;
       int mm = EMAT[e]; const double* De = &D4[(size_t)mm * 16]; double al = ab[mm][0], k = ab[mm][1];
       for (int a = 0; a < 12; a++) ue[a] = du[edof[e * 12 + a]];
       for (int q = 0; q < NG; q++) {
@@ -304,7 +312,7 @@ struct GeoFem {
     }
   }
 
-  bool nrstep(double SRF, const double* Fext, int rstep, vector<double>& u, int& itOut) {
+  bool nrstep(double SRF, const double* Fext, int rstep, vector<double>& u, int& itOut, bool keep = false) {
     const int maxit = 100;
     std::vector<std::array<double, 2>> ab(nmat + 1, {0.0, 0.0});   // un par (alpha,k) por suelo, TODOS (antes ab[3] fijo: con 3+ suelos leía basura)
     for (int mm = 0; mm < nmat; mm++) {
@@ -318,7 +326,7 @@ struct GeoFem {
     u.assign(ndof, 0.0);
     vector<double> du(ndof, 0.0), Fi(ndof, 0.0), F1(ndof, 0.0), Rf(nf), R1(nf), duf(nf), drf(nf), ADDisp(nf, 0.0), DForce(nf);
     bool conv = false; int it = 0;
-    resetState();
+    if (!keep) resetState();   // keep = la etapa arranca del estado (σ, ε_pl) que dejó la anterior
     assembleInc(du.data(), ab, false, Fi.data());
     for (int k = 0; k < nf; k++) Rf[k] = Fext[fr[k]] - Fi[fr[k]];
     DForce = Rf;
@@ -355,6 +363,46 @@ struct GeoFem {
     }
     itOut = it;
     return conv;
+  }
+
+  /** Una etapa de CONSTRUCCIÓN (análisis de tensiones de GEO5, SRF = 1): activa `a` (1 por elemento), carga = peso de
+   *  los elementos activos + `Fextra`, y Newton desde el estado de la etapa anterior. En la PRIMERA etapa el estado se
+   *  pone a cero y, al acabar, los desplazamientos también (GEO5: «la etapa 1 es el estado inicial»). */
+  bool runStaged(const int* a, const double* Fextra, bool first, double* outU) {
+    for (int e = 0; e < ne; e++) act[e] = a[e] ? 1 : 0;
+    std::fill(dormido.begin(), dormido.end(), 1);
+    for (int e = 0; e < ne; e++) if (act[e]) for (int k = 0; k < 12; k++) dormido[edof[e * 12 + k]] = 0;
+    vector<double> F(ndof, 0.0);
+    for (int e = 0; e < ne; e++) {
+      if (!act[e]) continue;
+      double rho = -MAT[(EMAT[e] - 1) * 6 + 4];
+      for (int q = 0; q < NG; q++) {
+        double N[6], dL1[6], dL2[6]; t6(GP[q][0], GP[q][1], N, dL1, dL2);
+        for (int k = 0; k < 6; k++) F[2 * ELE[e * 6 + k] + 1] += N[k] * rho * dJw[(size_t)e * NG + q];
+      }
+    }
+    for (int d = 0; d < ndof; d++) F[d] += Fextra[d];
+    if (first) { resetState(); std::fill(Utot.begin(), Utot.end(), 0.0); EPSacc.assign((size_t)ne * NG * 4, 0.0); }
+    vector<double> u; int it;
+    bool c = nrstep(1.0, F.data(), 0, u, it, true);
+    {
+      if (!first) for (int d = 0; d < ndof; d++) Utot[d] += u[d];
+      // GEO5 (medido en GeoFEM, 29-sep-2026): tras la etapa 1 pone a cero los DESPLAZAMIENTOS pero NO las deformaciones
+      // (E_d = 0.87 % ya en la etapa 1 del muro de Manabí). Por eso la ε de la etapa 1 se acumula aunque u no.
+      // la deformación de un elemento es la de SUS etapas activas: una capa recién puesta no hereda el asiento que
+      // tuvieron sus nudos de abajo antes de existir (con ε = B·Utot, E_d salía 6.8 % frente al 1.18 % de GEO5)
+      for (int e = 0; e < ne; e++) if (act[e]) for (int q = 0; q < NG; q++) {
+        size_t kk = (size_t)e * NG + q; const double* B = &Bc[kk * 36]; double e0 = 0, e1 = 0, e2 = 0;
+        for (int k = 0; k < 12; k++) { double v = u[edof[e * 12 + k]]; e0 += B[k] * v; e1 += B[12 + k] * v; e2 += B[24 + k] * v; }
+        EPSacc[kk * 4] += e0; EPSacc[kk * 4 + 1] += e1; EPSacc[kk * 4 + 3] += e2;
+      }
+    }
+    SIG1 = SIG; EPL1 = EPL; U1 = Utot; EPS1 = EPSacc;
+    int na = 0; for (int e = 0; e < ne; e++) na += act[e];
+    double sF = 0; for (int i = 0; i < nn; i++) sF += F[2 * i + 1];
+    LOG(fmt("    ETAPA %s: %d de %d elementos activos, carga vertical %.3f kN, %s en %d iteraciones", first ? "inicial" : "", na, ne, sF, c ? "CONVERGE" : "NO CONVERGE", it));
+    std::memcpy(outU, Utot.data(), sizeof(double) * ndof);
+    return c;
   }
 
   double runStage(const double* Ftot, double* outU, double* outUel, double* outSrf, double* outStepsU, int maxSteps) {
@@ -431,6 +479,7 @@ EMSCRIPTEN_KEEPALIVE
 double geofem_run_stage(int h, const double* F, double* outU, double* outUel, double* outSrf, double* outStepsU, int maxSteps) {
   return handles[h]->runStage(F, outU, outUel, outSrf, outStepsU, maxSteps);
 }
+EMSCRIPTEN_KEEPALIVE int geofem_run_staged(int h, const int* act, const double* F, int first, double* outU) { return handles[h]->runStaged(act, F, first != 0, outU) ? 1 : 0; }
 EMSCRIPTEN_KEEPALIVE void geofem_destroy(int h) { delete handles[h]; handles[h] = nullptr; }
 EMSCRIPTEN_KEEPALIVE double* geofem_alloc(int n) { return (double*)malloc(sizeof(double) * n); }
 EMSCRIPTEN_KEEPALIVE int* geofem_alloc_i(int n) { return (int*)malloc(sizeof(int) * n); }

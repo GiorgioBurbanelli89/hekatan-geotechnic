@@ -28,7 +28,9 @@ export type GeoModel = {
   // ATADURAS [gdl esclavo, gdl maestro]: u_esclavo = u_maestro, por ELIMINACIÓN (el esclavo comparte la fila del maestro).
   // Las respetan modes(), dynamic() y la SRM (nrstep/srm: gather/scatter por `map`).
   TIES?: number[][];
-  stages: { name: string; loads: string[]; geo5?: number }[];
+  stages: { name: string; loads: string[]; geo5?: number; active?: number[] }[];   // active: 1/0 por elemento (construcción por etapas)
+  staged?: boolean;          // true = CONSTRUCCIÓN POR ETAPAS: análisis de tensiones encadenado (sin SRM); solo motor WASM
+  REGK?: number[];           // región de cada elemento (la que señala `activa/inactiva`)
 };
 
 /** Opciones del análisis dinámico LINEAL (Newmark / HHT-α de FRGeoFEM). Unidades kN, m, t, s. */

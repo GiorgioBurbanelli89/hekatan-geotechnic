@@ -14,6 +14,7 @@ type Mod = {
   _geofem_gravity: (h: number) => number; _geofem_nsteps: (h: number) => number;
   _geofem_ngp: (h: number) => number; _geofem_state1: (h: number, sig: number, epl: number, eps: number, u1: number) => void;
   _geofem_run_stage: (h: number, F: number, u: number, uel: number, srf: number, stepsU: number, maxSteps: number) => number;
+  _geofem_run_staged: (h: number, act: number, F: number, first: number, u: number) => number;
   _geofem_destroy: (h: number) => void;
   _geofem_alloc: (n: number) => number; _geofem_alloc_i: (n: number) => number; _geofem_free: (p: number) => void;
 };
@@ -58,7 +59,38 @@ export class GeoFemWasm {
 
   setLog(log: Log): void { this.log = log; this.mod.geoLog = log; }
 
+  /** CONSTRUCCIÓN POR ETAPAS (Activity de GEO5): TODAS las etapas en orden, cada una desde el estado de la anterior.
+   *  Análisis de tensiones (SRF = 1): no hay factor de seguridad (fs = NaN). El peso lo pone el motor (solo elementos activos). */
+  runStaged(m: GeoModel, onStage?: (r: StageResult, index: number) => void): StageResult[] {
+    const mod = this.mod, ndof = this.ndof, ne = m.ELE.length;
+    const pMat = mod._geofem_alloc(6 * m.MAT.length); mod.HEAPF64.set(m.MAT.flat(), pMat >> 3); mod._geofem_set_mat(this.h, pMat); mod._geofem_free(pMat);
+    const pF = mod._geofem_alloc(ndof), pU = mod._geofem_alloc(ndof), pA = mod._geofem_alloc_i(ne);
+    const LOADS: Record<string, number[] | Float64Array> = { ...(m.loads || {}), Fs: m.Fs, Fa: m.Fa };
+    const results: StageResult[] = [];
+    m.stages.forEach((st, si) => {
+      const F = new Float64Array(ndof);
+      for (const nm of st.loads) { if (nm === "Fg") continue; const v = LOADS[nm]; if (!v) throw new Error(`carga desconocida ${nm}`); for (let d = 0; d < ndof; d++) F[d] += v[d]; }
+      mod.HEAPF64.set(F, pF >> 3); mod.HEAP32.set(st.active ?? new Array(ne).fill(1), pA >> 2);
+      const ts = performance.now();
+      this.log(""); this.log(`### ${st.name} ###`);
+      const conv = mod._geofem_run_staged(this.h, pA, pF, si === 0 ? 1 : 0, pU);
+      const sec = (performance.now() - ts) / 1000;
+      const u = Float64Array.from(mod.HEAPF64.subarray(pU >> 3, (pU >> 3) + ndof));
+      const ngp = mod._geofem_ngp(this.h), pS = mod._geofem_alloc(ngp * 4), pP = mod._geofem_alloc(ngp * 4), pE = mod._geofem_alloc(ngp * 4), pU1 = mod._geofem_alloc(ndof);
+      mod._geofem_state1(this.h, pS, pP, pE, pU1);
+      const sig1 = Float64Array.from(mod.HEAPF64.subarray(pS >> 3, (pS >> 3) + ngp * 4)), epl1 = Float64Array.from(mod.HEAPF64.subarray(pP >> 3, (pP >> 3) + ngp * 4));
+      const eps1 = Float64Array.from(mod.HEAPF64.subarray(pE >> 3, (pE >> 3) + ngp * 4));
+      for (const p of [pS, pP, pE, pU1]) mod._geofem_free(p);
+      this.log(`  ${st.name.padEnd(22)} >>> ${conv ? "equilibrio" : "NO CONVERGE"}  [${sec.toFixed(1)} s]`);
+      const res: StageResult = { name: st.name, fs: NaN, geo5: st.geo5, u, uel: u, steps: [], prog: "", seconds: sec, u1: u, sig1, epl1, eps1, ngp };
+      results.push(res); onStage?.(res, si);
+    });
+    for (const p of [pF, pU, pA]) mod._geofem_free(p);
+    return results;
+  }
+
   run(m: GeoModel, stageIdx: number[] = m.stages.map((_, i) => i), onStage?: (r: StageResult, index: number) => void): StageResult[] {
+    if (m.staged) return this.runStaged(m, onStage);
     const mod = this.mod, ndof = this.ndof, MAXS = 12;
     mod.geoLog = this.log;
     const pMat = mod._geofem_alloc(6 * m.MAT.length); mod.HEAPF64.set(m.MAT.flat(), pMat >> 3); mod._geofem_set_mat(this.h, pMat); mod._geofem_free(pMat);
