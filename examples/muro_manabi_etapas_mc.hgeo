@@ -1,0 +1,27 @@
+# Muro de Manabí CONSTRUIDO POR ETAPAS: la misma geometría que el modelo de GeoFEM (vídeo 3) con el relleno en 4 capas.
+# Etapas como GEO5 (tools/muro_manabi_etapas_geofem.py) y Abaqus (muro_pesos.py): terreno → muro y tierra de delante →
+# terreno bajo el talón → 4 capas de 0.65 m. Análisis de TENSIONES por etapas (sin factor de seguridad).
+margenes xmin=0 xmax=30 fondo=-12
+interfaz 0,-2.4 10.00000,-2.4 10.15,0 30,0
+interfaz 0,-3 30,-3
+suelo ARENA_SP    E=25000 nu=0.28 phi=30 c=0 gamma=18.5 modelo=mc
+suelo ARENA_SPSM  E=15500 nu=0.30 phi=29.97 c=0 gamma=17.5 modelo=mc
+suelo HORMIGON    E=21166510 nu=0.2 phi=0 c=0 gamma=23 rigido=1
+asignar HORMIGON en 10.25,-1.2
+asignar ARENA_SP en 20,-1.5
+asignar ARENA_SP en 5,-2.70
+asignar ARENA_SPSM en 15,-8
+linea 9.28,-3 9.30,-2.6 9.98,-2.6 10.00000,-2.4
+linea 10.40,0 10.42,-2.6 12.30,-2.6 12.32,-3
+linea 12.30,-2.6 30,-2.6
+linea 10.415,-1.95 30,-1.95
+linea 10.41,-1.3 30,-1.3
+linea 10.405,-0.65 30,-0.65
+malla 0.5
+etapa terreno inactiva=20,-0.3;20,-1;20,-1.6;20,-2.3;11.2,-2.8;5,-2.7;20,-2.8
+etapa muro activa=11.2,-2.8;5,-2.7
+etapa bajo-talon activa=20,-2.8
+etapa capa1 activa=20,-2.3
+etapa capa2 activa=20,-1.6
+etapa capa3 activa=20,-1
+etapa capa4 activa=20,-0.3

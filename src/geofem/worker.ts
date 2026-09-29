@@ -11,7 +11,7 @@ export type WorkerOut =
   | { type: "dyndone"; result: DynOut }
   | { type: "log"; line: string }
   | { type: "engine"; engine: "wasm" | "ts" }
-  | { type: "stage"; index: number; result: { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; prog: string; seconds: number } }
+  | { type: "stage"; index: number; result: { name: string; fs: number; alcanzada?: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; prog: string; seconds: number } }
   | { type: "done"; seconds: number }
   | { type: "error"; message: string };
 

@@ -359,7 +359,8 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     name: "hgeo", X, Y, ELE, EMAT, FIXED, Fg: new Array(ndof).fill(0), Fs: new Array(ndof).fill(0), Fa: new Array(ndof).fill(0),
     MAT: def.soils.map((s) => [s.E, s.nu, s.phi, s.c, s.gamma, s.psi]), recomputeGravity: true, loads, stages,
     MATNAMES: def.soils.map((s) => s.name),
-    RIGID: def.soils.map((s) => !!s.rigido),   // muro de hormigón: región elástica, la SRM no le reduce c ni φ
+    RIGID: def.soils.map((s) => !!s.rigido),
+    ...(def.soils.some((s) => s.modelo === "mc") ? { MODEL: def.soils.map((s) => (s.modelo === "mc" ? 1 : 0)) } : {}),   // muro de hormigón: región elástica, la SRM no le reduce c ni φ
     ...(staged ? { staged: true, REGK } : {}),
   };
   // estadísticas

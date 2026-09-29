@@ -16,7 +16,7 @@ import { hgeoToDxf, recetaGeo5 } from "./model/dxf";
 import { actualizarMuro, engancharMuro } from "./wall/panel";
 import { engancharDinamico, actualizarDinamico, dinActivo, dibujar as dibujarDinamico } from "./dyn/panel";
 
-type Stage = { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean; u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number };
+type Stage = { name: string; fs: number; alcanzada?: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean; u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const selModel = $<HTMLSelectElement>("model"), selN = $<HTMLSelectElement>("nstages"), btn = $<HTMLButtonElement>("run");
@@ -384,13 +384,13 @@ function buildStageTabs() {
   if (!model) { etabs.innerHTML = ""; return; }
   const vis = visibleStage();
   etabs.innerHTML = model.stages.map((st, i) => {
-    const r = stages[i]; const fs = r && !r.stale ? (model?.staged ? `<span class="fs">✓</span>` : r.steps.length ? `<span class="fs">FS ${r.fs.toFixed(2)}</span>` : `<span class="fs" style="color:#e5382b">✖</span>`) : "";
+    const r = stages[i]; const fs = r && !r.stale ? (model?.staged ? ((r.alcanzada ?? 1) < 1 ? `<span class="fs" style="color:#e5382b">✖</span>` : `<span class="fs">✓</span>`) : r.steps.length ? `<span class="fs">FS ${r.fs.toFixed(2)}</span>` : `<span class="fs" style="color:#e5382b">✖</span>`) : "";
     return `<button data-st="${i}" class="${i === vis ? "on" : ""}">${i + 1}. ${st.name}${fs}</button>`;
   }).join("");
   etabs.querySelectorAll<HTMLButtonElement>("button").forEach((b) => { b.onclick = () => { selStage.value = b.dataset.st!; selStage.dispatchEvent(new Event("change")); }; });
 }
 function fsTable() {
-  const rows = stages.map((s) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok"${s.steps.length || model?.staged ? "" : ' style="color:#e5382b"'}>${model?.staged ? "tensiones ✓" : s.steps.length ? s.fs.toFixed(4) : "< 1 ✖ falla"}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
+  const rows = stages.map((s) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok"${s.steps.length || model?.staged ? "" : ' style="color:#e5382b"'}>${model?.staged ? ((s.alcanzada ?? 1) < 1 ? `✖ no converge (${(100 * (s.alcanzada ?? 0)).toFixed(0)} % de la carga)` : "tensiones ✓") : s.steps.length ? s.fs.toFixed(4) : "< 1 ✖ falla"}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
   fsEl.innerHTML = `<table><tr><th>etapa</th><th>FS</th><th>GEO5</th><th>t</th></tr>${rows}</table>` + (busy ? `<div style="color:var(--oro);margin-top:4px">calculando…</div>` : "");
 }
 
@@ -420,7 +420,7 @@ function redraw() {
   const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress && !model.staged ? " · estado de tensión SRF=1" : "");
   const rango = plot.draw({
     field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked,
-    title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${model.staged ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · equilibrio` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
+    title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${model.staged ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
     deformScale: parseFloat(inpDef.value) || 0, u, uel: st.uel, active: model.stages[si]?.active,
   });
   draw.setMap(plot.mapping());

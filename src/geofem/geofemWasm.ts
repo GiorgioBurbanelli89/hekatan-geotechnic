@@ -10,11 +10,13 @@ type Mod = {
   _geofem_create: (nn: number, ne: number, X: number, Y: number, ELE: number, EMAT: number, nfixed: number, FIXED: number, nmat: number, MAT: number) => number;
   _geofem_set_mat: (h: number, MAT: number) => void;
   _geofem_set_rigid: (h: number, rigid: number, n: number) => void;
+  _geofem_set_model: (h: number, model: number, n: number) => void;
   _geofem_band: (h: number) => number; _geofem_nfree: (h: number) => number;
   _geofem_gravity: (h: number) => number; _geofem_nsteps: (h: number) => number;
   _geofem_ngp: (h: number) => number; _geofem_state1: (h: number, sig: number, epl: number, eps: number, u1: number) => void;
   _geofem_run_stage: (h: number, F: number, u: number, uel: number, srf: number, stepsU: number, maxSteps: number) => number;
   _geofem_run_staged: (h: number, act: number, F: number, first: number, u: number) => number;
+  _geofem_alcanzada: (h: number) => number;
   _geofem_destroy: (h: number) => void;
   _geofem_alloc: (n: number) => number; _geofem_alloc_i: (n: number) => number; _geofem_free: (p: number) => void;
 };
@@ -53,6 +55,7 @@ export class GeoFemWasm {
     const h = mod._geofem_create(nn, ne, pX, pY, pE, pM, m.FIXED.length, pF, nmat, pMat);
     // materiales RÍGIDOS (muro = «Rigid body» de GEO5: región elástica que la SRM no reduce)
     if (m.RIGID?.some((r) => r)) { const pR = mod._geofem_alloc_i(nmat); mod.HEAP32.set(m.RIGID.map((r) => (r ? 1 : 0)), pR >> 2); mod._geofem_set_rigid(h, pR, nmat); mod._geofem_free(pR); }
+    if (m.MODEL?.some((v) => v)) { const pD = mod._geofem_alloc_i(nmat); mod.HEAP32.set(m.MODEL, pD >> 2); mod._geofem_set_model(h, pD, nmat); mod._geofem_free(pD); }   // Mohr-Coulomb por material
     for (const p of [pX, pY, pE, pM, pF, pMat]) mod._geofem_free(p);
     return new GeoFemWasm(mod, h, m, log);
   }
@@ -82,7 +85,7 @@ export class GeoFemWasm {
       const eps1 = Float64Array.from(mod.HEAPF64.subarray(pE >> 3, (pE >> 3) + ngp * 4));
       for (const p of [pS, pP, pE, pU1]) mod._geofem_free(p);
       this.log(`  ${st.name.padEnd(22)} >>> ${conv ? "equilibrio" : "NO CONVERGE"}  [${sec.toFixed(1)} s]`);
-      const res: StageResult = { name: st.name, fs: NaN, geo5: st.geo5, u, uel: new Float64Array(ndof), steps: [], prog: "", seconds: sec, u1: u, sig1, epl1, eps1, ngp };
+      const res: StageResult = { name: st.name, fs: NaN, alcanzada: mod._geofem_alcanzada(this.h), geo5: st.geo5, u, uel: new Float64Array(ndof), steps: [], prog: "", seconds: sec, u1: u, sig1, epl1, eps1, ngp };
       results.push(res); onStage?.(res, si);
     });
     for (const p of [pF, pU, pA]) mod._geofem_free(p);

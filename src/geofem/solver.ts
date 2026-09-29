@@ -24,6 +24,7 @@ export type GeoModel = {
   recomputeGravity?: boolean;   // true = Fg = gravedad recalculada de MAT[:,4] (sliders de γ)
   loads?: Record<string, number[]>;   // vectores de carga con nombre (del mallador: L1, L2, …)
   MATNAMES?: string[];       // nombres de los suelos (rótulos del visor)
+  MODEL?: number[];          // modelo de suelo por material: 0 = Drucker-Prager (por defecto), 1 = Mohr-Coulomb (Clausen 2007)
   RIGID?: boolean[];         // material RÍGIDO (muro de hormigón = «Rigid body» de GEO5): región elástica, la SRM no lo reduce
   // ATADURAS [gdl esclavo, gdl maestro]: u_esclavo = u_maestro, por ELIMINACIÓN (el esclavo comparte la fila del maestro).
   // Las respetan modes(), dynamic() y la SRM (nrstep/srm: gather/scatter por `map`).
@@ -76,6 +77,7 @@ export type ModesResult = {
 export type StageResult = {
   name: string;
   fs: number;
+  alcanzada?: number;       // construcción por etapas: fracción de la carga nueva que llegó al equilibrio (1 = toda)
   geo5?: number;
   u: Float64Array;          // último peldaño convergido
   uel: Float64Array;        // u ELÁSTICA (la referencia que resta GEO5: u(FS) − u_el)
@@ -136,10 +138,12 @@ export class GeoFem {
   // ningún elemento activo quedan «dormidos» (muelle 1e12). Utot: u desde la etapa 1; EPSacc: ε solo mientras activo.
   private act: Uint8Array; private dormido: Uint8Array;
   private Utot!: Float64Array; private EPSacc!: Float64Array; private Flast!: Float64Array;
+  alcanzada = 1;   // fracción de la carga NUEVA de la etapa que llegó al equilibrio (GEO5: «Attained loading»)
 
   constructor(m: GeoModel, log: Log = () => {}) {
     this.log = log;
     this.X = m.X; this.Y = m.Y; this.ELE = m.ELE; this.EMAT = m.EMAT; this.MAT = m.MAT;
+    this.model = m.MODEL ?? [];
     this.rigid = m.RIGID ?? (m.MATNAMES ?? []).map((n) => /muro|hormig|concret|wall/i.test(n));   // Rigid body: región elástica que la SRM no reduce
     const nn = (this.nn = m.X.length), ne = (this.ne = m.ELE.length), ndof = (this.ndof = 2 * nn);
     const fixed = new Uint8Array(ndof); for (const d of m.FIXED) fixed[d] = 1;
@@ -305,6 +309,47 @@ export class GeoFem {
   private resetState(): void { this.SIG.fill(0); this.hasDep.fill(0); this.EPL.fill(0); }
   private EPL!: Float64Array; private Dinv!: Float64Array[];
   private rigid: boolean[] = [];   // material rígido (muro): la SRM no le reduce c ni φ
+  private model: number[] = [];    // 1 = Mohr-Coulomb en ese material
+  private mcp: [number, number, number][] = [];   // (φ, c, ψ) reducidos por la SRF del peldaño (índice 1..)
+
+  // ---- MOHR-COULOMB: el mismo retorno de Clausen que geofem.cpp (portado de mc_stress.m). Tracción positiva.
+  private static fmc(s: number[], sp: number, cc: number): number { return 0.5 * (s[0] - s[2]) + 0.5 * (s[0] + s[2]) * sp - cc; }
+  private static mcValido(s: number[], sp: number, cc: number, tol: number): boolean { return s[0] >= s[1] - tol && s[1] >= s[2] - tol && GeoFem.fmc(s, sp, cc) <= tol; }
+  private static mcArista(ss: number[], D: number[][], n1: number[], g1: number[], n2: number[], g2: number[], ccos: number): number[] {
+    const Dg1 = [0, 1, 2].map((i) => D[i][0] * g1[0] + D[i][1] * g1[1] + D[i][2] * g1[2]), Dg2 = [0, 1, 2].map((i) => D[i][0] * g2[0] + D[i][1] * g2[1] + D[i][2] * g2[2]);
+    const L11 = n1[0] * Dg1[0] + n1[1] * Dg1[1] + n1[2] * Dg1[2], L22 = n2[0] * Dg2[0] + n2[1] * Dg2[1] + n2[2] * Dg2[2];
+    const L12 = n1[0] * Dg2[0] + n1[1] * Dg2[1] + n1[2] * Dg2[2], L21 = n2[0] * Dg1[0] + n2[1] * Dg1[1] + n2[2] * Dg1[2];
+    const q1 = n1[0] * ss[0] + n1[1] * ss[1] + n1[2] * ss[2] - ccos, q2 = n2[0] * ss[0] + n2[1] * ss[1] + n2[2] * ss[2] - ccos, Om = L11 * L22 - L12 * L21;
+    const d1 = (L22 * q1 - L12 * q2) / Om, d2 = (L11 * q2 - L21 * q1) / Om;
+    return [0, 1, 2].map((i) => ss[i] - d1 * Dg1[i] - d2 * Dg2[i]);
+  }
+  private static mcReturn(st: ArrayLike<number>, De: Float64Array, phi: number, psi: number, c: number, out: Float64Array): boolean {
+    const sxx = st[0], syy = st[1], szz = st[2], sxy = st[3];
+    const cen = (sxx + syy) / 2, R = Math.sqrt(((sxx - syy) / 2) * ((sxx - syy) / 2) + sxy * sxy), t2 = Math.atan2(2 * sxy, sxx - syy);
+    const str = [cen + R, cen - R, szz];
+    const ix = [0, 1, 2]; ix.sort((a, b) => (str[a] > str[b] ? -1 : str[a] < str[b] ? 1 : 0));   // mismo orden que std::sort con «>»
+    const ss = [str[ix[0]], str[ix[1]], str[ix[2]]];
+    const tol = 1e-7 * Math.max(1, Math.max(Math.abs(str[0]), Math.max(Math.abs(str[1]), Math.abs(str[2]))));
+    const sp = Math.sin(phi), sg = Math.sin(psi), ccos = c * Math.cos(phi);
+    for (let i = 0; i < 4; i++) out[i] = st[i];
+    if (GeoFem.fmc(ss, sp, ccos) <= tol) return false;
+    const D = [0, 1, 2].map((i) => [De[i * 4], De[i * 4 + 1], De[i * 4 + 2]]);
+    const n1 = [0.5 * (1 + sp), 0, -0.5 * (1 - sp)], g1 = [0.5 * (1 + sg), 0, -0.5 * (1 - sg)];
+    const Dg1 = [0, 1, 2].map((i) => D[i][0] * g1[0] + D[i][1] * g1[1] + D[i][2] * g1[2]);
+    const den = n1[0] * Dg1[0] + n1[1] * Dg1[1] + n1[2] * Dg1[2], dl = GeoFem.fmc(ss, sp, ccos) / den;
+    let r = [ss[0] - dl * Dg1[0], ss[1] - dl * Dg1[1], ss[2] - dl * Dg1[2]];
+    if (!GeoFem.mcValido(r, sp, ccos, tol)) {
+      r = GeoFem.mcArista(ss, D, n1, g1, [0.5 * (1 + sp), -0.5 * (1 - sp), 0], [0.5 * (1 + sg), -0.5 * (1 - sg), 0], ccos);
+      if (!GeoFem.mcValido(r, sp, ccos, tol)) {
+        r = GeoFem.mcArista(ss, D, n1, g1, [0, 0.5 * (1 + sp), -0.5 * (1 - sp)], [0, 0.5 * (1 + sg), -0.5 * (1 - sg)], ccos);
+        if (!GeoFem.mcValido(r, sp, ccos, tol)) { const a = Math.tan(phi) > 1e-12 ? c / Math.tan(phi) : 0; r = [a, a, a]; }
+      }
+    }
+    const pr = [0, 0, 0]; for (let k = 0; k < 3; k++) pr[ix[k]] = r[k];
+    const cen2 = (pr[0] + pr[1]) / 2, R2 = (pr[0] - pr[1]) / 2;
+    out[0] = cen2 + R2 * Math.cos(t2); out[1] = cen2 - R2 * Math.cos(t2); out[2] = pr[2]; out[3] = R2 * Math.sin(t2);
+    return true;
+  }
 
   /** Fuerzas internas con σ = retorno(SIG + De·B·du). Si commit: guarda σ y la tangente del retorno. */
   private assembleInc(du: Float64Array, ab: [number, number][], commit: boolean, Fi: Float64Array): void {
@@ -321,7 +366,23 @@ export class GeoFem {
         for (let c = 0; c < 12; c++) { e0 += B[c] * ue[c]; e1 += B[12 + c] * ue[c]; e2 += B[24 + c] * ue[c]; }
         deps[0] = e0; deps[1] = e1; deps[2] = 0; deps[3] = e2;
         const sigN = this.SIG.subarray(kk * 4, kk * 4 + 4);
-        const got = this.dpReturn(deps, al, k, De, commit, sigN, sig, Dep);
+        let got: boolean;
+        if (this.model[mm - 1] === 1 && !this.rigid[mm - 1]) {   // MOHR-COULOMB, tangente NUMÉRICA (como geofem.cpp)
+          const q = this.mcp[mm];
+          const ret = (de: ArrayLike<number>, out: Float64Array) => {
+            const tr = new Float64Array(4); for (let i = 0; i < 4; i++) { let v = sigN[i]; for (let j = 0; j < 4; j++) v += De[i * 4 + j] * de[j]; tr[i] = v; }
+            return GeoFem.mcReturn(tr, De, q[0], q[2], q[1], out);
+          };
+          got = ret(deps, sig);
+          if (got && commit) {
+            Dep.set(De);
+            for (const j of [0, 1, 3]) {
+              const dp = Float64Array.from(deps), h = 1e-8 * Math.max(1, Math.abs(deps[j]) * 1e4); dp[j] += h;
+              const sp4 = new Float64Array(4); ret(dp, sp4);
+              for (let i = 0; i < 4; i++) Dep[i * 4 + j] = (sp4[i] - sig[i]) / h;
+            }
+          }
+        } else got = this.dpReturn(deps, al, k, De, commit, sigN, sig, Dep);
         const w = this.dJw[kk];
         const t0 = sig[0] * w, t1 = sig[1] * w, t3 = sig[3] * w;
         for (let c = 0; c < 12; c++) Fi[this.edof[e * 12 + c]] += B[c] * t0 + B[12 + c] * t1 + B[24 + c] * t3;
@@ -347,6 +408,7 @@ export class GeoFem {
       if (this.rigid[mm]) { ab[mm + 1] = [0, 1e30]; continue; }
       const phi = Math.atan(Math.tan(this.MAT[mm][2] * Math.PI / 180) / SRF), c = this.MAT[mm][3] / SRF;
       ab[mm + 1] = this.dpAb(phi, c);
+      this.mcp[mm + 1] = [phi, c, Math.min(this.MAT[mm][5] * Math.PI / 180, phi)];   // la dilatancia no pasa de la fricción reducida
     }
     const ndof = this.ndof, nf = this.nfree, free = this.free;
     const u = new Float64Array(ndof), du = new Float64Array(ndof), Fi = new Float64Array(ndof), F1 = new Float64Array(ndof);
@@ -395,7 +457,7 @@ export class GeoFem {
   /** Una etapa de CONSTRUCCIÓN (tensiones, SRF = 1), la misma que runStaged de geofem.cpp: activa `a`, carga = peso
    *  de los activos + Fextra, Newton desde el estado anterior; si no cierra, la carga nueva entra en 2, 4, 8, 16
    *  incrementos. En la PRIMERA etapa el estado se pone a cero y u también al acabar (GEO5); la ε NO (medido). */
-  stagedStep(a: ArrayLike<number>, Fextra: ArrayLike<number>, first: boolean): { conv: boolean; u: Float64Array; sig1: Float64Array; epl1: Float64Array; eps1: Float64Array } {
+  stagedStep(a: ArrayLike<number>, Fextra: ArrayLike<number>, first: boolean): { conv: boolean; alcanzada: number; u: Float64Array; sig1: Float64Array; epl1: Float64Array; eps1: Float64Array } {
     const ne = this.ne, ndof = this.ndof;
     for (let e = 0; e < ne; e++) this.act[e] = a[e] ? 1 : 0;
     this.dormido.fill(1);
@@ -410,19 +472,26 @@ export class GeoFem {
     if (first) { this.resetState(); this.Utot = new Float64Array(ndof); this.EPSacc = new Float64Array(ne * NG * 4); this.Flast = new Float64Array(ndof); }
     const sig0 = Float64Array.from(this.SIG), epl0 = Float64Array.from(this.EPL), dep0 = Float64Array.from(this.DEP), has0 = Uint8Array.from(this.hasDep);
     const u = new Float64Array(ndof), Fk = new Float64Array(ndof); let it = 0, c = false, nsub = 1;
+    this.alcanzada = 1;
     for (; nsub <= 16; nsub *= 2) {
       if (nsub > 1) { this.SIG.set(sig0); this.EPL.set(epl0); this.DEP.set(dep0); this.hasDep.set(has0); u.fill(0); }
       c = true;
       for (let j = 1; j <= nsub && c; j++) {
+        const sj = Float64Array.from(this.SIG), ej = Float64Array.from(this.EPL), dj = Float64Array.from(this.DEP), hj = Uint8Array.from(this.hasDep);
         for (let d = 0; d < ndof; d++) Fk[d] = this.Flast[d] + (F[d] - this.Flast[d]) * j / nsub;
         const [cj, du1, itj] = this.nrstep(1.0, Fk, j, undefined, true); c = cj; it += itj;
-        for (let d = 0; d < ndof; d++) u[d] += du1[d];
+        if (c) { let m = 0; for (let d = 0; d < ndof; d++) m = Math.max(m, Math.abs(du1[d])); if (!(m < 1.0)) c = false; }   // > 1 m = mecanismo, no equilibrio (como geofem.cpp)
+        if (c) for (let d = 0; d < ndof; d++) u[d] += du1[d];
+        else if (nsub === 16) {   // último intento: se queda en el incremento j−1
+          this.SIG.set(sj); this.EPL.set(ej); this.DEP.set(dj); this.hasDep.set(hj); this.alcanzada = (j - 1) / nsub;
+          for (let d = 0; d < ndof; d++) Fk[d] = this.Flast[d] + (F[d] - this.Flast[d]) * this.alcanzada;
+        }
       }
       if (c) break;
-      this.log(`    etapa: con ${nsub} incremento(s) no cierra; se reparte la carga en ${nsub * 2}`);
+      if (nsub < 16) this.log(`    etapa: con ${nsub} incremento(s) no cierra; se reparte la carga en ${nsub * 2}`);
     }
     if (nsub > 16) nsub = 16;
-    this.Flast = F;
+    this.Flast = c ? F : Float64Array.from(Fk);
     if (!first) for (let d = 0; d < ndof; d++) this.Utot[d] += u[d];
     for (let e = 0; e < ne; e++) if (this.act[e]) for (let q = 0; q < NG; q++) {   // ε de SUS etapas activas (la 1 también)
       const kk = e * NG + q, B = this.Bc.subarray(kk * 36, kk * 36 + 36); let e0 = 0, e1 = 0, e2 = 0;
@@ -431,8 +500,8 @@ export class GeoFem {
     }
     let na = 0; for (let e = 0; e < ne; e++) na += this.act[e];
     let sF = 0; for (let i = 0; i < this.nn; i++) sF += F[2 * i + 1];
-    this.log(`    ETAPA ${first ? "inicial" : ""}: ${na} de ${ne} elementos activos, carga vertical ${sF.toFixed(3)} kN, ${c ? "CONVERGE" : "NO CONVERGE"} en ${it} iteraciones (${nsub} incremento(s))`);
-    return { conv: c, u: Float64Array.from(this.Utot), sig1: Float64Array.from(this.SIG), epl1: Float64Array.from(this.EPL), eps1: Float64Array.from(this.EPSacc) };
+    this.log(`    ETAPA ${first ? "inicial" : ""}: ${na} de ${ne} elementos activos, carga vertical ${sF.toFixed(3)} kN, ${c ? "CONVERGE" : "NO CONVERGE"} en ${it} iteraciones (${nsub} incremento(s))${c ? "" : ` · carga alcanzada ${(100 * this.alcanzada).toFixed(1)} %`}`);
+    return { conv: c, alcanzada: this.alcanzada, u: Float64Array.from(this.Utot), sig1: Float64Array.from(this.SIG), epl1: Float64Array.from(this.EPL), eps1: Float64Array.from(this.EPSacc) };
   }
 
   /** Construcción por etapas: TODAS en orden (fs = NaN: análisis de tensiones). Misma salida que GeoFemWasm.runStaged. */
@@ -447,7 +516,7 @@ export class GeoFem {
       const r = this.stagedStep(st.active ?? new Array(ne).fill(1), F, si === 0);
       const sec = (performance.now() - t0) / 1000;
       this.log(`  ${st.name.padEnd(22)} >>> ${r.conv ? "equilibrio" : "NO CONVERGE"}  [${sec.toFixed(1)} s]`);
-      const res: StageResult = { name: st.name, fs: NaN, geo5: st.geo5, u: r.u, uel: new Float64Array(ndof), steps: [], prog: "", seconds: sec, u1: r.u, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: ne * NG };
+      const res: StageResult = { name: st.name, fs: NaN, alcanzada: r.alcanzada, geo5: st.geo5, u: r.u, uel: new Float64Array(ndof), steps: [], prog: "", seconds: sec, u1: r.u, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: ne * NG };
       onStage?.(res, si); return res;
     });
   }
@@ -707,6 +776,7 @@ export class GeoFem {
     if (m.staged) return this.runStaged(m, onStage);
     const t0 = performance.now();
     this.MAT = m.MAT;
+    this.model = m.MODEL ?? [];
     this.rigid = m.RIGID ?? (m.MATNAMES ?? []).map((n) => /muro|hormig|concret|wall/i.test(n));
     const results: StageResult[] = [];
     // Con sliders de γ la gravedad de la fixture ya no vale: se usa la recalculada (N·ρ·detJ·w por

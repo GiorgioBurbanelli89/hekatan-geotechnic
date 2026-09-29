@@ -89,6 +89,8 @@ static double vdot(const double* a, const double* b, int n) { double s = 0; for 
 struct GeoFem {
   int nn, ne, ndof, nfree, band;
   vector<double> X, Y; vector<int> ELE, EMAT; vector<double> MAT; int nmat;
+  vector<int> model;        // modelo de suelo por material: 0 = Drucker-Prager (GEO5, por defecto), 1 = Mohr-Coulomb (Clausen 2007)
+  vector<std::array<double, 3>> mcp;   // (φ, c, ψ) reducidos por la SRF del peldaño, por material (índice 1..)
   vector<int> rigid;        // 1 = material RÍGIDO (muro de hormigón = «Rigid body» de GEO5): región elástica, la SRM no lo reduce
   vector<int> free_, map_;
   vector<double> D4;        // (nmat+1)*16
@@ -103,6 +105,7 @@ struct GeoFem {
   // fuerza interna, ni peso. Los gdl de nudos que no tocan ningún elemento activo quedan «dormidos»: se les pone un
   // muelle muy rígido (du = 0) para que la matriz no sea singular. Utot = desplazamiento acumulado desde la etapa 1.
   vector<unsigned char> act, dormido; vector<double> Utot, EPSacc;
+  double alcanzada = 1;   // fracción de la carga NUEVA de la etapa que llegó al equilibrio (GEO5: «Attained loading»)
   vector<double> Flast;   // carga total en equilibrio al acabar la etapa anterior (para aplicar la nueva por incrementos)   // EPSacc: ε acumulada por punto de Gauss, SOLO mientras el elemento está activo
 
   void rcm(vector<int>& perm) {
@@ -281,6 +284,57 @@ struct GeoFem {
     return false;
   }
 
+  // ---- MOHR-COULOMB: retorno de Clausen, Damkilde y Andersen (2007) en espacio de tensiones PRINCIPALES, el método que usa
+  //      GeoFEM (FRGeoFEM.exe, MC\mohrcoulomb_rp.cpp, regiones F1 / F1F2 / F1F3 / ápice; memoria reference_geofem_mc_tangent).
+  //      Portado línea a línea de ingenieria-inversa/hekatan-geo5-bridge/Demo04_replica/mc_stress.m (validado contra Abaqus en
+  //      el talud Demo04). Tracción positiva. Deformación plana: principales en el plano (σa, σb) y σzz.
+  static double fmc(const double* s3, double sp, double cc) {   // s3 ordenado de mayor a menor
+    return 0.5 * (s3[0] - s3[2]) + 0.5 * (s3[0] + s3[2]) * sp - cc;
+  }
+  static bool mcValido(const double* s3, double sp, double cc, double tol) {
+    return s3[0] >= s3[1] - tol && s3[1] >= s3[2] - tol && fmc(s3, sp, cc) <= tol;
+  }
+  static void mcArista(const double* ss, const double D[3][3], const double* n1, const double* g1, const double* n2, const double* g2, double ccos, double* out) {
+    double Dg1[3], Dg2[3];
+    for (int i = 0; i < 3; i++) { Dg1[i] = D[i][0] * g1[0] + D[i][1] * g1[1] + D[i][2] * g1[2]; Dg2[i] = D[i][0] * g2[0] + D[i][1] * g2[1] + D[i][2] * g2[2]; }
+    double L11 = n1[0] * Dg1[0] + n1[1] * Dg1[1] + n1[2] * Dg1[2], L22 = n2[0] * Dg2[0] + n2[1] * Dg2[1] + n2[2] * Dg2[2];
+    double L12 = n1[0] * Dg2[0] + n1[1] * Dg2[1] + n1[2] * Dg2[2], L21 = n2[0] * Dg1[0] + n2[1] * Dg1[1] + n2[2] * Dg1[2];
+    double q1 = n1[0] * ss[0] + n1[1] * ss[1] + n1[2] * ss[2] - ccos, q2 = n2[0] * ss[0] + n2[1] * ss[1] + n2[2] * ss[2] - ccos, Om = L11 * L22 - L12 * L21;
+    double d1 = (L22 * q1 - L12 * q2) / Om, d2 = (L11 * q2 - L21 * q1) / Om;
+    for (int i = 0; i < 3; i++) out[i] = ss[i] - d1 * Dg1[i] - d2 * Dg2[i];
+  }
+  /** σ de prueba (4: xx yy zz xy) → σ devuelta. true si hubo plastificación. */
+  static bool mcReturn(const double* st, const double* De, double phi, double psi, double c, double* out) {
+    double sxx = st[0], syy = st[1], szz = st[2], sxy = st[3];
+    double cen = (sxx + syy) / 2, R = std::sqrt(((sxx - syy) / 2) * ((sxx - syy) / 2) + sxy * sxy), t2 = std::atan2(2 * sxy, sxx - syy);
+    double str[3] = {cen + R, cen - R, szz};
+    int ix[3] = {0, 1, 2};
+    std::sort(ix, ix + 3, [&](int a, int b) { return str[a] > str[b]; });
+    double ss[3] = {str[ix[0]], str[ix[1]], str[ix[2]]};
+    double tol = 1e-7 * std::max(1.0, std::max(std::fabs(str[0]), std::max(std::fabs(str[1]), std::fabs(str[2]))));
+    double sp = std::sin(phi), sg = std::sin(psi), ccos = c * std::cos(phi);
+    for (int i = 0; i < 4; i++) out[i] = st[i];
+    if (fmc(ss, sp, ccos) <= tol) return false;
+    double D[3][3]; for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) D[i][j] = De[i * 4 + j];
+    double n1[3] = {0.5 * (1 + sp), 0, -0.5 * (1 - sp)}, g1[3] = {0.5 * (1 + sg), 0, -0.5 * (1 - sg)};
+    double Dg1[3]; for (int i = 0; i < 3; i++) Dg1[i] = D[i][0] * g1[0] + D[i][1] * g1[1] + D[i][2] * g1[2];
+    double den = n1[0] * Dg1[0] + n1[1] * Dg1[1] + n1[2] * Dg1[2], dl = fmc(ss, sp, ccos) / den;
+    double r[3] = {ss[0] - dl * Dg1[0], ss[1] - dl * Dg1[1], ss[2] - dl * Dg1[2]};
+    if (!mcValido(r, sp, ccos, tol)) {
+      double n2c[3] = {0.5 * (1 + sp), -0.5 * (1 - sp), 0}, g2c[3] = {0.5 * (1 + sg), -0.5 * (1 - sg), 0};
+      mcArista(ss, D, n1, g1, n2c, g2c, ccos, r);
+      if (!mcValido(r, sp, ccos, tol)) {
+        double n2e[3] = {0, 0.5 * (1 + sp), -0.5 * (1 - sp)}, g2e[3] = {0, 0.5 * (1 + sg), -0.5 * (1 - sg)};
+        mcArista(ss, D, n1, g1, n2e, g2e, ccos, r);
+        if (!mcValido(r, sp, ccos, tol)) { double a = std::tan(phi) > 1e-12 ? c / std::tan(phi) : 0; r[0] = r[1] = r[2] = a; }   // ápice
+      }
+    }
+    double pr[3]; for (int k = 0; k < 3; k++) pr[ix[k]] = r[k];                                  // se deshace el orden
+    double cen2 = (pr[0] + pr[1]) / 2, R2 = (pr[0] - pr[1]) / 2;
+    out[0] = cen2 + R2 * std::cos(t2); out[1] = cen2 - R2 * std::cos(t2); out[2] = pr[2]; out[3] = R2 * std::sin(t2);
+    return true;
+  }
+
   void resetState() { std::fill(SIG.begin(), SIG.end(), 0.0); std::fill(hasDep.begin(), hasDep.end(), 0); std::fill(EPL.begin(), EPL.end(), 0.0); }
 
   void assembleInc(const double* du, const std::vector<std::array<double, 2>>& ab, bool commit, double* Fi) {
@@ -297,7 +351,23 @@ struct GeoFem {
         for (int c = 0; c < 12; c++) { e0 += B[c] * ue[c]; e1 += B[12 + c] * ue[c]; e2 += B[24 + c] * ue[c]; }
         deps[0] = e0; deps[1] = e1; deps[2] = 0; deps[3] = e2;
         double* sigN = &SIG[kk * 4];
-        bool got = dpReturn(deps, al, k, De, commit, sigN, sig, Dep);
+        bool got;
+        if (mm - 1 < (int)model.size() && model[mm - 1] == 1 && !(mm - 1 < (int)rigid.size() && rigid[mm - 1])) {
+          const auto& q = mcp[mm];
+          auto ret = [&](const double* de, double* out) {
+            double tr[4]; for (int i = 0; i < 4; i++) { double v = sigN[i]; for (int j = 0; j < 4; j++) v += De[i * 4 + j] * de[j]; tr[i] = v; }
+            return mcReturn(tr, De, q[0], q[2], q[1], out);
+          };
+          got = ret(deps, sig);
+          if (got && commit) {
+            for (int i = 0; i < 16; i++) Dep[i] = De[i];
+            for (int j : {0, 1, 3}) {
+              double dp[4] = {deps[0], deps[1], deps[2], deps[3]}, h = 1e-8 * std::max(1.0, std::fabs(deps[j]) * 1e4); dp[j] += h;
+              double sp4[4]; ret(dp, sp4);
+              for (int i = 0; i < 4; i++) Dep[i * 4 + j] = (sp4[i] - sig[i]) / h;
+            }
+          }
+        } else got = dpReturn(deps, al, k, De, commit, sigN, sig, Dep);
         double w = dJw[kk];
         double t0 = sig[0] * w, t1 = sig[1] * w, t3 = sig[3] * w;
         for (int c = 0; c < 12; c++) Fi[edof[e * 12 + c]] += B[c] * t0 + B[12 + c] * t1 + B[24 + c] * t3;
@@ -322,6 +392,9 @@ struct GeoFem {
       if (mm < (int)rigid.size() && rigid[mm]) { ab[mm + 1][0] = 0.0; ab[mm + 1][1] = 1e30; continue; }
       double phi = std::atan(std::tan(MAT[mm * 6 + 2] * 3.141592653589793 / 180) / SRF), c = MAT[mm * 6 + 3] / SRF;
       dpAb(phi, c, ab[mm + 1][0], ab[mm + 1][1]);
+      double psi = std::min(MAT[mm * 6 + 5] * 3.141592653589793 / 180, phi);   // la dilatancia no puede pasar a la fricción reducida
+      if ((int)mcp.size() < nmat + 1) mcp.resize(nmat + 1);
+      mcp[mm + 1] = {phi, c, psi};
     }
     int nf = nfree; const int* fr = free_.data();
     u.assign(ndof, 0.0);
@@ -388,19 +461,28 @@ struct GeoFem {
     // 2, 4, 8, 16 incrementos (como GEO5, que la aplica por pasos hasta «Attained loading = 100 %»)
     const vector<double> sig0 = SIG, epl0 = EPL, dep0 = DEP; const vector<unsigned char> has0 = hasDep;
     vector<double> u(ndof, 0.0), du1, Fk(ndof); int it = 0; bool c = false; int nsub = 1;
+    alcanzada = 1;
     for (; nsub <= 16; nsub *= 2) {
       if (nsub > 1) { SIG = sig0; EPL = epl0; DEP = dep0; hasDep = has0; std::fill(u.begin(), u.end(), 0.0); }
       c = true;
       for (int j = 1; j <= nsub && c; j++) {
+        const vector<double> sj = SIG, ej = EPL, dj = DEP; const vector<unsigned char> hj = hasDep;   // estado del último incremento bueno
         for (int d = 0; d < ndof; d++) Fk[d] = Flast[d] + (F[d] - Flast[d]) * j / nsub;
         int itj; c = nrstep(1.0, Fk.data(), j, du1, itj, true); it += itj;
-        for (int d = 0; d < ndof; d++) u[d] += du1[d];
+        // salvaguarda: un incremento que mueve algún nudo más de 1 m es un MECANISMO (el suelo colapsa), no un equilibrio,
+        // aunque las normas relativas de Newton lo den por bueno (muro de Manabí, Mohr-Coulomb, malla de 1 m: 12 m en la capa 4)
+        if (c) { double m = 0; for (int d = 0; d < ndof; d++) m = std::max(m, std::fabs(du1[d])); if (!(m < 1.0)) c = false; }
+        if (c) for (int d = 0; d < ndof; d++) u[d] += du1[d];
+        else if (nsub == 16) {   // último intento: se queda en el incremento j−1 (no se acumula un Newton que no cerró)
+          SIG = sj; EPL = ej; DEP = dj; hasDep = hj; alcanzada = (j - 1.0) / nsub;
+          for (int d = 0; d < ndof; d++) Fk[d] = Flast[d] + (F[d] - Flast[d]) * alcanzada;
+        }
       }
       if (c) break;
-      LOG(fmt("    etapa: con %d incremento(s) no cierra; se reparte la carga en %d", nsub, nsub * 2));
+      if (nsub < 16) LOG(fmt("    etapa: con %d incremento(s) no cierra; se reparte la carga en %d", nsub, nsub * 2));
     }
     if (nsub > 16) nsub = 16;
-    Flast = F;
+    Flast = c ? F : Fk;
     {
       if (!first) for (int d = 0; d < ndof; d++) Utot[d] += u[d];
       // GEO5 (medido en GeoFEM, 29-sep-2026): tras la etapa 1 pone a cero los DESPLAZAMIENTOS pero NO las deformaciones
@@ -416,7 +498,7 @@ struct GeoFem {
     SIG1 = SIG; EPL1 = EPL; U1 = Utot; EPS1 = EPSacc;
     int na = 0; for (int e = 0; e < ne; e++) na += act[e];
     double sF = 0; for (int i = 0; i < nn; i++) sF += F[2 * i + 1];
-    LOG(fmt("    ETAPA %s: %d de %d elementos activos, carga vertical %.3f kN, %s en %d iteraciones (%d incremento(s))", first ? "inicial" : "", na, ne, sF, c ? "CONVERGE" : "NO CONVERGE", it, nsub));
+    LOG(fmt("    ETAPA %s: %d de %d elementos activos, carga vertical %.3f kN, %s en %d iteraciones (%d incremento(s))%s", first ? "inicial" : "", na, ne, sF, c ? "CONVERGE" : "NO CONVERGE", it, nsub, c ? "" : fmt(" · carga alcanzada %.1f %%", 100 * alcanzada).c_str()));
     std::memcpy(outU, Utot.data(), sizeof(double) * ndof);
     return c;
   }
@@ -479,6 +561,7 @@ int geofem_create(int nn, int ne, const double* X, const double* Y, const int* E
 }
 // materiales RÍGIDOS (muros): 1 por material, en el mismo orden que MAT. Se llama justo tras geofem_create.
 EMSCRIPTEN_KEEPALIVE void geofem_set_rigid(int h, const int* rigid, int n) { GeoFem* g = handles[h]; g->rigid.assign(rigid, rigid + n); }
+EMSCRIPTEN_KEEPALIVE void geofem_set_model(int h, const int* m, int n) { GeoFem* g = handles[h]; g->model.assign(m, m + n); }
 EMSCRIPTEN_KEEPALIVE void geofem_set_mat(int h, const double* MAT) { GeoFem* g = handles[h]; std::memcpy(g->MAT.data(), MAT, sizeof(double) * 6 * g->nmat); }
 EMSCRIPTEN_KEEPALIVE int geofem_band(int h) { return handles[h]->band; }
 EMSCRIPTEN_KEEPALIVE int geofem_nfree(int h) { return handles[h]->nfree; }
@@ -496,6 +579,7 @@ double geofem_run_stage(int h, const double* F, double* outU, double* outUel, do
   return handles[h]->runStage(F, outU, outUel, outSrf, outStepsU, maxSteps);
 }
 EMSCRIPTEN_KEEPALIVE int geofem_run_staged(int h, const int* act, const double* F, int first, double* outU) { return handles[h]->runStaged(act, F, first != 0, outU) ? 1 : 0; }
+EMSCRIPTEN_KEEPALIVE double geofem_alcanzada(int h) { return handles[h]->alcanzada; }
 EMSCRIPTEN_KEEPALIVE void geofem_destroy(int h) { delete handles[h]; handles[h] = nullptr; }
 EMSCRIPTEN_KEEPALIVE double* geofem_alloc(int n) { return (double*)malloc(sizeof(double) * n); }
 EMSCRIPTEN_KEEPALIVE int* geofem_alloc_i(int n) { return (int*)malloc(sizeof(int) * n); }
