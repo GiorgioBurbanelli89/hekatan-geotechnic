@@ -96,11 +96,14 @@ export function gpToNodal(ELE: number[][], nn: number, ngpPerEl: number, val: (k
 /** Campo nodal de tensión/deformación (SRF=1) con el convenio de GEO5: compresión POSITIVA; sin agua u_tot = 0 y σ_tot = σ_eff. */
 export function stressField(kind: FieldKind, ELE: number[][], nn: number, ngp: number, sig: Float64Array, eps: Float64Array, epl: Float64Array): Float64Array {
   const per = Math.round(ngp / ELE.length);
-  const dev = (a: Float64Array, kk: number, strain: boolean) => {   // invariante desviador: J = √J2 (σ) ; E_d = √(2/3 e:e) (ε)
+  // invariantes de GEO5 FEM (manual teórico de GEO5, §2.3.1, págs. 24-25): J = √(½σᵀPσ) = √J2 (ec. 2.8) y
+  // E_d = √(2εᵀQPQε) = √(2 e:e) = √(4·J2(e)) (ec. 2.12). Antes E_d = √(4/3·J2): salía √3 veces menor que GEO5
+  // (muro de Manabí por etapas, 29-sep-2026: 0.69 % frente a 1.18 %, cociente 1.70 constante en todas las etapas)
+  const dev = (a: Float64Array, kk: number, strain: boolean) => {
     const xx = a[kk * 4], yy = a[kk * 4 + 1], zz = a[kk * 4 + 2], xy = a[kk * 4 + 3], m = (xx + yy + zz) / 3;
     const ex = xx - m, ey = yy - m, ez = zz - m, g = strain ? xy / 2 : xy;   // ε_xy = γ_xy/2
     const J2 = 0.5 * (ex * ex + ey * ey + ez * ez) + g * g;
-    return strain ? Math.sqrt((4 / 3) * J2) : Math.sqrt(J2);
+    return strain ? Math.sqrt(4 * J2) : Math.sqrt(J2);
   };
   switch (kind) {
     case "sx": case "sxt": return gpToNodal(ELE, nn, per, (kk) => -sig[kk * 4]);

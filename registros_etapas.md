@@ -17,8 +17,8 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
 | τxz [kPa] | −1.48 .. 11.64 | −13.59 .. 1.31 | signo contrario; 11.6 frente a 13.6 |
 | J [kPa] | 0.00 .. 70.24 | 0.37 .. 66.53 | ✅ 5 % |
 | u_tot [kPa] | 0 .. 0 | 0 .. 0 | ✅ sin agua |
-| E_d [%] | 0.00 .. 1.18 | 0.00 .. 0.69 | ⚠️ cociente 1.70 CONSTANTE (etapa 1: 0.87 / 0.512) → definición distinta, no mecánica |
-| E_d,pl [%] | 0.00 .. 0.38 | 0.00 .. 0.25 | Mohr-Coulomb (GEO5) frente a Drucker-Prager (Geotechnic) |
+| E_d [%] | 0.00 .. 1.18 | 0.01 .. 1.20 | ✅ 1.7 % (tras corregir la fórmula: ver abajo) |
+| E_d,pl [%] | 0.00 .. 0.38 | 0.00 .. 0.52 | Mohr-Coulomb (GEO5) frente a Drucker-Prager (Geotechnic) |
 
 ## Por etapa: coronación del muro y σz bajo la zapata (x = 9.8 … 11.8, z = −3.10)
 | etapa | d_x GEO5 / GT [mm] | d_z GEO5 / GT [mm] | σz: diferencia de GT |
@@ -37,6 +37,8 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
   53.2 px desde [1] = 707 (no 62, como suponía `stage_tab`). En Windows `glob` no distingue mayúsculas (cogió capturas viejas).
 - Motor: la ε de un elemento se acumula SOLO mientras está activo (con ε = B·Utot salía E_d 6.8 %).
 ## Pendiente
-- ⏳ E_d: buscar la definición de GEO5 (ayuda o binario) antes de tocar la fórmula.
+- ✅ E_d: manual teórico de GEO5 FEM (data.fine.cz/handbooks-chapter-pdf/geo5_fem_theoretical_guide.pdf), §2.3.1,
+  ec. 2.12, pág. 25: E_d = √(2εᵀQPQε) = √(4·J2(e)). El visor usaba √(4/3·J2) (√3 veces menor). Corregido en `geo5scale.ts`.
+- ✅ Etapa 6: la carga nueva entra por incrementos (2, 4, 8, 16) si Newton no cierra, como GEO5. Converge con 2.
 - ⏳ Asiento de la coronación: Geotechnic +13 a +25 % (Drucker-Prager frente a Mohr-Coulomb; causa no demostrada).
-- ⏳ La etapa 6 de Geotechnic no cierra la tolerancia en 10 iteraciones. ⏳ Construcción por etapas en el motor TS.
+- ⏳ Construcción por etapas en el motor TS.

@@ -102,7 +102,8 @@ struct GeoFem {
   // CONSTRUCCIÓN POR ETAPAS (Activity de GEO5): elemento activo o no. Un elemento inactivo no aporta rigidez, ni
   // fuerza interna, ni peso. Los gdl de nudos que no tocan ningún elemento activo quedan «dormidos»: se les pone un
   // muelle muy rígido (du = 0) para que la matriz no sea singular. Utot = desplazamiento acumulado desde la etapa 1.
-  vector<unsigned char> act, dormido; vector<double> Utot, EPSacc;   // EPSacc: ε acumulada por punto de Gauss, SOLO mientras el elemento está activo
+  vector<unsigned char> act, dormido; vector<double> Utot, EPSacc;
+  vector<double> Flast;   // carga total en equilibrio al acabar la etapa anterior (para aplicar la nueva por incrementos)   // EPSacc: ε acumulada por punto de Gauss, SOLO mientras el elemento está activo
 
   void rcm(vector<int>& perm) {
     vector<vector<int>> adj(nn);
@@ -382,9 +383,24 @@ struct GeoFem {
       }
     }
     for (int d = 0; d < ndof; d++) F[d] += Fextra[d];
-    if (first) { resetState(); std::fill(Utot.begin(), Utot.end(), 0.0); EPSacc.assign((size_t)ne * NG * 4, 0.0); }
-    vector<double> u; int it;
-    bool c = nrstep(1.0, F.data(), 0, u, it, true);
+    if (first) { resetState(); std::fill(Utot.begin(), Utot.end(), 0.0); EPSacc.assign((size_t)ne * NG * 4, 0.0); Flast.assign(ndof, 0.0); }
+    // Newton con toda la carga de la etapa; si no cierra, se vuelve al estado anterior y la carga NUEVA entra en
+    // 2, 4, 8, 16 incrementos (como GEO5, que la aplica por pasos hasta «Attained loading = 100 %»)
+    const vector<double> sig0 = SIG, epl0 = EPL, dep0 = DEP; const vector<unsigned char> has0 = hasDep;
+    vector<double> u(ndof, 0.0), du1, Fk(ndof); int it = 0; bool c = false; int nsub = 1;
+    for (; nsub <= 16; nsub *= 2) {
+      if (nsub > 1) { SIG = sig0; EPL = epl0; DEP = dep0; hasDep = has0; std::fill(u.begin(), u.end(), 0.0); }
+      c = true;
+      for (int j = 1; j <= nsub && c; j++) {
+        for (int d = 0; d < ndof; d++) Fk[d] = Flast[d] + (F[d] - Flast[d]) * j / nsub;
+        int itj; c = nrstep(1.0, Fk.data(), j, du1, itj, true); it += itj;
+        for (int d = 0; d < ndof; d++) u[d] += du1[d];
+      }
+      if (c) break;
+      LOG(fmt("    etapa: con %d incremento(s) no cierra; se reparte la carga en %d", nsub, nsub * 2));
+    }
+    if (nsub > 16) nsub = 16;
+    Flast = F;
     {
       if (!first) for (int d = 0; d < ndof; d++) Utot[d] += u[d];
       // GEO5 (medido en GeoFEM, 29-sep-2026): tras la etapa 1 pone a cero los DESPLAZAMIENTOS pero NO las deformaciones
@@ -400,7 +416,7 @@ struct GeoFem {
     SIG1 = SIG; EPL1 = EPL; U1 = Utot; EPS1 = EPSacc;
     int na = 0; for (int e = 0; e < ne; e++) na += act[e];
     double sF = 0; for (int i = 0; i < nn; i++) sF += F[2 * i + 1];
-    LOG(fmt("    ETAPA %s: %d de %d elementos activos, carga vertical %.3f kN, %s en %d iteraciones", first ? "inicial" : "", na, ne, sF, c ? "CONVERGE" : "NO CONVERGE", it));
+    LOG(fmt("    ETAPA %s: %d de %d elementos activos, carga vertical %.3f kN, %s en %d iteraciones (%d incremento(s))", first ? "inicial" : "", na, ne, sF, c ? "CONVERGE" : "NO CONVERGE", it, nsub));
     std::memcpy(outU, Utot.data(), sizeof(double) * ndof);
     return c;
   }
