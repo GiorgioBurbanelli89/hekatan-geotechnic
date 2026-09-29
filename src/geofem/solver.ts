@@ -26,7 +26,7 @@ export type GeoModel = {
   MATNAMES?: string[];       // nombres de los suelos (rótulos del visor)
   RIGID?: boolean[];         // material RÍGIDO (muro de hormigón = «Rigid body» de GEO5): región elástica, la SRM no lo reduce
   // ATADURAS [gdl esclavo, gdl maestro]: u_esclavo = u_maestro, por ELIMINACIÓN (el esclavo comparte la fila del maestro).
-  // Hoy solo las respetan modes() y dynamic(); la SRM (nrstep/srm) no reparte u al esclavo (pendiente).
+  // Las respetan modes(), dynamic() y la SRM (nrstep/srm: gather/scatter por `map`).
   TIES?: number[][];
   stages: { name: string; loads: string[]; geo5?: number }[];
 };
@@ -38,8 +38,11 @@ export type DynOptions = {
   accel: ((t: number) => number) | number[];   // a_g(t) en m/s² (función, o pares [t0,a0,t1,a1,…] como el `history` de GEO5, interpolación lineal)
   dir?: "x" | "y";           // dirección de la aceleración de la base (por defecto x)
   beta?: number; gamma?: number;   // Newmark (por defecto ¼ y ½, aceleración media); con alpha≠0 y sin β,γ: β=(1−α)²/4, γ=(1−2α)/2 (manual GEO5 17.105-17.106)
-  alpha?: number;            // HHT-α ∈ [−⅓, 0] (0 = Newmark)
-  rayleigh?: [number, number];   // C = a·M + b·K (apagado por defecto)
+  // HHT-α ∈ [−⅓, 0] (0 = Newmark). MISMA convención de signo que GEO5 (FRGeoFEM: α = problem+0x448, entra como (1+α),
+  // part_002.c:934,1318; manual 17.105-17.106) y que Abaqus (*DYNAMIC, ALPHA=−0.05 → β = 0.275625, γ = 0.55, leído del .dat):
+  // M·a₁ + (1+α)(C·v₁ + K·u₁ − F₁) − α(C·v₀ + K·u₀ − F₀) = 0. Validado contra Abaqus con α = −0.05 (tests/dinamico_columna.ts).
+  alpha?: number;
+  rayleigh?: [number, number];   // C = a·M + b·K elástica (apagado por defecto); actúa sobre la velocidad RELATIVA a la base, como Abaqus con GRAV y base fija
   g?: number;                // ρ = γ/g (por defecto 9.80665)
   watch?: number[];          // nudos cuya historia u_x, u_y se guarda
 };
@@ -335,7 +338,7 @@ export class GeoFem {
     let conv = false, it = 0;
     this.resetState();
     this.assembleInc(du, ab, false, Fi);
-    for (let k = 0; k < nf; k++) Rf[k] = Fext[free[k]] - Fi[free[k]];
+    this.gather(Fext, Fi, Rf);                                   // con TIES el esclavo suma en la fila del maestro
     DForce.set(Rf);
     let rPrev = 1e300, ndiv = 0;
     for (it = 1; it <= maxit; it++) {
@@ -344,18 +347,18 @@ export class GeoFem {
       let ok = bandFactor(this.Kt);
       if (ok) { bandSolve(this.Kt, Rf, duf); if (!Number.isFinite(norm(duf))) ok = false; }
       if (!ok) bandSolve(this.Kel, Rf, duf);
-      du.fill(0); for (let k = 0; k < nf; k++) du[free[k]] = duf[k];
+      this.scatter(duf, du);                                     // fijos = 0, esclavo = su maestro
       const s0 = dot(duf, Rf), n0 = norm(Rf);
       let al = 1.0;
       this.assembleInc(du, ab, false, F1);                       // retorno de PRUEBA desde el estado
-      for (let k = 0; k < nf; k++) R1[k] = Fext[free[k]] - F1[free[k]];
+      this.gather(Fext, F1, R1);
       const s1 = dot(duf, R1), n1 = norm(R1), den = s0 - s1;
       if (n0 > 1e-10 && n1 > 1e-10 && Math.abs(den) > 1e-10 && n1 / n0 >= 0.8) al = al * s0 / den;
       if (al < 0.1) al = 0.1; else if (al >= 1.0) al = 1.0;
       for (let k = 0; k < nf; k++) drf[k] = al * duf[k];
       for (let d = 0; d < ndof; d++) { du[d] *= al; u[d] += du[d]; }
       this.assembleInc(du, ab, true, Fi);                        // COMMIT: σ_i y tangente
-      for (let k = 0; k < nf; k++) Rf[k] = Fext[free[k]] - Fi[free[k]];
+      this.gather(Fext, Fi, Rf);
       if (trace) trace.push({ u: Float64Array.from(u) });
       for (let k = 0; k < nf; k++) ADDisp[k] += drf[k];
       const nDD = norm(drf), dA = norm(ADDisp), nDL = norm(Rf), dF = norm(DForce);
@@ -388,9 +391,9 @@ export class GeoFem {
     }
     // u ELÁSTICA = K_el⁻¹ F: la referencia que GEO5 resta (u(FS) − u_el), MEDIDO 2026-09-03
     const rhs = new Float64Array(this.nfree), x = new Float64Array(this.nfree);
-    for (let k = 0; k < this.nfree; k++) rhs[k] = Ftot[this.free[k]];
+    this.gather(Ftot, null, rhs);
     bandSolve(this.Kel, rhs, x);
-    const uel = new Float64Array(this.ndof); for (let k = 0; k < this.nfree; k++) uel[this.free[k]] = x[k];
+    const uel = this.scatter(x);
     this.log(`    SRM rs00 paso=1.0000 SRF=1.0000 ${c0 ? "CONVERGE" : "DIVERGE"} it=${n0}`);
     for (;;) {
       const s = 1 - (1 - RED0) / Math.pow(RELAX, nrelax);
@@ -446,6 +449,13 @@ export class GeoFem {
       }
     }
     return { M, m1x, m1y, massTotal };
+  }
+
+  /** out[k] = Σ_{d: map[d]=k} (F[d] − Fi[d]): residuo en gdl libres (con TIES el esclavo suma en la fila del maestro).
+   *  Sin ataduras es exactamente F[free[k]] − Fi[free[k]] (0 + x = x, bit a bit). */
+  private gather(F: ArrayLike<number>, Fi: ArrayLike<number> | null, out: Float64Array): void {
+    out.fill(0);
+    for (let d = 0; d < this.ndof; d++) { const k = this.map[d]; if (k >= 0) out[k] += Fi ? F[d] - Fi[d] : F[d]; }
   }
 
   /** Reparte un vector de gdl libres a los gdl completos (fijos = 0, esclavo = su maestro). */
@@ -583,6 +593,12 @@ export class GeoFem {
     this.log(`TOTAL ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     return results;
   }
+}
+
+/** Rayleigh C = a·M + b·K con amortiguamiento ξ en ω_a y ω_b (manual GEO5 ec. 17.121-17.126):
+ *  a = 2ξ·ω_a·ω_b/(ω_a+ω_b), b = 2ξ/(ω_a+ω_b). */
+export function rayleighCoef(xi: number, wa: number, wb: number): [number, number] {
+  return [2 * xi * wa * wb / (wa + wb), 2 * xi / (wa + wb)];
 }
 
 /** a_g(t) desde pares [t0,a0,t1,a1,…] (el `history` de GEO5), interpolación lineal; 0 fuera del registro. */

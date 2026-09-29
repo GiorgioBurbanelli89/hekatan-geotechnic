@@ -6,6 +6,22 @@ import sys, os, re, json
 from odbAccess import openOdb
 
 carpeta, salida = sys.argv[1], sys.argv[2]
+if len(sys.argv) > 3:
+    # modo «casos»: solo la historia u_x de la coronación de cada job (Rayleigh, HHT…)
+    #   abaqus python leer_abaqus_columna.py <carpeta> <salida.json> job1 job2 …
+    out = {}
+    for job in sys.argv[3:]:
+        o = openOdb(os.path.join(carpeta, job + '.odb'), readOnly=True)
+        st = o.steps['SISMO']
+        reg = [k for k in st.historyRegions.keys() if k.startswith('Node')][0]
+        hu = st.historyRegions[reg].historyOutputs['U1'].data
+        inp = open(os.path.join(carpeta, job + '.inp')).read()
+        out[job] = {'nudo_abaqus': reg, 't': [p[0] for p in hu], 'ux_corona': [p[1] for p in hu],
+                    'damping': re.findall(r'\*DAMPING[^\r\n]*', inp), 'dynamic': re.findall(r'\*DYNAMIC[^\r\n]*', inp)}
+        o.close()
+        print(job, len(hu), max([p[1] for p in hu], key=abs))
+    json.dump(out, open(salida, 'w'))
+    sys.exit(0)
 odb = openOdb(os.path.join(carpeta, 'columna.odb'), readOnly=True)
 res = {'fuente': 'Abaqus/Standard 2017, CPE6, job columna (Lanczos + *DYNAMIC ALPHA=0 DIRECT dt=0.005)'}
 # frecuencias: historia EIGFREQ (el frame.frequency viene redondeado a 5 cifras, como el .dat)

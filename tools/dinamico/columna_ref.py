@@ -119,8 +119,9 @@ def reduccion(nn, base, izq, der):
     return T, libres, sorted(fijo), esclavo
 
 
-def newmark(K, M, Mr, C=None):
-    """Newmark lineal con los b1…b6 del binario de GEO5 (sin HHT: alpha = 0).
+def newmark(K, M, Mr, C=None, alpha=0.0, BETA=BETA, GAMMA=GAMMA):
+    """Newmark / HHT-α lineal con los b1…b6 del binario de GEO5. HHT con la convención de GEO5 y de Abaqus
+    (α ∈ [−⅓, 0], entra como (1+α)): M·a₁ + (1+α)(C·v₁ + K·u₁ − F₁) − α(C·v₀ + K·u₀ − F₀) = 0.
     Mr = (M·1_x) en gdl reducidos, con la fila COMPLETA (incluye el acoplamiento con los nudos de la base):
     M_ff·ü_rel + K_ff·u_rel = −(M_ff·1_f + M_fc·1_c)·a_g, porque K·1 = 0 (traslación rígida)."""
     c = 0.5                                       # DAT_00613ff8 (leído del .rdata del exe)
@@ -133,14 +134,15 @@ def newmark(K, M, Mr, C=None):
     # comprobación: son el Newmark de libro (Bathe 9.27-9.31)
     assert abs(b3 - (1 / (2 * BETA) - 1)) < 1e-15 and abs(b6 - DT / 2 * (GAMMA / BETA - 2)) < 1e-15
     n = K.shape[0]; C = np.zeros_like(K) if C is None else C
-    Kef = K + b1 * M + b4 * C
+    Kef = b1 * M + (1 + alpha) * (K + b4 * C)
     cf = cho_factor(Kef)
     u = np.zeros(n); v = np.zeros(n); a = np.zeros(n)          # arranca en reposo, a0 = 0 porque a_g(0) = 0
     hist = [u.copy()]
     for s in range(1, NSTEP + 1):
         t = s * DT
-        F = -Mr * acel(t)
-        R = F + M @ (b1 * u + b2 * v + b3 * a) + C @ (b4 * u + b5 * v + b6 * a)
+        F1, F0 = -Mr * acel(t), -Mr * acel(t - DT)
+        R = ((1 + alpha) * F1 - alpha * F0 + alpha * (C @ v + K @ u)
+             + M @ (b1 * u + b2 * v + b3 * a) + (1 + alpha) * (C @ (b4 * u + b5 * v + b6 * a)))
         u1 = cho_solve(cf, R)
         a1 = b1 * (u1 - u) - b2 * v - b3 * a
         v = v + DT * ((1 - GAMMA) * a + GAMMA * a1)
@@ -187,6 +189,23 @@ def generar(abq):
     kc = libres.index(2 * corona)
     ux = hist[:, kc]
     imax = int(np.argmax(np.abs(ux)))
+    # ---- capa siguiente: Rayleigh (xi = 5 % en los modos 1 y 3) y HHT-alpha ----
+    XI = 0.05
+    w1, w3 = 2 * math.pi * f[0], 2 * math.pi * f[2]
+    aR, bR = 2 * XI * w1 * w3 / (w1 + w3), 2 * XI / (w1 + w3)      # manual GEO5 17.121-17.126
+    Cr = aR * Mr + bR * Kr
+    AH = -0.05
+    casos = {}
+    for nom, C, al in (("rayleigh", Cr, 0.0), ("hht", None, AH), ("hht_rayleigh", Cr, AH)):
+        be, ga = ((1 - al) ** 2 / 4, 0.5 - al) if al else (BETA, GAMMA)
+        h, _ = newmark(Kr, Mr, Mr1, C=C, alpha=al, BETA=be, GAMMA=ga)
+        uc = h[:, kc]; im = int(np.argmax(np.abs(uc)))
+        casos[nom] = dict(alpha=al, beta=be, gamma=ga, rayleigh=[aR, bR] if C is not None else [0, 0],
+                          ux_corona=[float(x) for x in uc], ux_max=float(uc[im]), t_max=im * DT)
+        escribir_inp(abq, X, Y, ELE, base, izq, der, corona, nombre=f"columna_{nom}",
+                     amort=(aR, bR) if C is not None else None, alpha=al)
+        print(f"{nom}: alpha={al} beta={be} gamma={ga} ; u_x max = {uc[im]*1e3:.6f} mm en t = {im*DT:.3f} s")
+    print(f"Rayleigh: a = {aR:.10f} 1/s, b = {bR:.10e} s")
     ref = dict(
         caso="columna de suelo a cortante, T6, H=12 m, ancho 1 m", nn=nn, ne=len(ELE), ngdl_red=len(libres),
         rho=RHO, G=G, Vs=Vs, masa_total=masa, rhoA=RHO * H * B,
@@ -196,6 +215,9 @@ def generar(abq):
         t=[s * DT for s in range(NSTEP + 1)], ux_corona=[float(x) for x in ux],
         ux_max=float(ux[imax]), t_max=imax * DT,
         ux_corona_sin_acoplamiento_base=[float(x) for x in hist_ff[:, kc]],
+        casos=casos,
+        # estático elástico con las ataduras: K·u = −M·1_x·(1 m/s²) → u_x de la coronación (para la SRM con TIES)
+        ux_estatico_corona=float(np.linalg.solve(Kr, -Mr1)[kc]),
         # rigidez/masa de un elemento para la comparación capa a capa (elemento 1 y 2, orden de Abaqus)
         Ke1=KE[0].tolist(), Me1=ME[0].tolist(), Ke2=KE[1].tolist(), Me2=ME[1].tolist(),
     )
@@ -218,7 +240,9 @@ def generar(abq):
     print(f"u_x corona max = {ux[imax]*1e3:.6f} mm en t = {imax*DT:.3f} s")
 
 
-def escribir_inp(abq, X, Y, ELE, base, izq, der, corona):
+def escribir_inp(abq, X, Y, ELE, base, izq, der, corona, nombre="columna", amort=None, alpha=0.0):
+    """nombre = columna: modos + matrices de elemento + Newmark. Los demás: solo el paso dinámico,
+    con *DAMPING (Rayleigh del material) si amort = (a, b) y *DYNAMIC ALPHA = alpha (HHT de Abaqus)."""
     os.makedirs(abq, exist_ok=True)
     L = ["*HEADING", "Columna de suelo a cortante, CPE6, misma malla que Hekatan Geotechnic (kN, m, t, s)",
          "*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO, CONTACT=NO", "*NODE"]
@@ -227,6 +251,7 @@ def escribir_inp(abq, X, Y, ELE, base, izq, der, corona):
     L += [f"{e+1}, " + ", ".join(str(n + 1) for n in el) for e, el in enumerate(ELE)]
     L += ["*SOLID SECTION, ELSET=SUELO, MATERIAL=ARENA", "1.0,", "*MATERIAL, NAME=ARENA",
           "*ELASTIC", f"{E:.10g}, {NU:.10g}", "*DENSITY", f"{RHO:.15g},"]
+    if amort: L.append(f"*DAMPING, ALPHA={amort[0]:.15g}, BETA={amort[1]:.15g}")
     def nset(nm, ns):
         out = [f"*NSET, NSET={nm}"]
         for k in range(0, len(ns), 16): out.append(", ".join(str(n + 1) for n in ns[k:k + 16]))
@@ -238,14 +263,15 @@ def escribir_inp(abq, X, Y, ELE, base, izq, der, corona):
     pts = [(s * DT, acel(s * DT)) for s in range(int(round(TP / DT)) + 1)] + [(TFIN, 0.0)]
     L.append("*AMPLITUDE, NAME=PULSO, DEFINITION=TABULAR")
     for k in range(0, len(pts), 4): L.append(", ".join(f"{t:.10g}, {a:.15g}" for t, a in pts[k:k + 4]))
-    L += ["*STEP, NAME=MODOS, PERTURBATION", "*FREQUENCY, EIGENSOLVER=LANCZOS, NORMALIZATION=MASS", "5,",
-          "*ELEMENT MATRIX OUTPUT, ELSET=SUELO, MASS=YES, STIFFNESS=YES, OUTPUT FILE=USER DEFINED, FILE NAME=columna_elem",
-          "*OUTPUT, FIELD, VARIABLE=PRESELECT", "*END STEP",
-          "*STEP, NAME=SISMO, INC=1000", "*DYNAMIC, ALPHA=0.0, DIRECT", f"{DT}, {TFIN}",
+    if nombre == "columna":
+        L += ["*STEP, NAME=MODOS, PERTURBATION", "*FREQUENCY, EIGENSOLVER=LANCZOS, NORMALIZATION=MASS", "5,",
+              "*ELEMENT MATRIX OUTPUT, ELSET=SUELO, MASS=YES, STIFFNESS=YES, OUTPUT FILE=USER DEFINED, FILE NAME=columna_elem",
+              "*OUTPUT, FIELD, VARIABLE=PRESELECT", "*END STEP"]
+    L += ["*STEP, NAME=SISMO, INC=1000", f"*DYNAMIC, ALPHA={alpha}, DIRECT", f"{DT}, {TFIN}",
           "*DLOAD, AMPLITUDE=PULSO", f"SUELO, GRAV, {APICO}, -1., 0., 0.",
           "*OUTPUT, FIELD, FREQUENCY=100", "*NODE OUTPUT", "U,", "*OUTPUT, HISTORY, FREQUENCY=1",
           "*NODE OUTPUT, NSET=CORONA", "U1, U2", "*END STEP"]
-    with open(os.path.join(abq, "columna.inp"), "w", newline="\r\n") as fo: fo.write("\n".join(L) + "\n")
+    with open(os.path.join(abq, nombre + ".inp"), "w", newline="\r\n") as fo: fo.write("\n".join(L) + "\n")
 
 
 def comparar():
@@ -265,6 +291,13 @@ def comparar():
     uf = np.array(P["ux_corona_sin_acoplamiento_base"])
     print(f"   (con carga -M_ff·1 sin el acoplamiento con la base: max|Py-Abq| = {np.abs(uf-ua).max()*1e3:.2e} mm)")
     print(f"   Mef_x3 Py {P['masa_efectiva_x'][2]:.7f}  Abq(odb, float32) {A['masa_efectiva_x_odb'][2]:.7f}  Abq(.dat) {A['masa_efectiva_x'][2]}")
+    fc = os.path.join(DATOS, "columna_abaqus_casos.json")
+    if os.path.exists(fc):
+        AC = json.load(open(fc, encoding="utf-8"))
+        for nom, c in P["casos"].items():
+            ac = np.array(AC["columna_" + nom]["ux_corona"]); pc = np.array(c["ux_corona"]); ic = int(np.argmax(np.abs(ac)))
+            print(f"{nom}: max|Py-Abq| = {np.abs(pc-ac).max()*1e3:.2e} mm ; u_max Py {c['ux_max']*1e3:.4f} (t={c['t_max']:.3f})"
+                  f"  Abq {ac[ic]*1e3:.4f} (t={AC['columna_'+nom]['t'][ic]:.3f})")
     print(f"u_max: Py {P['ux_max']*1e3:.4f} mm (t={P['t_max']:.3f})  Abq {ua[ia]*1e3:.4f} mm (t={A['t'][ia]:.3f})")
 
 
