@@ -50,7 +50,7 @@ export type DynOptions = {
 export type DynResult = {
   t: Float64Array;
   coef: { b1: number; b2: number; b3: number; b4: number; b5: number; b6: number; beta: number; gamma: number; alpha: number };
-  hist: { node: number; ux: Float64Array; uy: Float64Array }[];
+  hist: { node: number; ux: Float64Array; uy: Float64Array; ax: Float64Array; ay: Float64Array }[];   // a RELATIVA a la base (la absoluta suma a_g)
   u: Float64Array;           // u relativo (a la base) al final
   umaxAbs: Float64Array;     // envolvente |u| por gdl
   seconds: number;
@@ -529,11 +529,14 @@ export class GeoFem {
     // a0 = M⁻¹(F0 − C v0 − K u0) = M⁻¹·(−M·1·a_g(0)) → −1·a_g(0) en los gdl de la dirección (0 si a_g(0) = 0)
     const ag0 = ag(0);
     if (ag0 !== 0) { const Mf = bandCreate(n, this.band); Mf.a.set(M.a); bandFactor(Mf); for (let k = 0; k < n; k++) w1[k] = -r[k] * ag0; bandSolve(Mf, w1, a); }
-    const watch = (o.watch ?? []).map((node) => ({ node, ux: new Float64Array(nst + 1), uy: new Float64Array(nst + 1) }));
+    const watch = (o.watch ?? []).map((node) => ({ node, ux: new Float64Array(nst + 1), uy: new Float64Array(nst + 1), ax: new Float64Array(nst + 1), ay: new Float64Array(nst + 1) }));
     const tt = new Float64Array(nst + 1), umaxAbs = new Float64Array(this.ndof);
     const rec = (s: number) => {
       tt[s] = s * dt;
-      for (const h of watch) { const kx = this.map[2 * h.node], ky = this.map[2 * h.node + 1]; h.ux[s] = kx >= 0 ? u[kx] : 0; h.uy[s] = ky >= 0 ? u[ky] : 0; }
+      for (const h of watch) {
+        const kx = this.map[2 * h.node], ky = this.map[2 * h.node + 1];
+        h.ux[s] = kx >= 0 ? u[kx] : 0; h.uy[s] = ky >= 0 ? u[ky] : 0; h.ax[s] = kx >= 0 ? a[kx] : 0; h.ay[s] = ky >= 0 ? a[ky] : 0;
+      }
       for (let d = 0; d < this.ndof; d++) { const k = this.map[d]; if (k >= 0 && Math.abs(u[k]) > umaxAbs[d]) umaxAbs[d] = Math.abs(u[k]); }
     };
     rec(0);

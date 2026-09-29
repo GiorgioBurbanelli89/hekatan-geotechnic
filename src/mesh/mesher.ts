@@ -34,7 +34,11 @@ function polyY(poly: Pt[], x: number): number {
 
 export type MeshStats = { nodes: number; corners: number; elements: number; minAngle: number; meanEdge: number; area: number; steiner: number; avisos: string[] };
 
-export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } {
+/** opts.topeMs / opts.maxIter: topes del refinamiento de Ruppert. Por defecto 8 s y 5000 puntos (protegen el
+ *  navegador). Fuera del navegador (tools/, tests/) conviene subirlos: con el tope de TIEMPO la malla depende de lo
+ *  cargada que esté la máquina (2026-09-29: el muro de Manabí dio 179, 129 y 99 nudos huérfanos en tres corridas
+ *  idénticas) y el resultado deja de ser reproducible. */
+export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: number } = {}): { model: GeoModel; stats: MeshStats } {
   const h = def.h;
   // el contorno DERIVA de las interfaces: si un slider o el ratón cambió el terreno, se rehace aquí
   // (2026-09-06: el slider de H escribía el texto pero mallaba el contorno viejo)
@@ -189,12 +193,12 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   // tope de tiempo del refinamiento: una geometría degenerada no puede colgar el navegador. 2.5 s era demasiado
   // justo (el muro de ejemplo malla en 1.2 s en Node pero en 2.6 s en el navegador y saltaba el aviso en un
   // modelo perfectamente sano); 8 s sigue estando muy por debajo de lo que tarda el solver en ese mismo modelo.
-  const TOPE_MS = 8000;
-  let steiner = 0, cortado = false;
+  const TOPE_MS = opts.topeMs ?? 8000, MAXIT = opts.maxIter ?? 5000;
+  let steiner = 0, cortado = false, agotado = true;
   const tStart = performance.now();          // tope de tiempo: una geometría degenerada (dos interfaces que se
   enforce();                                 // tocan) no puede colgar el navegador: se entrega lo que haya
   meshDebug(`tras enforce: interiores ${interior().length}, área ${interior().reduce((a, t) => a + triArea(t), 0).toFixed(2)} de ${domArea.toFixed(2)}`);
-  for (let iter = 0; iter < 5000; iter++) {
+  for (let iter = 0; iter < MAXIT; iter++) {
     const live = interior();
     let worst: Tri | null = null, score = 0;
     if (performance.now() - tStart > TOPE_MS) { meshDebug(`refinamiento cortado por tiempo (${TOPE_MS / 1000} s): geometría degenerada`); cortado = true; break; }
@@ -205,7 +209,7 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
       const sc = (mn < 25 ? (25 - mn) / 25 : 0) + (ar > am ? ar / am - 1 : 0);
       if (sc > score) { score = sc; worst = t; }
     }
-    if (!worst) break;
+    if (!worst) { agotado = false; break; }
     const c = circ(worst);
     // ¿el circuncentro invade (encroach) un segmento restringido? → partir ese segmento
     let split = -1;
@@ -214,6 +218,20 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
       const r2 = ((P[a][0] - P[b][0]) ** 2 + (P[a][1] - P[b][1]) ** 2) / 4;
       if ((c.x - mx) ** 2 + (c.y - my) ** 2 < r2 * (1 - 1e-9)) { split = k; break; }
     }
+    // ¿el circuncentro queda AL OTRO LADO de un segmento restringido (no «se ve» desde el triángulo)? → partir ese
+    // segmento. Sin esto, una franja fina entre dos restricciones (la base de la zapata a −3.00 y la interfaz a −3.05)
+    // metía el circuncentro debajo de la interfaz, `enforce` devolvía el mismo triángulo malo y el bucle repetía el
+    // MISMO punto hasta el tope: miles de nudos huérfanos y malla rota (2026-09-29, muro de Manabí).
+    if (split < 0) {
+      const gx = (P[worst.a][0] + P[worst.b][0] + P[worst.c][0]) / 3, gy = (P[worst.a][1] + P[worst.b][1] + P[worst.c][1]) / 3;
+      let tBest = Infinity;
+      for (let k = 0; k < S.length; k++) {
+        const [a, b] = S[k]; const ax = P[a][0], ay = P[a][1], bx = P[b][0], by = P[b][1];
+        const d1 = cross(bx - ax, by - ay, gx - ax, gy - ay), d2 = cross(bx - ax, by - ay, c.x - ax, c.y - ay);
+        const d3 = cross(c.x - gx, c.y - gy, ax - gx, ay - gy), d4 = cross(c.x - gx, c.y - gy, bx - gx, by - gy);
+        if (d1 * d2 < 0 && d3 * d4 < 0) { const t = d1 / (d1 - d2); if (t < tBest) { tBest = t; split = k; } }   // el primer segmento que corta
+      }
+    }
     if (split < 0 && !pointInPoly(c.x, c.y, outline)) {          // fuera del dominio: partir su arista más larga del contorno
       const segs = isSeg();
       let best = -1, bl = 0;
@@ -221,7 +239,7 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
         const k = u < v ? u + "," + v : v + "," + u; if (!segs.has(k)) continue;
         const L = Math.hypot(P[u][0] - P[v][0], P[u][1] - P[v][1]); if (L > bl) { bl = L; best = S.findIndex(([p, q]) => (p === u && q === v) || (p === v && q === u)); }
       }
-      if (best < 0) break;   // no debería pasar: triángulo interior con circuncentro fuera y sin arista de contorno
+      if (best < 0) { agotado = false; break; }   // no debería pasar: triángulo interior con circuncentro fuera y sin arista de contorno
       split = best;
     }
     if (split >= 0) {
@@ -239,7 +257,8 @@ export function meshSlope(def: SlopeDef): { model: GeoModel; stats: MeshStats } 
   const midOf = new Map<string, number>();
   const mid = (u: number, v: number) => { const k = u < v ? u + "," + v : v + "," + u; let m = midOf.get(k); if (m === undefined) { m = X.length; X.push((X[u] + X[v]) / 2); Y.push((Y[u] + Y[v]) / 2); midOf.set(k, m); } return m; };
   const ELE: number[][] = [], EMAT: number[] = [], avisos: string[] = [];
-  if (cortado) avisos.push("el refinamiento se cortó a los 8 s: la malla puede estar incompleta (sube «malla» o simplifica la geometría)");
+  if (cortado) avisos.push(`el refinamiento se cortó a los ${TOPE_MS / 1000} s: la malla puede estar incompleta (sube «malla» o simplifica la geometría)`);
+  else if (agotado) avisos.push(`el refinamiento llegó al tope de ${MAXIT} puntos sin acabar: la malla no cumple el ángulo mínimo ni el tamaño`);
   for (const t of tris) {
     const a = ren(t.a), b = ren(t.b), c = ren(t.c);
     ELE.push([a, b, c, mid(a, b), mid(b, c), mid(c, a)]);
