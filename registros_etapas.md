@@ -40,7 +40,18 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
 - ✅ E_d: manual teórico de GEO5 FEM (data.fine.cz/handbooks-chapter-pdf/geo5_fem_theoretical_guide.pdf), §2.3.1,
   ec. 2.12, pág. 25: E_d = √(2εᵀQPQε) = √(4·J2(e)). El visor usaba √(4/3·J2) (√3 veces menor). Corregido en `geo5scale.ts`.
 - ✅ Etapa 6: la carga nueva entra por incrementos (2, 4, 8, 16) si Newton no cierra, como GEO5. Converge con 2.
-- ⏳ Asiento de la coronación: Geotechnic +13 a +25 % (Drucker-Prager frente a Mohr-Coulomb; causa no demostrada).
+- ✅ Asiento de la coronación (+13 a +25 % con Mohr-Coulomb en GEO5): DEMOSTRADO que es el modelo de suelo. El mismo
+  modelo de GeoFEM con las dos arenas en Drucker-Prager (`muro_manabi_fem_etapas_dp.gmk`, `examples/muro_manabi_etapas_geofem_dp.json`):
+  | etapa | d_z GEO5-DP / GT | d_x GEO5-DP / GT |
+  |---|---|---|
+  | muro | 6.5 / 6.52 | 3.6 / 3.40 |
+  | bajo el talón | 7.2 / 7.19 | 2.4 / 2.25 |
+  | capa 1 | 9.8 / 9.81 | −0.2 / −0.43 |
+  | capa 2 | 12.5 / 12.57 | −2.4 / −2.64 |
+  | capa 3 | 15.4 / 15.44 | −3.9 / −4.05 |
+  σz bajo la zapata (etapa 6, x 9.8…11.8): GEO5-DP 36.6 37.8 39.4 41.4 44.6 · GT 36.9 38.3 40.7 44.1 47.1 (+1 … +6 %).
+  ⚠️ Con Drucker-Prager GEO5 NO cierra la etapa 7 («Maximum number of relaxations… exceeded», W071, 0 %); Geotechnic sí
+  (14 iteraciones). El D-P de GEO5 (ajustado a extensión) es más débil que su Mohr-Coulomb: por eso el asiento era mayor.
 - ⏳ Construcción por etapas en el motor TS.
 
 # Parametrización del talud (29-sep-2026, pedido de Jorge)
