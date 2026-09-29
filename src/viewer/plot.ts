@@ -13,6 +13,7 @@ export type PlotOptions = {
   showMesh: boolean;
   deformScale?: number;     // 0 = sin deformada
   u?: Float64Array; uel?: Float64Array;
+  active?: ArrayLike<number>;   // construcción por etapas: 1/0 por elemento; los inactivos no se pintan (solo sus aristas)
 };
 
 type Edge = { a: number; b: number; count: number; mats: Set<number> };
@@ -93,7 +94,8 @@ export class SlopePlot {
   setModel(m: PlotModel): void { this.m = m; }
 
   draw(o: PlotOptions): { lv: number[]; vmin: number; vmax: number } {
-    const { X, Y, ELE, EMAT, MAT, Fs, Fa } = this.m;
+    const { X, Y, EMAT, MAT, Fs, Fa } = this.m;
+    const ELE = o.active ? this.m.ELE.filter((_, e) => o.active![e]) : this.m.ELE;
     const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
     const FG = this.dark ? "#f3ead0" : "#000", BG = this.dark ? "#000" : "#fff";
     const k = this.k;   // 2 en modo vídeo: fuentes, márgenes y trazos al doble sobre un lienzo 2x (nitidez)

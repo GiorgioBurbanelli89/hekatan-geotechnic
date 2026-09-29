@@ -384,13 +384,13 @@ function buildStageTabs() {
   if (!model) { etabs.innerHTML = ""; return; }
   const vis = visibleStage();
   etabs.innerHTML = model.stages.map((st, i) => {
-    const r = stages[i]; const fs = r && !r.stale ? (r.steps.length ? `<span class="fs">FS ${r.fs.toFixed(2)}</span>` : `<span class="fs" style="color:#e5382b">✖</span>`) : "";
+    const r = stages[i]; const fs = r && !r.stale ? (model?.staged ? `<span class="fs">✓</span>` : r.steps.length ? `<span class="fs">FS ${r.fs.toFixed(2)}</span>` : `<span class="fs" style="color:#e5382b">✖</span>`) : "";
     return `<button data-st="${i}" class="${i === vis ? "on" : ""}">${i + 1}. ${st.name}${fs}</button>`;
   }).join("");
   etabs.querySelectorAll<HTMLButtonElement>("button").forEach((b) => { b.onclick = () => { selStage.value = b.dataset.st!; selStage.dispatchEvent(new Event("change")); }; });
 }
 function fsTable() {
-  const rows = stages.map((s) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok"${s.steps.length ? "" : ' style="color:#e5382b"'}>${s.steps.length ? s.fs.toFixed(4) : "< 1 ✖ falla"}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
+  const rows = stages.map((s) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok"${s.steps.length || model?.staged ? "" : ' style="color:#e5382b"'}>${model?.staged ? "tensiones ✓" : s.steps.length ? s.fs.toFixed(4) : "< 1 ✖ falla"}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
   fsEl.innerHTML = `<table><tr><th>etapa</th><th>FS</th><th>GEO5</th><th>t</th></tr>${rows}</table>` + (busy ? `<div style="color:var(--oro);margin-top:4px">calculando…</div>` : "");
 }
 
@@ -417,11 +417,11 @@ function redraw() {
   const stress = isStressField(kind) && !!st.sig1;
   const vals = analitico ? new Float64Array(model.X.length)   // método analítico: talud sin color map, solo el círculo de falla
     : stress ? stressField(kind, model.ELE, model.X.length, st.ngp!, st.sig1!, st.eps1!, st.epl1!) : nodalField(u, st.uel, model.X.length, kind);
-  const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress ? " · estado de tensión SRF=1" : "");
+  const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress && !model.staged ? " · estado de tensión SRF=1" : "");
   const rango = plot.draw({
     field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked,
-    title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
-    deformScale: parseFloat(inpDef.value) || 0, u, uel: st.uel,
+    title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${model.staged ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · equilibrio` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
+    deformScale: parseFloat(inpDef.value) || 0, u, uel: st.uel, active: model.stages[si]?.active,
   });
   draw.setMap(plot.mapping());
   (window as unknown as { __geoMap: unknown }).__geoMap = plot.mapping();   // para el arnés puppeteer (clics en coordenadas del mundo)

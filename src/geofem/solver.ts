@@ -447,7 +447,7 @@ export class GeoFem {
       const r = this.stagedStep(st.active ?? new Array(ne).fill(1), F, si === 0);
       const sec = (performance.now() - t0) / 1000;
       this.log(`  ${st.name.padEnd(22)} >>> ${r.conv ? "equilibrio" : "NO CONVERGE"}  [${sec.toFixed(1)} s]`);
-      const res: StageResult = { name: st.name, fs: NaN, geo5: st.geo5, u: r.u, uel: r.u, steps: [], prog: "", seconds: sec, u1: r.u, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: ne * NG };
+      const res: StageResult = { name: st.name, fs: NaN, geo5: st.geo5, u: r.u, uel: new Float64Array(ndof), steps: [], prog: "", seconds: sec, u1: r.u, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: ne * NG };
       onStage?.(res, si); return res;
     });
   }

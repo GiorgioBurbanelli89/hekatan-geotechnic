@@ -82,7 +82,7 @@ export class GeoFemWasm {
       const eps1 = Float64Array.from(mod.HEAPF64.subarray(pE >> 3, (pE >> 3) + ngp * 4));
       for (const p of [pS, pP, pE, pU1]) mod._geofem_free(p);
       this.log(`  ${st.name.padEnd(22)} >>> ${conv ? "equilibrio" : "NO CONVERGE"}  [${sec.toFixed(1)} s]`);
-      const res: StageResult = { name: st.name, fs: NaN, geo5: st.geo5, u, uel: u, steps: [], prog: "", seconds: sec, u1: u, sig1, epl1, eps1, ngp };
+      const res: StageResult = { name: st.name, fs: NaN, geo5: st.geo5, u, uel: new Float64Array(ndof), steps: [], prog: "", seconds: sec, u1: u, sig1, epl1, eps1, ngp };
       results.push(res); onStage?.(res, si);
     });
     for (const p of [pF, pU, pA]) mod._geofem_free(p);
