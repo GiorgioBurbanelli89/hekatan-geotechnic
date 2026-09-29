@@ -1,0 +1,15 @@
+# MOHR-COULOMB, malla 0.5 (como GeoFEM, FS 1.36). geometría calcada de GeoFEM (fuste 0.25→0.40, suelos a −3.00), 0.60 m delante, malla 0.8 (generado por tools/variaciones_muro_manabi.ts)
+margenes xmin=0 xmax=30 fondo=-12
+interfaz 0,-2.4 10.00000,-2.4 10.15,0 30,0
+interfaz 0,-3 30,-3
+suelo ARENA_SP    E=25000 nu=0.28 phi=30 c=0 gamma=18.5 modelo=mc
+suelo ARENA_SPSM  E=15500 nu=0.30 phi=29.97 c=0 gamma=17.5 modelo=mc
+suelo HORMIGON    E=21166510 nu=0.2 phi=0 c=0 gamma=23 rigido=1
+asignar HORMIGON en 10.25,-1.2
+asignar ARENA_SP en 20,-1.5
+asignar ARENA_SP en 5,-2.70
+asignar ARENA_SPSM en 15,-8
+linea 9.28,-3 9.30,-2.6 9.98,-2.6 10.00000,-2.4
+linea 10.40,0 10.42,-2.6 12.30,-2.6 12.32,-3
+malla 0.5
+etapa peso propio

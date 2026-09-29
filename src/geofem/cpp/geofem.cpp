@@ -303,8 +303,8 @@ struct GeoFem {
     double d1 = (L22 * q1 - L12 * q2) / Om, d2 = (L11 * q2 - L21 * q1) / Om;
     for (int i = 0; i < 3; i++) out[i] = ss[i] - d1 * Dg1[i] - d2 * Dg2[i];
   }
-  /** σ de prueba (4: xx yy zz xy) → σ devuelta. true si hubo plastificación. */
-  static bool mcReturn(const double* st, const double* De, double phi, double psi, double c, double* out) {
+  /** σ de prueba (4: xx yy zz xy) → σ devuelta. Devuelve la región: 0 elástico, 1 cara, 2 arista, 3 ÁPICE. */
+  static int mcReturn(const double* st, const double* De, double phi, double psi, double c, double* out) {
     double sxx = st[0], syy = st[1], szz = st[2], sxy = st[3];
     double cen = (sxx + syy) / 2, R = std::sqrt(((sxx - syy) / 2) * ((sxx - syy) / 2) + sxy * sxy), t2 = std::atan2(2 * sxy, sxx - syy);
     double str[3] = {cen + R, cen - R, szz};
@@ -314,7 +314,8 @@ struct GeoFem {
     double tol = 1e-7 * std::max(1.0, std::max(std::fabs(str[0]), std::max(std::fabs(str[1]), std::fabs(str[2]))));
     double sp = std::sin(phi), sg = std::sin(psi), ccos = c * std::cos(phi);
     for (int i = 0; i < 4; i++) out[i] = st[i];
-    if (fmc(ss, sp, ccos) <= tol) return false;
+    if (fmc(ss, sp, ccos) <= tol) return 0;
+    int reg = 1;
     double D[3][3]; for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) D[i][j] = De[i * 4 + j];
     double n1[3] = {0.5 * (1 + sp), 0, -0.5 * (1 - sp)}, g1[3] = {0.5 * (1 + sg), 0, -0.5 * (1 - sg)};
     double Dg1[3]; for (int i = 0; i < 3; i++) Dg1[i] = D[i][0] * g1[0] + D[i][1] * g1[1] + D[i][2] * g1[2];
@@ -322,17 +323,17 @@ struct GeoFem {
     double r[3] = {ss[0] - dl * Dg1[0], ss[1] - dl * Dg1[1], ss[2] - dl * Dg1[2]};
     if (!mcValido(r, sp, ccos, tol)) {
       double n2c[3] = {0.5 * (1 + sp), -0.5 * (1 - sp), 0}, g2c[3] = {0.5 * (1 + sg), -0.5 * (1 - sg), 0};
-      mcArista(ss, D, n1, g1, n2c, g2c, ccos, r);
+      mcArista(ss, D, n1, g1, n2c, g2c, ccos, r); reg = 2;
       if (!mcValido(r, sp, ccos, tol)) {
         double n2e[3] = {0, 0.5 * (1 + sp), -0.5 * (1 - sp)}, g2e[3] = {0, 0.5 * (1 + sg), -0.5 * (1 - sg)};
         mcArista(ss, D, n1, g1, n2e, g2e, ccos, r);
-        if (!mcValido(r, sp, ccos, tol)) { double a = std::tan(phi) > 1e-12 ? c / std::tan(phi) : 0; r[0] = r[1] = r[2] = a; }   // ápice
+        if (!mcValido(r, sp, ccos, tol)) { double a = std::tan(phi) > 1e-12 ? c / std::tan(phi) : 0; r[0] = r[1] = r[2] = a; reg = 3; }   // ápice
       }
     }
     double pr[3]; for (int k = 0; k < 3; k++) pr[ix[k]] = r[k];                                  // se deshace el orden
     double cen2 = (pr[0] + pr[1]) / 2, R2 = (pr[0] - pr[1]) / 2;
     out[0] = cen2 + R2 * std::cos(t2); out[1] = cen2 - R2 * std::cos(t2); out[2] = pr[2]; out[3] = R2 * std::sin(t2);
-    return true;
+    return reg;
   }
 
   void resetState() { std::fill(SIG.begin(), SIG.end(), 0.0); std::fill(hasDep.begin(), hasDep.end(), 0); std::fill(EPL.begin(), EPL.end(), 0.0); }
@@ -358,7 +359,9 @@ struct GeoFem {
             double tr[4]; for (int i = 0; i < 4; i++) { double v = sigN[i]; for (int j = 0; j < 4; j++) v += De[i * 4 + j] * de[j]; tr[i] = v; }
             return mcReturn(tr, De, q[0], q[2], q[1], out);
           };
-          got = ret(deps, sig);
+          // en el ÁPICE (σ hidrostática = c·cotφ, 0 en arena) la tangente es casi nula: como el Drucker-Prager de arriba,
+          // se deja la elástica (got = false) y no se suma deformación plástica en ese punto
+          { int reg = ret(deps, sig); got = reg == 1 || reg == 2; }
           if (got && commit) {
             for (int i = 0; i < 16; i++) Dep[i] = De[i];
             for (int j : {0, 1, 3}) {
@@ -503,11 +506,30 @@ struct GeoFem {
     return c;
   }
 
+  /** El estado INICIAL de la SRM (SRF = 1) con la carga TOTAL; si Newton no cierra de una vez, desde cero en 2, 4, 8, 16
+   *  incrementos de carga (GEO5 también carga por pasos: «Attained loading»). Solo para SRF = 1: en los peldaños SRF > 1 la
+   *  divergencia es la que fija el FS y no se reintenta. Si cierra de una vez, el camino es el de siempre (Demo04 intacto). */
+  bool nrstepInc(double SRF, const double* F, int rstep, vector<double>& u, int& itOut) {
+    if (nrstep(SRF, F, rstep, u, itOut)) return true;
+    vector<double> Fk(ndof), du;
+    for (int nsub = 2; nsub <= 16; nsub *= 2) {
+      resetState(); u.assign(ndof, 0.0); bool c = true;
+      for (int j = 1; j <= nsub && c; j++) {
+        for (int d = 0; d < ndof; d++) Fk[d] = F[d] * j / nsub;
+        int itj; c = nrstep(SRF, Fk.data(), rstep, du, itj, true); itOut += itj;
+        if (c) { double m = 0; for (int d = 0; d < ndof; d++) m = std::max(m, std::fabs(du[d])); if (!(m < 1.0)) c = false; }
+        if (c) for (int d = 0; d < ndof; d++) u[d] += du[d];
+      }
+      if (c) { LOG(fmt("    SRF=%.4f: converge con la carga en %d incrementos", SRF, nsub)); return true; }
+    }
+    return false;
+  }
+
   double runStage(const double* Ftot, double* outU, double* outUel, double* outSrf, double* outStepsU, int maxSteps) {
     const double RED0 = 0.9, RELAX = 2, MINSTEP = 0.99; const int MAXRELAX = 3;
     double Racc = 1, fs = 1; int nrelax = 0, rs = 0; std::string prog;
-    vector<double> ulo(ndof, 0.0), u; int n0;
-    bool c0 = nrstep(1.0, Ftot, 0, u, n0);
+    vector<double> ulo(ndof, 0.0), u; int n0 = 0;
+    bool c0 = nrstepInc(1.0, Ftot, 0, u, n0);
     // instantánea del estado de tensión (SRF=1) para los campos del visor
     SIG1 = SIG; EPL1 = EPL; U1 = u;
     for (int e = 0; e < ne; e++) for (int q = 0; q < NG; q++) {
@@ -527,7 +549,7 @@ struct GeoFem {
       double trial = 1 / (Racc * s);
       if (trial > 3) break;
       rs++;
-      int nit; bool conv = nrstep(trial, Ftot, rs, u, nit);
+      int nit; bool conv = nrstep(trial, Ftot, rs, u, nit);   // SRF > 1: SIN reintento por incrementos (la divergencia de GEO5 es la que fija el FS; con reintento Demo04 etapa 3 daba 1.7369 en vez de 1.69)
       if (conv && std::isfinite(vnorm(u.data(), ndof))) {
         Racc *= s; fs = trial; ulo = u;
         if (nstepsOut < maxSteps) { outSrf[nstepsOut] = trial; std::memcpy(outStepsU + (size_t)nstepsOut * ndof, u.data(), sizeof(double) * ndof); nstepsOut++; }

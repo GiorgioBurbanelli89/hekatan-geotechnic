@@ -323,7 +323,7 @@ export class GeoFem {
     const d1 = (L22 * q1 - L12 * q2) / Om, d2 = (L11 * q2 - L21 * q1) / Om;
     return [0, 1, 2].map((i) => ss[i] - d1 * Dg1[i] - d2 * Dg2[i]);
   }
-  private static mcReturn(st: ArrayLike<number>, De: Float64Array, phi: number, psi: number, c: number, out: Float64Array): boolean {
+  private static mcReturn(st: ArrayLike<number>, De: Float64Array, phi: number, psi: number, c: number, out: Float64Array): number {   // región: 0 elástico, 1 cara, 2 arista, 3 ápice
     const sxx = st[0], syy = st[1], szz = st[2], sxy = st[3];
     const cen = (sxx + syy) / 2, R = Math.sqrt(((sxx - syy) / 2) * ((sxx - syy) / 2) + sxy * sxy), t2 = Math.atan2(2 * sxy, sxx - syy);
     const str = [cen + R, cen - R, szz];
@@ -332,23 +332,24 @@ export class GeoFem {
     const tol = 1e-7 * Math.max(1, Math.max(Math.abs(str[0]), Math.max(Math.abs(str[1]), Math.abs(str[2]))));
     const sp = Math.sin(phi), sg = Math.sin(psi), ccos = c * Math.cos(phi);
     for (let i = 0; i < 4; i++) out[i] = st[i];
-    if (GeoFem.fmc(ss, sp, ccos) <= tol) return false;
+    if (GeoFem.fmc(ss, sp, ccos) <= tol) return 0;
+    let reg = 1;
     const D = [0, 1, 2].map((i) => [De[i * 4], De[i * 4 + 1], De[i * 4 + 2]]);
     const n1 = [0.5 * (1 + sp), 0, -0.5 * (1 - sp)], g1 = [0.5 * (1 + sg), 0, -0.5 * (1 - sg)];
     const Dg1 = [0, 1, 2].map((i) => D[i][0] * g1[0] + D[i][1] * g1[1] + D[i][2] * g1[2]);
     const den = n1[0] * Dg1[0] + n1[1] * Dg1[1] + n1[2] * Dg1[2], dl = GeoFem.fmc(ss, sp, ccos) / den;
     let r = [ss[0] - dl * Dg1[0], ss[1] - dl * Dg1[1], ss[2] - dl * Dg1[2]];
     if (!GeoFem.mcValido(r, sp, ccos, tol)) {
-      r = GeoFem.mcArista(ss, D, n1, g1, [0.5 * (1 + sp), -0.5 * (1 - sp), 0], [0.5 * (1 + sg), -0.5 * (1 - sg), 0], ccos);
+      r = GeoFem.mcArista(ss, D, n1, g1, [0.5 * (1 + sp), -0.5 * (1 - sp), 0], [0.5 * (1 + sg), -0.5 * (1 - sg), 0], ccos); reg = 2;
       if (!GeoFem.mcValido(r, sp, ccos, tol)) {
         r = GeoFem.mcArista(ss, D, n1, g1, [0, 0.5 * (1 + sp), -0.5 * (1 - sp)], [0, 0.5 * (1 + sg), -0.5 * (1 - sg)], ccos);
-        if (!GeoFem.mcValido(r, sp, ccos, tol)) { const a = Math.tan(phi) > 1e-12 ? c / Math.tan(phi) : 0; r = [a, a, a]; }
+        if (!GeoFem.mcValido(r, sp, ccos, tol)) { const a = Math.tan(phi) > 1e-12 ? c / Math.tan(phi) : 0; r = [a, a, a]; reg = 3; }
       }
     }
     const pr = [0, 0, 0]; for (let k = 0; k < 3; k++) pr[ix[k]] = r[k];
     const cen2 = (pr[0] + pr[1]) / 2, R2 = (pr[0] - pr[1]) / 2;
     out[0] = cen2 + R2 * Math.cos(t2); out[1] = cen2 - R2 * Math.cos(t2); out[2] = pr[2]; out[3] = R2 * Math.sin(t2);
-    return true;
+    return reg;
   }
 
   /** Fuerzas internas con σ = retorno(SIG + De·B·du). Si commit: guarda σ y la tangente del retorno. */
@@ -369,11 +370,11 @@ export class GeoFem {
         let got: boolean;
         if (this.model[mm - 1] === 1 && !this.rigid[mm - 1]) {   // MOHR-COULOMB, tangente NUMÉRICA (como geofem.cpp)
           const q = this.mcp[mm];
-          const ret = (de: ArrayLike<number>, out: Float64Array) => {
+          const ret = (de: ArrayLike<number>, out: Float64Array): number => {
             const tr = new Float64Array(4); for (let i = 0; i < 4; i++) { let v = sigN[i]; for (let j = 0; j < 4; j++) v += De[i * 4 + j] * de[j]; tr[i] = v; }
             return GeoFem.mcReturn(tr, De, q[0], q[2], q[1], out);
           };
-          got = ret(deps, sig);
+          const reg = ret(deps, sig); got = reg === 1 || reg === 2;   // ápice: tangente elástica, sin ε plástica (como el D-P)
           if (got && commit) {
             Dep.set(De);
             for (const j of [0, 1, 3]) {
@@ -521,13 +522,30 @@ export class GeoFem {
     });
   }
 
+  /** Estado INICIAL de la SRM (SRF = 1): si no cierra de una vez, desde cero en 2, 4, 8, 16 incrementos (como geofem.cpp). Solo SRF = 1. */
+  private nrstepInc(SRF: number, F: Float64Array, rstep: number): [boolean, Float64Array, number] {
+    const r0 = this.nrstep(SRF, F, rstep); if (r0[0]) return r0;
+    let it = r0[2]; const ndof = this.ndof, Fk = new Float64Array(ndof);
+    for (let nsub = 2; nsub <= 16; nsub *= 2) {
+      this.resetState(); const u = new Float64Array(ndof); let c = true;
+      for (let j = 1; j <= nsub && c; j++) {
+        for (let d = 0; d < ndof; d++) Fk[d] = F[d] * j / nsub;
+        const [cj, du, itj] = this.nrstep(SRF, Fk, rstep, undefined, true); c = cj; it += itj;
+        if (c) { let m = 0; for (let d = 0; d < ndof; d++) m = Math.max(m, Math.abs(du[d])); if (!(m < 1.0)) c = false; }
+        if (c) for (let d = 0; d < ndof; d++) u[d] += du[d];
+      }
+      if (c) { this.log(`    SRF=${f4(SRF)}: converge con la carga en ${nsub} incrementos`); return [true, u, it]; }
+    }
+    return [false, r0[1], it];
+  }
+
   /** Escalera SRM de GEO5 para una etapa (carga total Ftot). */
   private srm(Ftot: Float64Array): { fs: number; prog: string; ulo: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; u1: Float64Array; sig1: Float64Array; epl1: Float64Array; eps1: Float64Array } {
     const RED0 = 0.9, RELAX = 2, MINSTEP = 0.99, MAXRELAX = 3;
     let Racc = 1, fs = 1, nrelax = 0, rs = 0, prog = "";
     let ulo: Float64Array = new Float64Array(this.ndof);
     const steps: { srf: number; u: Float64Array }[] = [];
-    const [c0, u1, n0] = this.nrstep(1.0, Ftot, 0);
+    const [c0, u1, n0] = this.nrstepInc(1.0, Ftot, 0);
     // instantánea del estado de tensión (SRF=1) para los campos del visor
     const sig1 = Float64Array.from(this.SIG), epl1 = Float64Array.from(this.EPL), eps1 = new Float64Array(this.ne * NG * 4);
     for (let e = 0; e < this.ne; e++) for (let q = 0; q < NG; q++) {
@@ -547,7 +565,7 @@ export class GeoFem {
       const trial = 1 / (Racc * s);                            // SRF EXACTO (GEO5 no redondea)
       if (trial > 3) break;
       rs++;
-      const [conv, u, nit] = this.nrstep(trial, Ftot, rs);
+      const [conv, u, nit] = this.nrstep(trial, Ftot, rs);   // SRF > 1: sin reintento por incrementos (la divergencia fija el FS; con reintento Demo04 etapa 3 daba 1.7369)
       if (conv && Number.isFinite(norm(u))) {
         Racc *= s; fs = trial; ulo = u; steps.push({ srf: trial, u });
         let dxmax = 0; for (let i = 0; i < this.nn; i++) dxmax = Math.max(dxmax, Math.abs(u[2 * i]));
