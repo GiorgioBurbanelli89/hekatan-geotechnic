@@ -1,0 +1,11 @@
+# TALUD ESCALONADO CON BERMAS, PARAMETRICO: `bermas=2 berma=3` reparte H = 12 m en 3 caras de 4 m a 45° separadas por
+# 2 bermas de 3 m (desmonte habitual). Sliders: H, beta, n.º de bermas, ancho de berma, corona, contratalud y estratos.
+margenes xmin=0 xmax=50 fondo=-25
+talud xpie=10 zpie=-14 H=12 beta=45 corona=15 zfin=-2 bermas=2 berma=3
+interfaz 0,-17 25,-16 50,-15
+suelo LIMO_ARENOSO E=22000 nu=0.3  phi=28 c=12 gamma=18.5
+suelo ARCILLA_FIRME E=11000 nu=0.35 phi=22 c=28 gamma=18
+asignar LIMO_ARENOSO en 6,-15
+asignar ARCILLA_FIRME en 25,-20
+malla 1.5
+etapa peso propio

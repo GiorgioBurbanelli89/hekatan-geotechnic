@@ -42,3 +42,13 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
 - ✅ Etapa 6: la carga nueva entra por incrementos (2, 4, 8, 16) si Newton no cierra, como GEO5. Converge con 2.
 - ⏳ Asiento de la coronación: Geotechnic +13 a +25 % (Drucker-Prager frente a Mohr-Coulomb; causa no demostrada).
 - ⏳ Construcción por etapas en el motor TS.
+
+# Parametrización del talud (29-sep-2026, pedido de Jorge)
+- `talud … bermas=n berma=w`: H se reparte en n+1 caras iguales a β, con n bermas horizontales de ancho w.
+- Deslizadores nuevos: n.º de bermas, ancho de berma, contratalud β₂, cota tras el contratalud (antes solo H, β, corona, x pie).
+- «Estratos»: un deslizador por interfaz de suelo que la sube o baja entera, limitado para no cruzar el terreno, otras
+  interfaces ni los puntos de `asignar` (cruzarlos intercambiaría los suelos de las regiones).
+- Ejemplo `examples/talud_bermas.hgeo` (H 12 m a 45°): FS 1.17 sin bermas · 1.46 con 1 · 1.65 con 2 (más tendido → más FS).
+- Puppeteer `tests/shot_talud_param.mjs` (puppeteer de hekatan-struct-limpio: el de hekatan-struct estaba vacío): los
+  sliders salen, mover bermas remalla y recalcula, consola sin errores. Subir el estrato 1.66 m cambia malla y d_x pero el
+  FS queda en el mismo peldaño de la escalera SRM (1.6455): la rotura va por el limo de arriba.

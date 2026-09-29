@@ -95,8 +95,9 @@ function buildGeomSliders() {
     const nota = document.createElement("div"); nota.className = "mats"; nota.textContent = "malla exacta de GEO5: al mover un slider de geometría se pasa al mismo talud con malla propia (.hgeo)"; g.appendChild(nota);
     return;
   }
-  if (!def.param) { buildDrawnSliders(g); buildWallSliders(g); buildLoadSliders(g); return; }
+  if (!def.param) { buildDrawnSliders(g); buildLayerSliders(g); buildWallSliders(g); buildLoadSliders(g); return; }
   buildParamSliders(g, def.param, () => def);
+  buildLayerSliders(g);
   buildWallSliders(g);
   buildLoadSliders(g);
 }
@@ -104,14 +105,19 @@ function buildGeomSliders() {
  *  primero cambia al gemelo .hgeo). Mientras se arrastra, las líneas se mueven en vivo (draw.showGeom); al soltar, remalla y recalcula. */
 function buildParamSliders(g: HTMLDivElement, pm: NonNullable<SlopeDef["param"]>, ensure: () => SlopeDef | null) {
   const rows: { key: keyof typeof pm; label: string; min: number; max: number; step: number }[] = [
-    { key: "H", label: "altura H [m]", min: 1, max: 15, step: 0.1 },
+    { key: "H", label: "altura H [m]", min: 1, max: 30, step: 0.1 },
     { key: "beta", label: "talud β [°]", min: 10, max: 75, step: 0.5 },
+    { key: "bermas", label: "n.º de bermas", min: 0, max: 4, step: 1 },
+    { key: "berma", label: "ancho de berma [m]", min: 0, max: 8, step: 0.25 },
     { key: "corona", label: "corona [m]", min: 0, max: 20, step: 0.5 },
+    { key: "beta2", label: "contratalud β₂ [°]", min: 5, max: 75, step: 0.5 },
+    { key: "zfin", label: "cota tras el contratalud [m]", min: pm.zpie - 5, max: pm.zpie + 30, step: 0.1 },
     { key: "xpie", label: "x pie [m]", min: 2, max: 25, step: 0.5 },
   ];
   for (const r of rows) {
     const row = document.createElement("div"); row.className = "sl";
-    row.innerHTML = `<span class="n">${r.label}</span><input type="range" id="gs_${r.key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${pm[r.key]}"><span class="v" id="gv_${r.key}">${pm[r.key]}</span>`;
+    const v0 = pm[r.key] ?? 0;
+    row.innerHTML = `<span class="n">${r.label}</span><input type="range" id="gs_${r.key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${v0}"><span class="v" id="gv_${r.key}">${v0}</span>`;
     g.appendChild(row);
     const inp = row.querySelector("input") as HTMLInputElement;
     inp.addEventListener("input", () => {
@@ -121,6 +127,40 @@ function buildParamSliders(g: HTMLDivElement, pm: NonNullable<SlopeDef["param"]>
       d.param[r.key] = parseFloat(inp.value);
       d.interfaces[0] = terrainFromParam(d.param, d.margins!.xmin, d.margins!.xmax);
       for (const st of d.stages) delete st.geo5;   // geometría distinta de la escrita: la referencia GEO5 ya no vale
+      draw.showGeom = true; draw.setDef(d); draw.render();
+      clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
+    });
+    inp.addEventListener("change", () => { geomSliding = false; draw.showGeom = false; draw.render(); window.setTimeout(buildGeomSliders, 350); });
+  }
+}
+/** ESTRATOS: un slider por interfaz de suelo (no el terreno) que la sube o la baja ENTERA. El recorrido se limita para que
+ *  no cruce el terreno, las otras interfaces ni los puntos de `asignar` (si cruzara uno, cambiaría el número de región
+ *  del punto y el suelo de las regiones se intercambiaría: la asignación de GEO5 va por «interfaces por encima»). */
+function buildLayerSliders(g: HTMLDivElement) {
+  const d = def; if (!d || d.interfaces.length < 2 || !d.margins) return;
+  const h = document.createElement("div"); h.className = "sl"; h.style.display = "block"; h.style.color = "var(--oro)"; h.style.fontWeight = "600"; h.style.marginTop = "6px";
+  h.textContent = "estratos (subir / bajar la interfaz)"; g.appendChild(h);
+  for (let k = 1; k < d.interfaces.length; k++) {
+    const it0 = d.interfaces[k].map((p) => [p[0], p[1]] as [number, number]);
+    // cuánto puede subir (lim+) o bajar (lim−) sin tocar otra línea ni un punto de asignación (margen 0.10 m)
+    let up = 50, dn = 50;
+    const xs = [...new Set(d.interfaces.flat().map((p) => p[0]).concat(d.assign.map((a) => a.p[0])))].filter((x) => x >= it0[0][0] && x <= it0[it0.length - 1][0]);
+    for (const x of xs) {
+      const y0 = interfaceY(it0, x);
+      d.interfaces.forEach((o, j) => { if (j === k || x < o[0][0] || x > o[o.length - 1][0]) return; const yo = interfaceY(o, x); if (yo > y0) up = Math.min(up, yo - y0 - 0.1); else dn = Math.min(dn, y0 - yo - 0.1); });
+    }
+    for (const a of d.assign) { if (a.p[0] < it0[0][0] || a.p[0] > it0[it0.length - 1][0]) continue; const y0 = interfaceY(it0, a.p[0]); if (a.p[1] > y0) up = Math.min(up, a.p[1] - y0 - 0.1); else dn = Math.min(dn, y0 - a.p[1] - 0.1); }
+    dn = Math.min(dn, Math.max(0, it0.reduce((m, p) => Math.min(m, p[1]), 1e9) - d.margins.bottom - 0.5));
+    up = Math.max(0, up); dn = Math.max(0, dn);
+    const key = `estrato${k}`;
+    const row = document.createElement("div"); row.className = "sl";
+    row.innerHTML = `<span class="n">interfaz ${k + 1}: desplazar [m]</span><input type="range" id="gs_${key}" min="${(-dn).toFixed(2)}" max="${up.toFixed(2)}" step="0.05" value="0"><span class="v" id="gv_${key}">0</span>`;
+    g.appendChild(row);
+    const inp = row.querySelector("input") as HTMLInputElement;
+    inp.addEventListener("input", () => {
+      const dz = parseFloat(inp.value); geomSliding = true; $<HTMLSpanElement>("gv_" + key).textContent = dz.toFixed(2);
+      d.interfaces[k] = it0.map((p) => [p[0], p[1] + dz] as [number, number]);
+      for (const st of d.stages) delete st.geo5;
       draw.showGeom = true; draw.setDef(d); draw.render();
       clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
     });

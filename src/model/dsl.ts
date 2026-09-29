@@ -4,8 +4,10 @@
 //
 //   margenes xmin=0 xmax=40 fondo=-21.5      rango del modelo (izquierda, derecha, fondo)
 //   interfaz x,y x,y ...                     polilínea de borde a borde; la PRIMERA es el terreno
-//   talud xpie=11 zpie=-9 H=6.5 beta=33 corona=8.5 zfin=-4 [beta2=28.6]   terreno PARAMÉTRICO (sliders):
-//       pie plano → cara a beta° hasta H → corona → bajada a beta2° hasta zfin → plano hasta el margen
+//   talud xpie=11 zpie=-9 H=6.5 beta=33 corona=8.5 zfin=-4 [beta2=28.6] [bermas=2 berma=3]   terreno PARAMÉTRICO (sliders):
+//       pie plano → cara a beta° hasta H → corona → bajada a beta2° hasta zfin → plano hasta el margen.
+//       Con `bermas=n` la altura H se reparte en n+1 caras iguales a beta°, separadas por n bermas horizontales de
+//       ancho `berma` [m] (talud escalonado, el habitual en desmontes y presas de tierra)
 //   suelo NOMBRE E=130347 nu=0.3 phi=22.7 c=9 gamma=18 [psi=0]
 //   asignar NOMBRE en x,y                    la región que contiene el punto es de ese suelo
 //   muro NOMBRE x=20 [z=-9] H=4 [fuste=0.4 zapata=0.4 talon=1.5 dedo=0.6 emp=0.9]   MURO CANTILEVER = RIGID BODY:
@@ -57,14 +59,21 @@ export type SlopeDef = {
   comments: string[];
   param?: TaludParam;                       // terreno paramétrico (sliders); si se dibuja a mano, se pierde
 };
-export type TaludParam = { xpie: number; zpie: number; H: number; beta: number; corona: number; zfin: number; beta2: number };
+export type TaludParam = { xpie: number; zpie: number; H: number; beta: number; corona: number; zfin: number; beta2: number; bermas?: number; berma?: number };
 
 /** Terreno a partir de los parámetros (la 1ª interfaz). */
 export function terrainFromParam(pm: TaludParam, xmin: number, xmax: number): Pt[] {
   const tb = Math.tan((pm.beta * Math.PI) / 180), tb2 = Math.tan((pm.beta2 * Math.PI) / 180);
-  const xc = pm.xpie + pm.H / Math.max(tb, 1e-6), zc = pm.zpie + pm.H;
-  const x2 = xc + pm.corona, drop = zc - pm.zfin;
-  const pts: Pt[] = [[xmin, pm.zpie], [pm.xpie, pm.zpie], [xc, zc], [x2, zc]];
+  const nb = Math.max(0, Math.round(pm.bermas ?? 0)), wb = nb ? Math.max(0, pm.berma ?? 0) : 0;
+  const hc = pm.H / (nb + 1);                                   // altura de cada cara del talud escalonado
+  const pts: Pt[] = [[xmin, pm.zpie], [pm.xpie, pm.zpie]];
+  let x = pm.xpie, z = pm.zpie;
+  for (let k = 0; k <= nb; k++) {                                // cara k (a beta°) y, salvo la última, su berma
+    x += hc / Math.max(tb, 1e-6); z += hc; pts.push([x, z]);
+    if (k < nb && wb > 0) { x += wb; pts.push([x, z]); }
+  }
+  const zc = pm.zpie + pm.H, x2 = x + pm.corona, drop = zc - pm.zfin;
+  pts.push([x2, zc]);
   if (Math.abs(drop) > 1e-9) pts.push([x2 + Math.abs(drop) / Math.max(tb2, 1e-6), pm.zfin]);
   pts.push([xmax, pts[pts.length - 1][1]]);
   return pts.filter((q, i, a) => i === 0 || Math.hypot(q[0] - a[i - 1][0], q[1] - a[i - 1][1]) > 1e-9);
@@ -201,7 +210,7 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
       else if (cmd === "margenes" || cmd === "márgenes") { const o = kv(toks.slice(1)); def.margins = { xmin: num(o.xmin ?? "0"), xmax: num(o.xmax ?? "40"), bottom: num(o.fondo ?? o.bottom ?? "-20") }; }
       else if (cmd === "interfaz" || cmd === "interface") def.interfaces.push(pts(toks.slice(1)));
       else if (cmd === "linea" || cmd === "línea" || cmd === "line" || cmd === "libre") def.lines.push(pts(toks.slice(1)));
-      else if (cmd === "talud") { const o = kv(toks.slice(1)); def.param = { xpie: num(o.xpie ?? "10"), zpie: num(o.zpie ?? "-10"), H: num(o.h ?? "6"), beta: num(o.beta ?? "33"), corona: num(o.corona ?? "8"), zfin: num(o.zfin ?? String(num(o.zpie ?? "-10") + num(o.h ?? "6"))), beta2: num(o.beta2 ?? "28.6") }; def.interfaces.unshift([]); }
+      else if (cmd === "talud") { const o = kv(toks.slice(1)); def.param = { xpie: num(o.xpie ?? "10"), zpie: num(o.zpie ?? "-10"), H: num(o.h ?? "6"), beta: num(o.beta ?? "33"), corona: num(o.corona ?? "8"), zfin: num(o.zfin ?? String(num(o.zpie ?? "-10") + num(o.h ?? "6"))), beta2: num(o.beta2 ?? "28.6"), ...(o.bermas ? { bermas: num(o.bermas), berma: num(o.berma ?? "2") } : {}) }; def.interfaces.unshift([]); }
       else if (cmd === "suelo") {
         const o = kv(toks.slice(2));
         def.soils.push({ name: toks[1], E: num(o.e ?? "0"), nu: num(o.nu ?? "0.3"), phi: num(o.phi ?? "0"), c: num(o.c ?? "0"), gamma: num(o.gamma ?? "0"), psi: num(o.psi ?? "0"), rigido: /^(1|si|sí|true|yes)$/i.test(o.rigido ?? o.rigid ?? "") || undefined, ...(o.vs ? { vs: num(o.vs) } : {}) });
@@ -276,7 +285,7 @@ export function serializeHgeo(def: SlopeDef): string {
   const p = (q: Pt) => `${r(q[0])},${r(q[1])}`;
   const L: string[] = [...def.comments];
   if (def.margins) L.push(`margenes xmin=${r(def.margins.xmin)} xmax=${r(def.margins.xmax)} fondo=${r(def.margins.bottom)}`);
-  def.interfaces.forEach((it, k) => { if (k === 0 && def.param) { const q = def.param; L.push(`talud xpie=${r(q.xpie)} zpie=${r(q.zpie)} H=${r(q.H)} beta=${r(q.beta)} corona=${r(q.corona)} zfin=${r(q.zfin)} beta2=${r(q.beta2)}`); } else L.push(`interfaz ${it.map(p).join(" ")}`); });
+  def.interfaces.forEach((it, k) => { if (k === 0 && def.param) { const q = def.param; L.push(`talud xpie=${r(q.xpie)} zpie=${r(q.zpie)} H=${r(q.H)} beta=${r(q.beta)} corona=${r(q.corona)} zfin=${r(q.zfin)} beta2=${r(q.beta2)}${q.bermas ? ` bermas=${r(q.bermas)} berma=${r(q.berma ?? 0)}` : ""}`); } else L.push(`interfaz ${it.map(p).join(" ")}`); });
   if (!def.interfaces.length && def.outline.length) L.push(`contorno ${def.outline.map(p).join(" ")}`);
   for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.vs ? ` vs=${r(s.vs)}` : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}`);
   for (const w of def.walls ?? []) L.push(`muro ${w.soil} x=${r(w.pm.x)}${Number.isFinite(w.pm.z as number) ? ` z=${r(w.pm.z as number)}` : ""} H=${r(w.pm.H)} fuste=${r(w.pm.fuste)} zapata=${r(w.pm.zapata)} talon=${r(w.pm.talon)} dedo=${r(w.pm.dedo)} emp=${r(w.pm.emp)}`);
