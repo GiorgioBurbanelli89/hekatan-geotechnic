@@ -106,7 +106,22 @@ export function loadMalla(): Malla {
   return { ...m, Fg: new Array(2 * m.X.length).fill(0), Fs: new Array(2 * m.X.length).fill(0), Fa: new Array(2 * m.X.length).fill(0) };
 }
 
-function escribirInp(m: Malla, a: number, b: number) {
+/** T6 de SUELO con un LADO en el trasdós del fuste (x = 10.40 + 0.02·(−z)/2.6, de la coronación a z = −2.60). */
+export function caraElems(m: Malla): number[] {
+  const f = new Set(m.FUSTE), out: number[] = [];
+  m.ELE.forEach((e, i) => { if (m.RIGID?.[m.EMAT[i] - 1]) return; if ([[0, 1], [1, 2], [2, 0]].some(([p, q]) => f.has(e[p]) && f.has(e[q]))) out.push(i); });
+  return out;
+}
+/** Empuje horizontal del terreno sobre el trasdós del fuste [kN/m]: Σ (∫Bᵀσ)_x de los T6 de `caraElems` en los nudos del
+ *  trasdós. POSITIVO = el terreno empuja el muro hacia −x (hacia la cara vista). Abaqus: −Σ NFORC1 (su NFORC es −∫Bᵀσ,
+ *  medido: peso propio +18.596613 aquí y Σ NFORC1 = −18.596613 allí). */
+export function empuje(fem: GeoFem, m: Malla, u: ArrayLike<number>, cara = caraElems(m)): number {
+  const F = fem.elasticNodalForces(u, cara); let h = 0;
+  for (const n of m.FUSTE) h += F[2 * n];
+  return h;
+}
+
+function escribirInp(m: Malla, a: number, b: number, job = "muro_lineal", nforc = false) {
   mkdirSync(ABQ, { recursive: true });
   const L = ["*HEADING", "Muro de Manabi LINEAL, CPE6, misma malla que Hekatan Geotechnic (kN, m, t, s)", "*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO, CONTACT=NO", "*NODE"];
   m.X.forEach((x, i) => L.push(`${i + 1}, ${x.toPrecision(15)}, ${m.Y[i].toPrecision(15)}`));
@@ -125,16 +140,22 @@ function escribirInp(m: Malla, a: number, b: number) {
   const base: number[] = [], lados: number[] = [];
   for (let i = 0; i < m.X.length; i++) { const fx = m.FIXED.includes(2 * i), fy = m.FIXED.includes(2 * i + 1); if (fx && fy) base.push(i); else if (fy) lados.push(i); }
   nset("BASE", base); nset("LADOS", lados);
-  nset("MIRA", Object.values(m.WATCH));
+  nset("MIRA", Object.values(m.WATCH)); nset("TRASDOS", m.FUSTE);
+  const cara = caraElems(m); L.push("*ELSET, ELSET=CARA"); for (let k = 0; k < cara.length; k += 16) L.push(cara.slice(k, k + 16).map((e) => e + 1).join(", "));
   L.push("*BOUNDARY", "BASE, 1, 2", "LADOS, 2, 2");
   const acc = registro();
   L.push("*AMPLITUDE, NAME=APO1N, DEFINITION=TABULAR");
   for (let k = 0; k < acc.length; k += 8) L.push(acc.slice(k, k + 8).map((v) => v.toPrecision(10)).join(", "));
   L.push("*STEP, NAME=MODOS, PERTURBATION", "*FREQUENCY, EIGENSOLVER=LANCZOS, NORMALIZATION=MASS", "5,", "*OUTPUT, FIELD, VARIABLE=PRESELECT", "*END STEP");
   L.push("*STEP, NAME=SISMO, INC=100000", "*DYNAMIC, ALPHA=0, DIRECT", `${DT}, ${T1 - T0}`, "*DLOAD, AMPLITUDE=APO1N", "TODO, GRAV, 1., -1., 0., 0.",
-    "*OUTPUT, FIELD, FREQUENCY=100", "*NODE OUTPUT", "U,", "*OUTPUT, HISTORY, FREQUENCY=1", "*NODE OUTPUT, NSET=MIRA", "U1, U2, A1", "*END STEP");
-  writeFileSync(join(ABQ, "muro_lineal.inp"), L.join("\r\n") + "\r\n");
-  console.log(`.inp → ${join(ABQ, "muro_lineal.inp")} (${m.X.length} nudos, ${m.ELE.length} CPE6, ${acc.length / 2} puntos del registro)`);
+    "*OUTPUT, FIELD, FREQUENCY=100", "*NODE OUTPUT", "U,", ...(nforc ? ["*OUTPUT, FIELD, FREQUENCY=1", "*ELEMENT OUTPUT, ELSET=CARA, DIRECTIONS=NO", "NFORC,"] : []),
+    "*OUTPUT, HISTORY, FREQUENCY=1", "*NODE OUTPUT, NSET=MIRA", "U1, U2, A1", "*END STEP");
+  writeFileSync(join(ABQ, `${job}.inp`), L.join("\r\n") + "\r\n");
+  // estático de PESO PROPIO (el estado antes del sismo): mismos materiales y apoyos, NFORC de la cara
+  const P = L.slice(0, L.indexOf("*AMPLITUDE, NAME=APO1N, DEFINITION=TABULAR"));
+  P.push("*STEP, NAME=PESO", "*STATIC", "*DLOAD", `TODO, GRAV, ${G0}, 0., -1., 0.`, "*OUTPUT, FIELD", "*NODE OUTPUT", "U,", "*ELEMENT OUTPUT, ELSET=CARA, DIRECTIONS=NO", "NFORC,", "*END STEP");
+  writeFileSync(join(ABQ, "muro_peso.inp"), P.join("\r\n") + "\r\n");
+  console.log(`.inp → ${join(ABQ, `${job}.inp`)} y muro_peso.inp (${m.X.length} nudos, ${m.ELE.length} CPE6, ${acc.length / 2} puntos del registro, CARA ${cara.length} T6)`);
 }
 
 /** Corre masa → modos → respuesta con Geotechnic (TS). Devuelve lo que se compara. */
@@ -145,7 +166,18 @@ export function correr(m = loadMalla(), log = (l: string) => console.log(l)) {
   const [a, b] = rayleighCoef(0.05, md.omega[0], md.omega[2]);
   const acc = registro();
   const W = Object.values(m.WATCH);
-  const dyn = fem.dynamic({ dt: DT, tEnd: T1 - T0, accel: acc, watch: W, rayleigh: [a, b] });
+  // empuje antes del sismo: estático LINEAL de peso propio (u = K⁻¹·Fg, gravedad N·γ·detJ·w del solver)
+  const cara = caraElems(m);
+  const uPeso = fem.elasticSolve(fem.Fg2), E0 = empuje(fem, m, uPeso, cara);
+  // Ed: σ = De·B·u (la tensión elástica). EdC: σ + tensión viscosa del Rayleigh de RIGIDEZ, De·B·(u + b·v): es lo que
+  // Abaqus mete en NFORC con *DAMPING BETA (medido: con Ed la historia difiere 0.78 kN/m; con EdC cuadra).
+  const Ed = new Float64Array(Math.round((T1 - T0) / DT) + 1), EdC = new Float64Array(Ed.length);
+  const w = new Float64Array(2 * m.X.length);
+  const dyn = fem.dynamic({ dt: DT, tEnd: T1 - T0, accel: acc, watch: W, rayleigh: [a, b], onStep: (s, _t, u, v) => {
+    Ed[s] = empuje(fem, m, u, cara);
+    for (let i = 0; i < w.length; i++) w[i] = u[i] + b * v[i];
+    EdC[s] = empuje(fem, m, w, cara);
+  } });
   const ag = (s: number) => acc[2 * s + 1];
   const res: Record<string, unknown> = {
     nudos: m.X.length, T6: m.ELE.length, gdl: fem.nfree, banda: fem.band, masa_total: md.massTotal, f: md.f, T: md.f.map((f) => 1 / f), mefx: md.mefx,
@@ -159,6 +191,12 @@ export function correr(m = loadMalla(), log = (l: string) => console.log(l)) {
     hist[k] = { ux: Array.from(h.ux), ax: Array.from(h.ax), ux_max: h.ux[iu], t_ux: dyn.t[iu], aabs_max: aabs[ia], t_aabs: dyn.t[ia] };
   });
   res.hist = hist;
+  // empuje total = peso (estático) + incremento sísmico (lineal: se suman). El «peor» = el de mayor |total|.
+  let ie = 0; for (let s = 0; s < Ed.length; s++) if (Math.abs(E0 + Ed[s]) > Math.abs(E0 + Ed[ie])) ie = s;
+  let ic = 0; for (let s = 0; s < EdC.length; s++) if (Math.abs(E0 + EdC[s]) > Math.abs(E0 + EdC[ic])) ic = s;
+  res.empuje = { cara_T6: cara.length, nudos_trasdos: m.FUSTE.length, peso: E0, dinamico: Array.from(Ed), total_max: E0 + Ed[ie], t_max: ie * DT,
+    dinamico_con_viscosa: Array.from(EdC), total_max_con_viscosa: E0 + EdC[ic], t_max_con_viscosa: ic * DT };
+  log(`  empuje sobre el trasdós del fuste: peso ${E0.toFixed(4)} kN/m · máximo ${(E0 + Ed[ie]).toFixed(4)} kN/m en t = ${(ie * DT).toFixed(2)} s (incremento sísmico ${Ed[ie].toFixed(4)})`);
   log(`Geotechnic: ${m.X.length} nudos, ${m.ELE.length} T6, ${fem.nfree} gdl, banda ${fem.band} · masa ${md.massTotal.toFixed(4)} t · f ${md.f.map((f) => f.toFixed(4)).join(" / ")} Hz · T1 ${(1 / md.f[0]).toFixed(4)} s · ${(res.segundos as number).toFixed(1)} s`);
   for (const [k, h] of Object.entries(hist)) log(`  ${k.padEnd(12)} u_x máx ${(h.ux_max * 1e3).toFixed(4)} mm (t ${h.t_ux.toFixed(2)} s) · a abs máx ${(h.aabs_max / G0).toFixed(4)} g (t ${h.t_aabs.toFixed(2)} s)`);
   return res;
@@ -167,7 +205,10 @@ export function correr(m = loadMalla(), log = (l: string) => console.log(l)) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const que = process.argv[2] ?? "correr";
   if (que === "generar") generar();
-  else {
+  else if (que === "inp") {   // .inp desde la malla GUARDADA (sin remallar), con NFORC de la cara: job muro_empuje + muro_peso
+    const m = loadMalla(), md = new GeoFem(m, () => {}).modes(3), [a, b] = rayleighCoef(0.05, md.omega[0], md.omega[2]);
+    escribirInp(m, a, b, "muro_empuje", true);
+  } else {
     const r = correr();
     writeFileSync(join(AQUI, "muro_din_ts.json"), JSON.stringify(r));
     if (existsSync(join(DATOS, "muro_din_abaqus.json"))) console.log("comparación: npx tsx tests/dinamico_muro.ts");

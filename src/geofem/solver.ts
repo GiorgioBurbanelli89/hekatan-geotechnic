@@ -45,6 +45,11 @@ export type DynOptions = {
   rayleigh?: [number, number];   // C = a·M + b·K elástica (apagado por defecto); actúa sobre la velocidad RELATIVA a la base, como Abaqus con GRAV y base fija
   g?: number;                // ρ = γ/g (por defecto 9.80665)
   watch?: number[];          // nudos cuya historia u_x, u_y se guarda
+  // TENSIONES (misma recuperación σ = De·B·u por punto de Gauss que el estático: elasticStress). u es el RELATIVO a la base,
+  // así que son las tensiones del INCREMENTO sísmico; las de peso propio se suman aparte (estático lineal).
+  stressAt?: number[];       // pasos (0…nst) en los que se guarda σ en todos los puntos de Gauss
+  stressEnvelope?: boolean;  // máximo |σ| por componente y punto de Gauss en toda la historia
+  onStep?: (s: number, t: number, u: Float64Array, v: Float64Array) => void;   // u y v (velocidad relativa) en gdl COMPLETOS en cada paso
 };
 
 export type DynResult = {
@@ -54,6 +59,8 @@ export type DynResult = {
   u: Float64Array;           // u relativo (a la base) al final
   umaxAbs: Float64Array;     // envolvente |u| por gdl
   seconds: number;
+  stress?: Map<number, Float64Array>;   // paso → σ (ngp·4: xx yy zz xy), de `stressAt`
+  stressMax?: Float64Array;             // envolvente max|σ| (ngp·4), de `stressEnvelope`
 };
 
 export type ModesResult = {
@@ -538,7 +545,19 @@ export class GeoFem {
         h.ux[s] = kx >= 0 ? u[kx] : 0; h.uy[s] = ky >= 0 ? u[ky] : 0; h.ax[s] = kx >= 0 ? a[kx] : 0; h.ay[s] = ky >= 0 ? a[ky] : 0;
       }
       for (let d = 0; d < this.ndof; d++) { const k = this.map[d]; if (k >= 0 && Math.abs(u[k]) > umaxAbs[d]) umaxAbs[d] = Math.abs(u[k]); }
+      const quiere = stressSet.has(s) || !!stressMax || !!o.onStep;
+      if (!quiere) return;
+      this.scatter(u, uf);
+      if (o.onStep) { this.scatter(v, vf); o.onStep(s, s * dt, uf, vf); }
+      if (stressSet.has(s) || stressMax) {
+        const sg = this.elasticStress(uf);
+        if (stressSet.has(s)) stress.set(s, sg);
+        if (stressMax) for (let i = 0; i < sg.length; i++) if (Math.abs(sg[i]) > stressMax[i]) stressMax[i] = Math.abs(sg[i]);
+      }
     };
+    const stressSet = new Set(o.stressAt ?? []), stress = new Map<number, Float64Array>();
+    const stressMax = o.stressEnvelope ? new Float64Array(this.ne * NG * 4) : undefined;
+    const uf = new Float64Array(this.ndof), vf = new Float64Array(this.ndof);
     rec(0);
     let Fprev = ag0;
     for (let s = 1; s <= nst; s++) {
@@ -563,7 +582,51 @@ export class GeoFem {
     }
     const sec = (performance.now() - t0) / 1000;
     this.log(`DINÁMICO lineal: Newmark β=${beta} γ=${gamma} α=${alpha}, Δt=${dt} s, ${nst} pasos, b1..b6 = ${[b1, b2, b3, b4, b5, b6].map((x) => +x.toPrecision(12)).join(" ")} [${sec.toFixed(2)} s]`);
-    return { t: tt, coef: { b1, b2, b3, b4, b5, b6, beta, gamma, alpha }, hist: watch, u: this.scatter(u), umaxAbs, seconds: sec };
+    return { t: tt, coef: { b1, b2, b3, b4, b5, b6, beta, gamma, alpha }, hist: watch, u: this.scatter(u), umaxAbs, seconds: sec,
+      ...(stressSet.size ? { stress } : {}), ...(stressMax ? { stressMax } : {}) };
+  }
+
+  /** σ ELÁSTICA por punto de Gauss (ngp·4: xx yy zz xy) para u en gdl completos: σ = De·B·u con las MISMAS B y De que el
+   *  estático (es el retorno de assembleInc cuando no hay plasticidad, desde σ₀ = 0). */
+  elasticStress(u: ArrayLike<number>): Float64Array {
+    const out = new Float64Array(this.ne * NG * 4), deps = new Float64Array(4);
+    for (let e = 0; e < this.ne; e++) {
+      const De = this.D4[this.EMAT[e]];
+      for (let q = 0; q < NG; q++) {
+        const kk = e * NG + q, B = this.Bc.subarray(kk * 36, kk * 36 + 36);
+        let e0 = 0, e1 = 0, e2 = 0;
+        for (let c = 0; c < 12; c++) { const v = u[this.edof[e * 12 + c]]; e0 += B[c] * v; e1 += B[12 + c] * v; e2 += B[24 + c] * v; }
+        deps[0] = e0; deps[1] = e1; deps[2] = 0; deps[3] = e2;
+        for (let i = 0; i < 4; i++) { let s = 0; for (let j = 0; j < 4; j++) s += De[i * 4 + j] * deps[j]; out[kk * 4 + i] = s; }
+      }
+    }
+    return out;
+  }
+
+  /** Fuerzas nodales internas ∫Bᵀσ dA (gdl completos) de los elementos `elems` para u (σ = elasticStress). Es lo que Abaqus
+   *  llama NFORC sumado sobre esos elementos. */
+  elasticNodalForces(u: ArrayLike<number>, elems: number[]): Float64Array {
+    const F = new Float64Array(this.ndof), deps = new Float64Array(4), sg = new Float64Array(4);
+    for (const e of elems) {
+      const De = this.D4[this.EMAT[e]];
+      for (let q = 0; q < NG; q++) {
+        const kk = e * NG + q, B = this.Bc.subarray(kk * 36, kk * 36 + 36);
+        let e0 = 0, e1 = 0, e2 = 0;
+        for (let c = 0; c < 12; c++) { const v = u[this.edof[e * 12 + c]]; e0 += B[c] * v; e1 += B[12 + c] * v; e2 += B[24 + c] * v; }
+        deps[0] = e0; deps[1] = e1; deps[2] = 0; deps[3] = e2;
+        for (let i = 0; i < 4; i++) { let s = 0; for (let j = 0; j < 4; j++) s += De[i * 4 + j] * deps[j]; sg[i] = s; }
+        const w = this.dJw[kk];
+        for (let c = 0; c < 12; c++) F[this.edof[e * 12 + c]] += (B[c] * sg[0] + B[12 + c] * sg[1] + B[24 + c] * sg[3]) * w;
+      }
+    }
+    return F;
+  }
+
+  /** u = K_el⁻¹·F (lineal elástico, gdl completos; respeta fijos y ataduras). */
+  elasticSolve(F: ArrayLike<number>): Float64Array {
+    const rhs = new Float64Array(this.nfree), x = new Float64Array(this.nfree);
+    this.gather(F, null, rhs); bandSolve(this.Kel, rhs, x);
+    return this.scatter(x);
   }
 
   setLog(log: Log): void { this.log = log; }
