@@ -11,7 +11,7 @@
 //   - 3 normas num/max(den,1) (desplazamiento ABSOLUTO en m, fuerza, energía con el residuo NUEVO);
 //   - divergencia tras DOS subidas seguidas de |gi| o ‖R‖/‖F‖ > 250;
 //   - escalera SRM: paso 0.90, relajación /2 (máx 3), tope 0.99, SRF EXACTO (sin round).
-import { BandMatrix, bandAdd, bandClear, bandCreate, bandFactor, bandSolve, reverseCuthillMcKee } from "./band";
+import { BandMatrix, bandAdd, bandClear, bandCreate, bandFactor, bandMul, bandSolve, reverseCuthillMcKee } from "./band";
 
 export type GeoModel = {
   name?: string;
@@ -25,7 +25,40 @@ export type GeoModel = {
   loads?: Record<string, number[]>;   // vectores de carga con nombre (del mallador: L1, L2, …)
   MATNAMES?: string[];       // nombres de los suelos (rótulos del visor)
   RIGID?: boolean[];         // material RÍGIDO (muro de hormigón = «Rigid body» de GEO5): región elástica, la SRM no lo reduce
+  // ATADURAS [gdl esclavo, gdl maestro]: u_esclavo = u_maestro, por ELIMINACIÓN (el esclavo comparte la fila del maestro).
+  // Hoy solo las respetan modes() y dynamic(); la SRM (nrstep/srm) no reparte u al esclavo (pendiente).
+  TIES?: number[][];
   stages: { name: string; loads: string[]; geo5?: number }[];
+};
+
+/** Opciones del análisis dinámico LINEAL (Newmark / HHT-α de FRGeoFEM). Unidades kN, m, t, s. */
+export type DynOptions = {
+  dt: number;                // paso fijo (s)
+  tEnd: number;              // duración (s)
+  accel: ((t: number) => number) | number[];   // a_g(t) en m/s² (función, o pares [t0,a0,t1,a1,…] como el `history` de GEO5, interpolación lineal)
+  dir?: "x" | "y";           // dirección de la aceleración de la base (por defecto x)
+  beta?: number; gamma?: number;   // Newmark (por defecto ¼ y ½, aceleración media); con alpha≠0 y sin β,γ: β=(1−α)²/4, γ=(1−2α)/2 (manual GEO5 17.105-17.106)
+  alpha?: number;            // HHT-α ∈ [−⅓, 0] (0 = Newmark)
+  rayleigh?: [number, number];   // C = a·M + b·K (apagado por defecto)
+  g?: number;                // ρ = γ/g (por defecto 9.80665)
+  watch?: number[];          // nudos cuya historia u_x, u_y se guarda
+};
+
+export type DynResult = {
+  t: Float64Array;
+  coef: { b1: number; b2: number; b3: number; b4: number; b5: number; b6: number; beta: number; gamma: number; alpha: number };
+  hist: { node: number; ux: Float64Array; uy: Float64Array }[];
+  u: Float64Array;           // u relativo (a la base) al final
+  umaxAbs: Float64Array;     // envolvente |u| por gdl
+  seconds: number;
+};
+
+export type ModesResult = {
+  f: number[]; omega: number[];
+  phi: Float64Array[];       // formas (gdl completos), normalizadas a M (φᵀMφ = 1)
+  mefx: number[]; mefy: number[];   // masa efectiva con la fila COMPLETA de M·1 (incluye el acoplamiento con los apoyos, como Abaqus)
+  massTotal: number;         // Σ ρ·área (todos los nudos, también los fijos)
+  iterations: number;
 };
 
 export type StageResult = {
@@ -59,6 +92,7 @@ function t6(L1: number, L2: number): [number[], number[], number[]] {
 }
 
 const ONE = [1, 1, 1, 0];
+const NSH = GP.map(([a, b]) => t6(a, b)[0]);     // funciones de forma en los 7 puntos (masa consistente)
 
 function norm(v: Float64Array): number { let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * v[i]; return Math.sqrt(s); }
 function dot(a: Float64Array, b: Float64Array): number { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
@@ -93,13 +127,18 @@ export class GeoFem {
     this.rigid = m.RIGID ?? (m.MATNAMES ?? []).map((n) => /muro|hormig|concret|wall/i.test(n));   // Rigid body: región elástica que la SRM no reduce
     const nn = (this.nn = m.X.length), ne = (this.ne = m.ELE.length), ndof = (this.ndof = 2 * nn);
     const fixed = new Uint8Array(ndof); for (const d of m.FIXED) fixed[d] = 1;
+    const slave = new Uint8Array(ndof); for (const [s] of m.TIES ?? []) slave[s] = 1;   // atadura: el esclavo no tiene fila propia
     // renumeración RCM para la banda
     const perm = reverseCuthillMcKee(nn, m.ELE);
     const order: number[] = [];                       // gdl libres en orden RCM
     const byPos = new Int32Array(nn); for (let i = 0; i < nn; i++) byPos[perm[i]] = i;
-    for (let p = 0; p < nn; p++) { const i = byPos[p]; if (!fixed[2 * i]) order.push(2 * i); if (!fixed[2 * i + 1]) order.push(2 * i + 1); }
+    for (let p = 0; p < nn; p++) { const i = byPos[p]; for (const d of [2 * i, 2 * i + 1]) if (!fixed[d] && !slave[d]) order.push(d); }
     this.free = Int32Array.from(order); this.nfree = order.length;
     this.map = new Int32Array(ndof).fill(-1); for (let k = 0; k < order.length; k++) this.map[order[k]] = k;
+    for (const [s, ms] of m.TIES ?? []) {
+      if (fixed[s] || this.map[ms] < 0) throw new Error(`atadura ${s}→${ms}: el esclavo no puede estar fijo y el maestro tiene que ser libre`);
+      this.map[s] = this.map[ms];
+    }
     let n1 = 0, n2 = 0; for (let e = 0; e < ne; e++) if (m.EMAT[e] === 1) n1++; else n2++;
     log(`MALLA GEO5: ${nn} nodos, ${ne} T6 (SOIL_1=${n1}, SOIL_2=${n2}), ${m.FIXED.length} gdl fijos`);
     for (let mm = 0; mm < m.MAT.length; mm++) {
@@ -374,6 +413,146 @@ export class GeoFem {
     return { fs, prog, ulo, uel, steps, u1, sig1, epl1, eps1 };
   }
 
+  // =====================================================================================================
+  // DINÁMICO LINEAL (paso 1 del plan: suelo ELÁSTICO). Lo del binario de GEO5 (FRGeoFEM.exe 2024):
+  //   masa CONSISTENTE Me = ρ·NᵀN·detJ·w (FUN_005836e0; la diagonal aborta en GEO5), ρ = γ/g;
+  //   Newmark b1…b6 (part_001.c:60956-60968, c = 0.5 del .rdata), HHT (1+α), v₁ = v + Δt[(1−γ)a + γa₁].
+  // Validado contra Abaqus/Standard (CPE6, misma malla nudo a nudo): tests/dinamico_columna.ts.
+  // =====================================================================================================
+
+  /** Masa consistente en banda (mismo `map` que K, así respeta fijos y ataduras) y la fila completa de M·1
+   *  en x e y (Σ_b M_ab, también con los gdl fijos: es la carga −M·1·a_g del movimiento de la base). */
+  massMatrix(g = 9.80665): { M: BandMatrix; m1x: Float64Array; m1y: Float64Array; massTotal: number } {
+    const M = bandCreate(this.nfree, this.band);
+    const m1x = new Float64Array(this.nfree), m1y = new Float64Array(this.nfree);
+    const Me = new Float64Array(36);
+    let massTotal = 0;
+    for (let e = 0; e < this.ne; e++) {
+      const rho = this.MAT[this.EMAT[e] - 1][4] / g;
+      Me.fill(0);
+      for (let q = 0; q < NG; q++) {
+        const N = NSH[q], w = rho * this.dJw[e * NG + q];
+        massTotal += w;
+        for (let a = 0; a < 6; a++) for (let b = 0; b < 6; b++) Me[a * 6 + b] += N[a] * N[b] * w;
+      }
+      const nd = this.ELE[e];
+      for (let a = 0; a < 6; a++) {
+        let row = 0; for (let b = 0; b < 6; b++) row += Me[a * 6 + b];
+        for (let c = 0; c < 2; c++) {
+          const ia = this.map[2 * nd[a] + c]; if (ia < 0) continue;
+          if (c === 0) m1x[ia] += row; else m1y[ia] += row;
+          for (let b = 0; b < 6; b++) { const ib = this.map[2 * nd[b] + c]; if (ib >= 0) bandAdd(M, ia, ib, Me[a * 6 + b]); }
+        }
+      }
+    }
+    return { M, m1x, m1y, massTotal };
+  }
+
+  /** Reparte un vector de gdl libres a los gdl completos (fijos = 0, esclavo = su maestro). */
+  private scatter(x: Float64Array, out = new Float64Array(this.ndof)): Float64Array {
+    for (let d = 0; d < this.ndof; d++) { const k = this.map[d]; out[d] = k >= 0 ? x[k] : 0; }
+    return out;
+  }
+
+  /** Primeros `nmodes` modos de K·φ = ω²·M·φ por ITERACIÓN EN SUBESPACIO (Bathe 11.6; GEO5 usa también
+   *  subespacio + Jacobi, eigenvalue_ssi_jacobi.cpp). Usa la K elástica ya factorizada (Kel). */
+  modes(nmodes = 3, g = 9.80665, tol = 1e-12, maxit = 200): ModesResult {
+    const n = this.nfree, p = Math.min(nmodes, n), q = Math.min(n, Math.max(2 * p, p + 8));
+    const { M, m1x, m1y, massTotal } = this.massMatrix(g);
+    const K = bandCreate(n, this.band); this.assembleK(K, true);
+    // vectores de arranque: M·1x, M·1y y pseudoaleatorios deterministas
+    let X: Float64Array[] = [];
+    X.push(Float64Array.from(m1x)); X.push(Float64Array.from(m1y));
+    let seed = 12345; const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648) - 0.5;
+    while (X.length < q) X.push(Float64Array.from({ length: n }, rnd));
+    let lam: Float64Array = new Float64Array(q), it = 0;
+    const Y = X.map(() => new Float64Array(n)), Z = X.map(() => new Float64Array(n));
+    for (it = 1; it <= maxit; it++) {
+      for (let j = 0; j < q; j++) { bandMul(M, X[j], Y[j]); bandSolve(this.Kel, Y[j], Z[j]); }   // Z = K⁻¹·M·X
+      // proyección: Kq = Zᵀ K Z = Zᵀ(M X) ; Mq = Zᵀ M Z
+      const MZ = Z.map((z) => { const t = new Float64Array(n); bandMul(M, z, t); return t; });
+      const Kq = new Float64Array(q * q), Mq = new Float64Array(q * q);
+      for (let i = 0; i < q; i++) for (let j = 0; j < q; j++) { Kq[i * q + j] = dot(Z[i], Y[j]); Mq[i * q + j] = dot(Z[i], MZ[j]); }
+      for (let i = 0; i < q; i++) for (let j = 0; j < i; j++) { const a = (Kq[i * q + j] + Kq[j * q + i]) / 2; Kq[i * q + j] = Kq[j * q + i] = a; }
+      const [ev, Q] = genEigSym(Kq, Mq, q);
+      X = Array.from({ length: q }, (_, j) => { const x = new Float64Array(n); for (let i = 0; i < q; i++) { const c = Q[i * q + j]; for (let k = 0; k < n; k++) x[k] += c * Z[i][k]; } return x; });
+      let err = 0; for (let j = 0; j < p; j++) err = Math.max(err, Math.abs(ev[j] - lam[j]) / Math.abs(ev[j]));
+      lam = ev;
+      if (err < tol) break;
+    }
+    const f: number[] = [], omega: number[] = [], phi: Float64Array[] = [], mefx: number[] = [], mefy: number[] = [];
+    const t = new Float64Array(n);
+    for (let j = 0; j < p; j++) {
+      bandMul(M, X[j], t); const gm = dot(X[j], t), s = 1 / Math.sqrt(gm);
+      for (let k = 0; k < n; k++) X[j][k] *= s;
+      omega.push(Math.sqrt(lam[j])); f.push(Math.sqrt(lam[j]) / (2 * Math.PI));
+      mefx.push(dot(X[j], m1x) ** 2); mefy.push(dot(X[j], m1y) ** 2);
+      phi.push(this.scatter(X[j]));
+    }
+    this.log(`MODOS (subespacio, ${q} vectores, ${it} iteraciones): ` + f.map((x, j) => `f${j + 1}=${x.toFixed(6)} Hz`).join("  ") + `  | masa total ${massTotal.toFixed(6)} t`);
+    return { f, omega, phi, mefx, mefy, massTotal, iterations: it };
+  }
+
+  /** Respuesta en el tiempo, LINEAL, al movimiento de la base: M·ü + C·u̇ + K·u = −(M·1)·a_g(t), u relativo a la base.
+   *  K_ef = b1·M + (1+α)(b4·C + K), factorizada UNA vez (suelo elástico: constante). Arranca en reposo. */
+  dynamic(o: DynOptions): DynResult {
+    const t0 = performance.now();
+    const alpha = o.alpha ?? 0;
+    const beta = o.beta ?? (alpha !== 0 ? (1 - alpha) ** 2 / 4 : 0.25), gamma = o.gamma ?? (alpha !== 0 ? (1 - 2 * alpha) / 2 : 0.5);
+    const dt = o.dt, c = 0.5;                                  // c = DAT_00613ff8 (0.5, .rdata de FRGeoFEM.exe)
+    const b1 = 1 / beta / dt / dt, b2 = 1 / beta / dt, b3 = (1 - 2 * beta) * c / beta;
+    const b4 = gamma / beta / dt, b5 = gamma / beta - 1, b6 = (gamma - 2 * beta) * c / beta * dt;
+    const n = this.nfree;
+    const { M, m1x, m1y } = this.massMatrix(o.g);
+    const r = o.dir === "y" ? m1y : m1x;
+    const K = bandCreate(n, this.band); this.assembleK(K, true);
+    const [ra, rb] = o.rayleigh ?? [0, 0], hasC = ra !== 0 || rb !== 0;
+    const C = bandCreate(n, this.band);
+    if (hasC) for (let k = 0; k < C.a.length; k++) C.a[k] = ra * M.a[k] + rb * K.a[k];
+    const Kef = bandCreate(n, this.band);
+    for (let k = 0; k < Kef.a.length; k++) Kef.a[k] = b1 * M.a[k] + (1 + alpha) * (b4 * C.a[k] + K.a[k]);
+    if (!bandFactor(Kef)) throw new Error("K efectiva singular");
+    const ag = typeof o.accel === "function" ? o.accel : historyFn(o.accel);
+    const nst = Math.round(o.tEnd / dt);
+    let u = new Float64Array(n), v = new Float64Array(n), a = new Float64Array(n);
+    const R = new Float64Array(n), w1 = new Float64Array(n), w2 = new Float64Array(n), u1 = new Float64Array(n);
+    // a0 = M⁻¹(F0 − C v0 − K u0) = M⁻¹·(−M·1·a_g(0)) → −1·a_g(0) en los gdl de la dirección (0 si a_g(0) = 0)
+    const ag0 = ag(0);
+    if (ag0 !== 0) { const Mf = bandCreate(n, this.band); Mf.a.set(M.a); bandFactor(Mf); for (let k = 0; k < n; k++) w1[k] = -r[k] * ag0; bandSolve(Mf, w1, a); }
+    const watch = (o.watch ?? []).map((node) => ({ node, ux: new Float64Array(nst + 1), uy: new Float64Array(nst + 1) }));
+    const tt = new Float64Array(nst + 1), umaxAbs = new Float64Array(this.ndof);
+    const rec = (s: number) => {
+      tt[s] = s * dt;
+      for (const h of watch) { const kx = this.map[2 * h.node], ky = this.map[2 * h.node + 1]; h.ux[s] = kx >= 0 ? u[kx] : 0; h.uy[s] = ky >= 0 ? u[ky] : 0; }
+      for (let d = 0; d < this.ndof; d++) { const k = this.map[d]; if (k >= 0 && Math.abs(u[k]) > umaxAbs[d]) umaxAbs[d] = Math.abs(u[k]); }
+    };
+    rec(0);
+    let Fprev = ag0;
+    for (let s = 1; s <= nst; s++) {
+      const agN = ag(s * dt);
+      // R = (1+α)F₁ − αF₀ + α(C v + K u) + M(b1 u + b2 v + b3 a) + (1+α)C(b4 u + b5 v + b6 a)
+      for (let k = 0; k < n; k++) w1[k] = b1 * u[k] + b2 * v[k] + b3 * a[k];
+      bandMul(M, w1, R);
+      for (let k = 0; k < n; k++) R[k] += -r[k] * ((1 + alpha) * agN - alpha * Fprev);
+      if (hasC) {
+        for (let k = 0; k < n; k++) w1[k] = (1 + alpha) * (b4 * u[k] + b5 * v[k] + b6 * a[k]) + alpha * v[k];
+        bandMul(C, w1, w2); for (let k = 0; k < n; k++) R[k] += w2[k];
+      }
+      if (alpha !== 0) { bandMul(K, u, w2); for (let k = 0; k < n; k++) R[k] += alpha * w2[k]; }
+      bandSolve(Kef, R, u1);
+      for (let k = 0; k < n; k++) {
+        const a1 = b1 * (u1[k] - u[k]) - b2 * v[k] - b3 * a[k];
+        v[k] += dt * ((1 - gamma) * a[k] + gamma * a1);
+        a[k] = a1;
+      }
+      u.set(u1); Fprev = agN;
+      rec(s);
+    }
+    const sec = (performance.now() - t0) / 1000;
+    this.log(`DINÁMICO lineal: Newmark β=${beta} γ=${gamma} α=${alpha}, Δt=${dt} s, ${nst} pasos, b1..b6 = ${[b1, b2, b3, b4, b5, b6].map((x) => +x.toPrecision(12)).join(" ")} [${sec.toFixed(2)} s]`);
+    return { t: tt, coef: { b1, b2, b3, b4, b5, b6, beta, gamma, alpha }, hist: watch, u: this.scatter(u), umaxAbs, seconds: sec };
+  }
+
   setLog(log: Log): void { this.log = log; }
 
   /** Corre las etapas pedidas del modelo (cada una independiente: cargas según `stages[i].loads`).
@@ -404,6 +583,57 @@ export class GeoFem {
     this.log(`TOTAL ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     return results;
   }
+}
+
+/** a_g(t) desde pares [t0,a0,t1,a1,…] (el `history` de GEO5), interpolación lineal; 0 fuera del registro. */
+function historyFn(h: number[]): (t: number) => number {
+  if (h.length % 2) throw new Error("acelerograma: solo número par de valores (pares t, a)");
+  const n = h.length / 2;
+  return (t) => {
+    if (n === 0 || t < h[0] || t > h[2 * (n - 1)]) return 0;
+    for (let i = 1; i < n; i++) if (t <= h[2 * i]) { const ta = h[2 * i - 2], tb = h[2 * i]; return tb > ta ? h[2 * i - 1] + (h[2 * i + 1] - h[2 * i - 1]) * (t - ta) / (tb - ta) : h[2 * i + 1]; }
+    return h[2 * n - 1];
+  };
+}
+
+/** Problema generalizado pequeño A·z = λ·B·z (A simétrica, B SPD): Cholesky B = LLᵀ, Jacobi cíclico sobre
+ *  L⁻¹AL⁻ᵀ. Devuelve λ ascendentes y los vectores (columnas de Q, q×q por filas). */
+function genEigSym(A: Float64Array, Bm: Float64Array, q: number): [Float64Array, Float64Array] {
+  const L = new Float64Array(q * q);
+  for (let j = 0; j < q; j++) {
+    let s = Bm[j * q + j]; for (let k = 0; k < j; k++) s -= L[j * q + k] ** 2;
+    if (!(s > 0)) throw new Error("subespacio: la masa proyectada no es definida positiva");
+    L[j * q + j] = Math.sqrt(s);
+    for (let i = j + 1; i < q; i++) { let t = Bm[i * q + j]; for (let k = 0; k < j; k++) t -= L[i * q + k] * L[j * q + k]; L[i * q + j] = t / L[j * q + j]; }
+  }
+  // Li = L⁻¹ (triangular inferior)
+  const Li = new Float64Array(q * q);
+  for (let j = 0; j < q; j++) { Li[j * q + j] = 1 / L[j * q + j]; for (let i = j + 1; i < q; i++) { let s = 0; for (let k = j; k < i; k++) s -= L[i * q + k] * Li[k * q + j]; Li[i * q + j] = s / L[i * q + i]; } }
+  // S = Li·A·Liᵀ
+  const T = new Float64Array(q * q), S = new Float64Array(q * q);
+  for (let i = 0; i < q; i++) for (let j = 0; j < q; j++) { let s = 0; for (let k = 0; k < q; k++) s += Li[i * q + k] * A[k * q + j]; T[i * q + j] = s; }
+  for (let i = 0; i < q; i++) for (let j = 0; j < q; j++) { let s = 0; for (let k = 0; k < q; k++) s += T[i * q + k] * Li[j * q + k]; S[i * q + j] = s; }
+  const V = new Float64Array(q * q); for (let i = 0; i < q; i++) V[i * q + i] = 1;
+  for (let sweep = 0; sweep < 100; sweep++) {
+    let off = 0, dia = 0;
+    for (let i = 0; i < q; i++) for (let j = 0; j < q; j++) if (i !== j) off += S[i * q + j] ** 2; else dia += S[i * q + j] ** 2;
+    if (off <= 1e-30 * dia) break;
+    for (let p = 0; p < q - 1; p++) for (let r = p + 1; r < q; r++) {
+      const apr = S[p * q + r]; if (Math.abs(apr) < 1e-300) continue;
+      const th = (S[r * q + r] - S[p * q + p]) / (2 * apr);
+      const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)), cs = 1 / Math.sqrt(t * t + 1), sn = t * cs;
+      for (let k = 0; k < q; k++) { const skp = S[k * q + p], skr = S[k * q + r]; S[k * q + p] = cs * skp - sn * skr; S[k * q + r] = sn * skp + cs * skr; }
+      for (let k = 0; k < q; k++) { const spk = S[p * q + k], srk = S[r * q + k]; S[p * q + k] = cs * spk - sn * srk; S[r * q + k] = sn * spk + cs * srk; }
+      for (let k = 0; k < q; k++) { const vkp = V[k * q + p], vkr = V[k * q + r]; V[k * q + p] = cs * vkp - sn * vkr; V[k * q + r] = sn * vkp + cs * vkr; }
+    }
+  }
+  const idx = Array.from({ length: q }, (_, i) => i).sort((a, b) => S[a * q + a] - S[b * q + b]);
+  const ev = new Float64Array(q), Q = new Float64Array(q * q);
+  for (let jj = 0; jj < q; jj++) {
+    const j = idx[jj]; ev[jj] = S[j * q + j];
+    for (let i = 0; i < q; i++) { let s = 0; for (let k = 0; k < q; k++) s += Li[k * q + i] * V[k * q + j]; Q[i * q + jj] = s; }   // z = L⁻ᵀ·v
+  }
+  return [ev, Q];
 }
 
 /** inversa 4x4 (Gauss-Jordan con pivote parcial), para Dinv = De⁻¹ */

@@ -95,3 +95,8 @@ node tests/check_muro.mjs                                  # el muro dibujado co
 node tests/check_muro_panel.mjs                            # el panel de verificacion + los solidos, en el navegador
 ```
 Verificación: `cmp_iterlogs_key.py matlab_exact_3et.log tests/out/demo04_ts.log` → 142/142 iteraciones a 0.0e+00.
+
+Dinámico LINEAL (`GeoFem.modes()`, `GeoFem.dynamic()`: masa consistente, subespacio, Newmark/HHT con los b1…b6 de FRGeoFEM):
+`npm test` corre también `tests/dinamico_columna.ts` (columna de suelo a cortante, 48 T6) contra Abaqus/Standard CPE6
+con la misma malla (`tests/datos/columna_abaqus.json`) y la referencia `tools/dinamico/columna_ref.py`: masa, 3 frecuencias,
+masa efectiva y u_x(t) de la coronación a 4 decimales. El espejo C++/WASM aún no tiene el dinámico.

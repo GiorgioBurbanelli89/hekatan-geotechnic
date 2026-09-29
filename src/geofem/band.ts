@@ -63,6 +63,18 @@ export function bandSolve(M: BandMatrix, rhs: Float64Array, x: Float64Array): vo
   }
 }
 
+/** y = A·x con la matriz SIN factorizar (masa, amortiguamiento, rigidez para el análisis dinámico). */
+export function bandMul(M: BandMatrix, x: Float64Array, y: Float64Array): void {
+  const { n, b, w, a } = M;
+  for (let i = 0; i < n; i++) {
+    const rowI = i * w + (b - i);
+    const j0 = Math.max(0, i - b), j1 = Math.min(n - 1, i + b);
+    let s = 0;
+    for (let j = j0; j <= j1; j++) s += a[rowI + j] * x[j];
+    y[i] = s;
+  }
+}
+
 /** Cuthill-McKee inverso sobre la conectividad nodal de la malla (cada elemento acopla todos sus nudos). */
 export function reverseCuthillMcKee(nn: number, ELE: number[][]): Int32Array {
   const adj: Set<number>[] = Array.from({ length: nn }, () => new Set<number>());
