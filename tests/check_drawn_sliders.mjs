@@ -5,7 +5,7 @@ const puppeteer = require("puppeteer");
 const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] }); const page = await browser.newPage();
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const waitTotal = () => page.waitForFunction(() => document.getElementById("log").textContent.includes("TOTAL "), { timeout: 180000 });
-await page.goto("http://localhost:4700/", { waitUntil: "networkidle0" }); await waitTotal();
+await page.goto((process.argv[2] || "http://localhost:4700/") + "?v=" + Date.now(), { waitUntil: "networkidle0" }); await waitTotal();
 await page.select("#model", "hgeo"); await wait(300); await waitTotal();
 await page.$eval("#hgeo", (e, v) => { e.value = v; }, readFileSync("examples/talud_nuevo.hgeo", "utf-8")); await page.click("#apply"); await wait(400); await waitTotal(); await wait(300);
 const fs0 = await page.$eval("#fs", (e) => e.innerText); const ids = await page.$$eval("#gsliders input", (l) => l.map((i) => i.id));

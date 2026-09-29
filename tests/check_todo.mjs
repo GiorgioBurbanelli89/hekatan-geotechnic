@@ -23,6 +23,10 @@ const CON_ARGS = {
   "shot.mjs": (u) => [u, "tests/shots/todo_demo04"],
   "shot_hgeo.mjs": (u) => [u, "tests/shots/todo_hgeo"],
 };
+// Pruebas que ya no aplican, con su motivo (no se corren; salen en el informe como OBSOLETA)
+const OBSOLETAS = {
+  "check_param_geom.mjs": "busca el botón #gParam («parametrizar geometría»), que se quitó en 610a48e: Demo04 enseña los sliders directamente (lo cubre check_live_sliders.mjs)",
+};
 const guiones = readdirSync(AQUI).filter((f) => /^(check_(?!todo).*|shot.*)\.mjs$/.test(f)).filter((f) => !solo || f.includes(solo)).sort();
 
 function corre(f) {
@@ -39,21 +43,27 @@ function corre(f) {
 
 const filas = [];
 for (const f of guiones) {
+  if (OBSOLETAS[f]) { filas.push({ f, veredicto: "OBSOLETA", seg: 0, buenas: 0, marcas: 0, codigo: "-", malas: [OBSOLETAS[f]], texto: "" }); console.log(`${f} … OBSOLETA`); continue; }
   process.stdout.write(`${f} … `);
   const r = await corre(f);
-  const marcas = (r.texto.match(/✖|FALLA|\bFAIL\b/g) || []).length;
+  // «< 1 ✖ falla» es TEXTO DE LA APLICACIÓN (la etapa rompe: factor menor que 1), no una marca de la prueba:
+  // se cuenta aparte y no da FALLA por sí solo.
+  const sinRotura = r.texto.replace(/< 1 ✖ falla/g, "");
+  r.roturas = (r.texto.match(/< 1 ✖ falla/g) || []).length;
+  const marcas = (sinRotura.match(/✖|FALLA|\bFAIL\b/g) || []).length;
   const buenas = (r.texto.match(/✓|✔/g) || []).length;
-  const js = /errores JS:\s*\[\s*[^\]\s]/.test(r.texto) || /pageerror/i.test(r.texto);
+  const js = /(errores JS|pageerrors?):\s*(\d+\s*)?\[\s*[^\]\s]/i.test(r.texto);      // «pageerrors: 0 []» NO es un error
   r.veredicto = r.colgado ? "COLGADO" : (r.codigo !== 0 || marcas > 0 || js) ? "FALLA" : "ok";
   r.marcas = marcas; r.buenas = buenas;
   r.ultimas = r.texto.trim().split(/\r?\n/).slice(-4).map((l) => l.slice(0, 200));
-  r.malas = r.texto.split(/\r?\n/).filter((l) => /✖|FALLA|\bFAIL\b|Error|errores JS:\s*\[\s*[^\]\s]/.test(l)).slice(0, 6).map((l) => l.trim().slice(0, 220));
+  r.malas = sinRotura.split(/\r?\n/).filter((l) => /✖|FALLA|\bFAIL\b|Error|errores JS:\s*\[\s*[^\]\s]/.test(l)).slice(0, 6).map((l) => l.trim().slice(0, 220));
+  if (r.roturas) r.malas.push(`(la aplicación dice «< 1 ✖ falla» ${r.roturas} veces: etapa que rompe)`);
   filas.push(r);
   console.log(`${r.veredicto}  (${r.seg.toFixed(0)} s, ✓ ${buenas}, ✖ ${marcas}, código ${r.codigo})`);
 }
 const n = (v) => filas.filter((r) => r.veredicto === v).length;
 let md = `# Puppeteer total de Hekatan Geotechnic\n\n- dirección: ${url}\n- fecha: ${new Date().toISOString().slice(0, 16)}\n`
-  + `- pruebas: ${filas.length} · ok ${n("ok")} · FALLA ${n("FALLA")} · COLGADO ${n("COLGADO")}\n\n`
+  + `- pruebas: ${filas.length} · ok ${n("ok")} · FALLA ${n("FALLA")} · COLGADO ${n("COLGADO")} · OBSOLETA ${n("OBSOLETA")}\n\n`
   + `| prueba | veredicto | s | ✓ | ✖ | código | lo que marcó mal |\n|---|---|---|---|---|---|---|\n`;
 for (const r of filas) md += `| ${r.f} | ${r.veredicto} | ${r.seg.toFixed(0)} | ${r.buenas} | ${r.marcas} | ${r.codigo} | ${r.malas.join(" ⏎ ").replace(/\|/g, "/")} |\n`;
 mkdirSync(dirname(join(RAIZ, salida)), { recursive: true });
