@@ -374,7 +374,7 @@ export class GeoFem {
             const tr = new Float64Array(4); for (let i = 0; i < 4; i++) { let v = sigN[i]; for (let j = 0; j < 4; j++) v += De[i * 4 + j] * de[j]; tr[i] = v; }
             return GeoFem.mcReturn(tr, De, q[0], q[2], q[1], out);
           };
-          const reg = ret(deps, sig); got = reg === 1 || reg === 2;   // ápice: tangente elástica, sin ε plástica (como el D-P)
+          got = ret(deps, sig) !== 0;   // también en el ápice, tangente numérica (con la elástica la etapa 6 no convergía)
           if (got && commit) {
             Dep.set(De);
             for (const j of [0, 1, 3]) {

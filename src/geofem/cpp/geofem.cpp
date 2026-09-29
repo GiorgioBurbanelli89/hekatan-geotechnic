@@ -359,9 +359,10 @@ struct GeoFem {
             double tr[4]; for (int i = 0; i < 4; i++) { double v = sigN[i]; for (int j = 0; j < 4; j++) v += De[i * 4 + j] * de[j]; tr[i] = v; }
             return mcReturn(tr, De, q[0], q[2], q[1], out);
           };
-          // en el ÁPICE (σ hidrostática = c·cotφ, 0 en arena) la tangente es casi nula: como el Drucker-Prager de arriba,
-          // se deja la elástica (got = false) y no se suma deformación plástica en ese punto
-          { int reg = ret(deps, sig); got = reg == 1 || reg == 2; }
+          // también en el ÁPICE se usa la tangente numérica (consistente). Probado el 29-sep-2026 con la ELÁSTICA en el ápice
+          // (como el D-P del motor): la etapa 6 del muro por etapas dejaba de converger (0 % de la carga). GEO5 tiene su
+          // propia tangente de vértice (FUN_0045d760), no la elástica.
+          got = ret(deps, sig) != 0;
           if (got && commit) {
             for (int i = 0; i < 16; i++) Dep[i] = De[i];
             for (int j : {0, 1, 3}) {
