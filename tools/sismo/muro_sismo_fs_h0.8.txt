@@ -1,0 +1,25 @@
+h=0.8 peso propio: 2798 nudos, 1341 T6 · FS = 1.3160 · SRF=1 converge · 15.8 s
+    SRM rs00 paso=1.0000 SRF=1.0000 CONVERGE it=7
+    SRM rs01 paso=0.9000 SRF=1.1111 CONVERGE it=7
+    SRM rs02 paso=0.9000 SRF=1.2346 CONVERGE it=8
+    SRM rs03 paso=0.9000 SRF=1.3717 DIVERGE relax=1
+    SRM rs04 paso=0.9500 SRF=1.2995 CONVERGE it=12
+    SRM rs05 paso=0.9500 SRF=1.3679 DIVERGE relax=2
+    SRM rs06 paso=0.9750 SRF=1.3329 DIVERGE relax=3
+    SRM rs07 paso=0.9875 SRF=1.3160 CONVERGE it=10
+    SRM rs08 paso=0.9875 SRF=1.3327 DIVERGE relax=4
+h=0.8 peso + sismo kh=-0.336: 2798 nudos, 1341 T6 · FS = 1.0000 · SRF=1 NO converge · 17.5 s
+    SRM rs00 paso=1.0000 SRF=1.0000 CONVERGE it=7
+    SRM rs01 paso=0.9000 SRF=1.1111 CONVERGE it=7
+    SRM rs02 paso=0.9000 SRF=1.2346 CONVERGE it=8
+    SRM rs03 paso=0.9000 SRF=1.3717 DIVERGE relax=1
+    SRM rs04 paso=0.9500 SRF=1.2995 CONVERGE it=12
+    SRM rs05 paso=0.9500 SRF=1.3679 DIVERGE relax=2
+    SRM rs06 paso=0.9750 SRF=1.3329 DIVERGE relax=3
+    SRM rs07 paso=0.9875 SRF=1.3160 CONVERGE it=10
+    SRM rs08 paso=0.9875 SRF=1.3327 DIVERGE relax=4
+    SRM rs00 paso=1.0000 SRF=1.0000 DIVERGE it=3
+    SRM rs01 paso=0.9000 SRF=1.1111 DIVERGE relax=1
+    SRM rs02 paso=0.9500 SRF=1.0526 DIVERGE relax=2
+    SRM rs03 paso=0.9750 SRF=1.0256 DIVERGE relax=3
+    SRM rs04 paso=0.9875 SRF=1.0127 DIVERGE relax=4

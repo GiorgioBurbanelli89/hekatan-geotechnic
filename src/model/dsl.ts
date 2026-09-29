@@ -17,6 +17,9 @@
 //   malla 2.3                                tamaño de arista objetivo [m]
 //   etapa NOMBRE [geo5=1.69] [q=35 en x1,y1 -> x2,y2] [F=72 en x,y ang=-17]
 //       cada etapa AÑADE sus cargas a las de la etapa anterior (peso propio siempre está)
+//   etapa NOMBRE kh=-0.336 kv=0 [borde=1]    sismo SEUDOESTÁTICO (GEO5 FEM): fuerza de volumen (kh·γ, −kv·γ) en la región
+//   sismo kh=-0.336 kv=0 [borde=1]           lo mismo como etapa «+sismo»; kh > 0 empuja a +x; región = centro a ≥ borde
+//                                            (por defecto h) de los márgenes izquierdo, derecho y fondo
 //   # comentario
 //
 // Compatibilidad: también se aceptan `contorno x,y …` + `capa NOMBRE bajo|sobre x,y …` (forma vieja).
@@ -35,7 +38,12 @@ export type Wall = { soil: string; pm: WallParam };
 export type Layer = { soil: string; side: "bajo" | "sobre"; poly: Pt[] };
 export type Surcharge = { q: number; a: Pt; b: Pt };
 export type Anchor = { F: number; p: Pt; ang: number };
-export type StageDef = { name: string; geo5?: number; surcharges: Surcharge[]; anchors: Anchor[] };
+/** Sismo SEUDOESTÁTICO de GEO5 FEM (FRGeoFEM `pseudo_earthquake rho kh kv elements=[…]`, elem_load.cpp FUN_0057b5e0):
+ *  fuerza de volumen b = (+kh·γ, −kv·γ) en los elementos de la región. kh > 0 empuja hacia +x (derecha): el signo lo
+ *  pone el usuario. Región: todos los elementos cuyo centro dista ≥ `borde` [m] de los márgenes izquierdo, derecho y fondo
+ *  (GEO5: la región «no debe tocar los bordes»); por defecto borde = h de la malla. */
+export type Seismic = { kh: number; kv: number; borde?: number };
+export type StageDef = { name: string; geo5?: number; surcharges: Surcharge[]; anchors: Anchor[]; sismo?: Seismic };
 export type SlopeDef = {
   outline: Pt[]; soils: Soil[]; layers: Layer[]; h: number; stages: StageDef[];
   margins?: { xmin: number; xmax: number; bottom: number };
@@ -212,9 +220,13 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
           const key = m[1].toLowerCase(), val = m[2];
           if (key === "geo5") st.geo5 = num(val);
           else if (key === "q") { const en = rest.indexOf("en", j); const p = pts([rest[en + 1], rest[en + 3]]); st.surcharges.push({ q: num(val), a: p[0], b: p[1] }); j = en + 3; }
+          else if (key === "kh" || key === "kv" || key === "borde") { st.sismo ??= { kh: 0, kv: 0 }; (st.sismo as Record<string, number>)[key] = num(val); }
           else if (key === "f") { const en = rest.indexOf("en", j); const p = pts([rest[en + 1]])[0]; const o = kv(rest.slice(en + 2, en + 4)); st.anchors.push({ F: num(val), p, ang: num(o.ang ?? "0") }); j = en + 2; }
         }
         def.stages.push(st);
+      } else if (cmd === "sismo") {   // `sismo kh=-0.336 kv=0 [borde=1]` = una etapa «+sismo» que se suma a las anteriores
+        const o = kv(toks.slice(1));
+        def.stages.push({ name: "+sismo", surcharges: [], anchors: [], sismo: { kh: num(o.kh ?? "0"), kv: num(o.kv ?? "0"), ...(o.borde ? { borde: num(o.borde) } : {}) } });
       } else throw new Error(`orden desconocida "${toks[0]}"`);
     } catch (e) { throw new Error(`${ln}: ${(e as Error).message}`); }
   });
@@ -273,6 +285,7 @@ export function serializeHgeo(def: SlopeDef): string {
     if (st.geo5) s += ` geo5=${st.geo5}`;
     for (const q of st.surcharges) s += ` q=${r(q.q)} en ${p(q.a)} -> ${p(q.b)}`;
     for (const a of st.anchors) s += ` F=${r(a.F)} en ${p(a.p)} ang=${r(a.ang)}`;
+    if (st.sismo) s += ` kh=${r(st.sismo.kh)} kv=${r(st.sismo.kv)}${st.sismo.borde !== undefined ? ` borde=${r(st.sismo.borde)}` : ""}`;
     L.push(s);
   }
   return L.join("\n") + "\n";

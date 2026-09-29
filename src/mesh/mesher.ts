@@ -333,8 +333,9 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     const F = new Float64Array(ndof);
     for (const sc of st.surcharges) surchargeLoad(F, sc.q, sc.a, sc.b, X, Y, bEdges);
     for (const an of st.anchors) anchorLoad(F, an.F, an.p, an.ang, X, Y, ELE, outline);
+    if (st.sismo) seismicLoad(F, st.sismo.kh, st.sismo.kv, st.sismo.borde ?? h, X, Y, ELE, EMAT, def.soils.map((s) => s.gamma));
     const name = `L${si + 1}`; loads[name] = Array.from(F);
-    if (st.surcharges.length || st.anchors.length) acc = acc.concat([name]);
+    if (st.surcharges.length || st.anchors.length || st.sismo) acc = acc.concat([name]);
     stages.push({ name: st.name, loads: acc.slice() as GeoModel["stages"][number]["loads"], geo5: st.geo5 });
   });
   const model: GeoModel = {
@@ -447,6 +448,22 @@ function surchargeLoad(F: Float64Array, q: number, a: Pt, b: Pt, X: number[], Y:
     F[2 * e.a + 1] += -R * Na; F[2 * e.b + 1] += -R * Nb; F[2 * e.m + 1] += -R * Nm;
     void Le; void G;
   }
+}
+/** Sismo seudoestático de GEO5 FEM: fuerza de volumen b = (+kh·γ, −kv·γ) [kN/m³] en los T6 cuyo centro está a ≥ borde de
+ *  los márgenes izquierdo, derecho y fondo. Carga CONSISTENTE ∫N·b dA: en un T6 de lados rectos ∫N dA = 0 en las esquinas
+ *  y A/3 en los nudos de lado medio (exacto; es lo que da la cuadratura de 7 puntos del solver y el BX de Abaqus). */
+export function seismicLoad(F: Float64Array, kh: number, kv: number, borde: number, X: number[], Y: number[], ELE: number[][], EMAT: number[], gammas: number[]): number {
+  let xmin = Infinity, xmax = -Infinity, ymin = Infinity;
+  for (let i = 0; i < X.length; i++) { xmin = Math.min(xmin, X[i]); xmax = Math.max(xmax, X[i]); ymin = Math.min(ymin, Y[i]); }
+  let n = 0;
+  ELE.forEach((el, e) => {
+    const [a, b, c] = el, gx = (X[a] + X[b] + X[c]) / 3, gy = (Y[a] + Y[b] + Y[c]) / 3;
+    if (gx - xmin < borde || xmax - gx < borde || gy - ymin < borde) return;
+    const A = Math.abs(cross(X[b] - X[a], Y[b] - Y[a], X[c] - X[a], Y[c] - Y[a])) / 2, g = gammas[EMAT[e] - 1];
+    for (const m of [el[3], el[4], el[5]]) { F[2 * m] += kh * g * A / 3; F[2 * m + 1] += -kv * g * A / 3; }
+    n++;
+  });
+  return n;
 }
 /** Ancla: fuerza F [kN] en p con ángulo ang [°] desde +x (antihorario), repartida con las N del T6 que contiene p. */
 function anchorLoad(F: Float64Array, Fk: number, p: Pt, ang: number, X: number[], Y: number[], ELE: number[][], outline: Pt[]) {
