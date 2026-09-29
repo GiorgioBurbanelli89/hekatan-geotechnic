@@ -63,3 +63,24 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
 - Puppeteer `tests/shot_talud_param.mjs` (puppeteer de hekatan-struct-limpio: el de hekatan-struct estaba vacío): los
   sliders salen, mover bermas remalla y recalcula, consola sin errores. Subir el estrato 1.66 m cambia malla y d_x pero el
   FS queda en el mismo peldaño de la escalera SRM (1.6455): la rotura va por el limo de arriba.
+
+# Mohr-Coulomb en Geotechnic (29-sep-2026, tarde)
+- ✅ `suelo … modelo=mc`: retorno de Clausen, Damkilde y Andersen (2007) en tensiones principales (cara, arista de
+  compresión, arista de extensión, ápice), el método de GeoFEM (MC\mohrcoulomb_rp.cpp; memoria reference_geofem_mc_tangent),
+  portado línea a línea de `ingenieria-inversa/hekatan-geo5-bridge/Demo04_replica/mc_stress.m`. Tangente NUMÉRICA
+  (medido antes: da lo mismo que la analítica de GEO5). ψ ≤ φ reducida. Por defecto sigue Drucker-Prager (Demo04 intacto).
+- ✅ Validado contra GeoFEM-MC por etapas (`examples/muro_manabi_etapas_mc.hgeo`), coronación d_z / d_x:
+  | etapa | GEO5-MC | Geotechnic-MC |
+  |---|---|---|
+  | muro | 5.2 / 2.9 | 5.25 / 2.71 |
+  | bajo el talón | 5.9 / 1.7 | 5.91 / 1.56 |
+  | capa 1 | 8.4 / −0.8 | 8.42 / −0.97 |
+  | capa 2 | 10.9 / −2.7 | 10.96 / −2.89 |
+  | capa 3 | 13.6 / −3.9 | 13.60 / −4.10 |
+  | capa 4 | 16.4 / −4.5 | 16.38 / −4.55 |
+  Etapa final: σz 212.9 / 211.1 · σx 91.2 / 90.4 · J 70.2 / 69.7 · E_d 1.18 / 1.17 · E_d,pl 0.38 / 0.58 · d_z máx 27.1 / 25.3.
+- ✅ TS = WASM bit a bit con Mohr-Coulomb (`tests/etapas_ts_wasm.ts`, en `npm test`).
+- ❌→✅ Malla de 1 m + Mohr-Coulomb: la capa 4 «convergía» a 12 m (mecanismo de colapso; las normas relativas lo daban
+  por bueno). Ahora: un incremento que mueve > 1 m es mecanismo; si ni con 16 incrementos cierra, se queda en el último
+  bueno y dice «carga alcanzada x %» (como GEO5, «Attained loading»). En la interfaz: «✖ no converge (x % de la carga)».
+
