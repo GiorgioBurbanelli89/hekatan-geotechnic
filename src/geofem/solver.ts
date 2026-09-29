@@ -29,7 +29,7 @@ export type GeoModel = {
   // Las respetan modes(), dynamic() y la SRM (nrstep/srm: gather/scatter por `map`).
   TIES?: number[][];
   stages: { name: string; loads: string[]; geo5?: number; active?: number[] }[];   // active: 1/0 por elemento (construcción por etapas)
-  staged?: boolean;          // true = CONSTRUCCIÓN POR ETAPAS: análisis de tensiones encadenado (sin SRM); solo motor WASM
+  staged?: boolean;          // true = CONSTRUCCIÓN POR ETAPAS: análisis de tensiones encadenado (sin SRM); motores TS y WASM
   REGK?: number[];           // región de cada elemento (la que señala `activa/inactiva`)
 };
 
@@ -132,6 +132,10 @@ export class GeoFem {
   log: Log;
   readonly Fg2check: { sFg: number; sFg2: number; dmax: number };
   readonly Fg2: Float64Array;              // gravedad recalculada (N·ρ·detJ·w)
+  // CONSTRUCCIÓN POR ETAPAS (Activity de GEO5), igual que geofem.cpp: elemento activo o no; los gdl de nudos sin
+  // ningún elemento activo quedan «dormidos» (muelle 1e12). Utot: u desde la etapa 1; EPSacc: ε solo mientras activo.
+  private act: Uint8Array; private dormido: Uint8Array;
+  private Utot!: Float64Array; private EPSacc!: Float64Array; private Flast!: Float64Array;
 
   constructor(m: GeoModel, log: Log = () => {}) {
     this.log = log;
@@ -208,6 +212,7 @@ export class GeoFem {
     this.EPL = new Float64Array(ne * NG * 4);
     this.Dinv = this.D4.map((D) => (D ? inv4(D) : D));
     // K elástica (respaldo si la tangente sale singular)
+    this.act = new Uint8Array(ne).fill(1); this.dormido = new Uint8Array(ndof);
     this.Kel = bandCreate(this.nfree, band); this.Kt = bandCreate(this.nfree, band);
     this.assembleK(this.Kel, true);
     if (!bandFactor(this.Kel)) throw new Error("K elástica singular");
@@ -219,6 +224,7 @@ export class GeoFem {
     const Ke = new Float64Array(144);
     const DB = new Float64Array(36);   // 3x12 = Dm·B
     for (let e = 0; e < this.ne; e++) {
+      if (!this.act[e]) continue;
       const De = this.D4[this.EMAT[e]];
       Ke.fill(0);
       for (let q = 0; q < NG; q++) {
@@ -244,6 +250,7 @@ export class GeoFem {
         for (let c = 0; c < 12; c++) { const ic = this.map[this.edof[e * 12 + c]]; if (ic >= 0) bandAdd(K, ir, ic, Ke[r * 12 + c]); }
       }
     }
+    for (let d = 0; d < this.ndof; d++) if (this.dormido[d] && this.map[d] >= 0) bandAdd(K, this.map[d], this.map[d], 1e12);
   }
 
   private dpAb(phi: number, c: number): [number, number] {
@@ -304,6 +311,7 @@ export class GeoFem {
     Fi.fill(0);
     const ue = new Float64Array(12), deps = new Float64Array(4), sig = new Float64Array(4), Dep = new Float64Array(16);
     for (let e = 0; e < this.ne; e++) {
+      if (!this.act[e]) continue;
       const mm = this.EMAT[e], De = this.D4[mm], al = ab[mm][0], k = ab[mm][1];
       for (let a = 0; a < 12; a++) ue[a] = du[this.edof[e * 12 + a]];
       for (let q = 0; q < NG; q++) {
@@ -330,7 +338,7 @@ export class GeoFem {
   }
 
   /** Un peldaño de la escalera (Newton completo con line-search). Devuelve [conv, u, it]. */
-  private nrstep(SRF: number, Fext: Float64Array, rstep: number, trace?: { u: Float64Array }[]): [boolean, Float64Array, number] {
+  private nrstep(SRF: number, Fext: Float64Array, rstep: number, trace?: { u: Float64Array }[], keep = false): [boolean, Float64Array, number] {
     const maxit = 100;
     const ab: [number, number][] = [];
     for (let mm = 0; mm < this.MAT.length; mm++) {   // TODOS los suelos (antes tope 2: con 3+ suelos leía fuera del arreglo)
@@ -345,7 +353,7 @@ export class GeoFem {
     const Rf = new Float64Array(nf), R1 = new Float64Array(nf), duf = new Float64Array(nf), drf = new Float64Array(nf);
     const ADDisp = new Float64Array(nf), DForce = new Float64Array(nf);
     let conv = false, it = 0;
-    this.resetState();
+    if (!keep) this.resetState();   // keep = la etapa arranca del estado (σ, ε_pl) que dejó la anterior
     this.assembleInc(du, ab, false, Fi);
     this.gather(Fext, Fi, Rf);                                   // con TIES el esclavo suma en la fila del maestro
     DForce.set(Rf);
@@ -382,6 +390,66 @@ export class GeoFem {
       if (ndiv >= 2) break;
     }
     return [conv, u, it];
+  }
+
+  /** Una etapa de CONSTRUCCIÓN (tensiones, SRF = 1), la misma que runStaged de geofem.cpp: activa `a`, carga = peso
+   *  de los activos + Fextra, Newton desde el estado anterior; si no cierra, la carga nueva entra en 2, 4, 8, 16
+   *  incrementos. En la PRIMERA etapa el estado se pone a cero y u también al acabar (GEO5); la ε NO (medido). */
+  stagedStep(a: ArrayLike<number>, Fextra: ArrayLike<number>, first: boolean): { conv: boolean; u: Float64Array; sig1: Float64Array; epl1: Float64Array; eps1: Float64Array } {
+    const ne = this.ne, ndof = this.ndof;
+    for (let e = 0; e < ne; e++) this.act[e] = a[e] ? 1 : 0;
+    this.dormido.fill(1);
+    for (let e = 0; e < ne; e++) if (this.act[e]) for (let k = 0; k < 12; k++) this.dormido[this.edof[e * 12 + k]] = 0;
+    const F = new Float64Array(ndof);
+    for (let e = 0; e < ne; e++) {
+      if (!this.act[e]) continue;
+      const rho = -this.MAT[this.EMAT[e] - 1][4];
+      for (let q = 0; q < NG; q++) { const [N] = t6(GP[q][0], GP[q][1]); for (let k = 0; k < 6; k++) F[2 * this.ELE[e][k] + 1] += N[k] * rho * this.dJw[e * NG + q]; }
+    }
+    for (let d = 0; d < ndof; d++) F[d] += Fextra[d];
+    if (first) { this.resetState(); this.Utot = new Float64Array(ndof); this.EPSacc = new Float64Array(ne * NG * 4); this.Flast = new Float64Array(ndof); }
+    const sig0 = Float64Array.from(this.SIG), epl0 = Float64Array.from(this.EPL), dep0 = Float64Array.from(this.DEP), has0 = Uint8Array.from(this.hasDep);
+    const u = new Float64Array(ndof), Fk = new Float64Array(ndof); let it = 0, c = false, nsub = 1;
+    for (; nsub <= 16; nsub *= 2) {
+      if (nsub > 1) { this.SIG.set(sig0); this.EPL.set(epl0); this.DEP.set(dep0); this.hasDep.set(has0); u.fill(0); }
+      c = true;
+      for (let j = 1; j <= nsub && c; j++) {
+        for (let d = 0; d < ndof; d++) Fk[d] = this.Flast[d] + (F[d] - this.Flast[d]) * j / nsub;
+        const [cj, du1, itj] = this.nrstep(1.0, Fk, j, undefined, true); c = cj; it += itj;
+        for (let d = 0; d < ndof; d++) u[d] += du1[d];
+      }
+      if (c) break;
+      this.log(`    etapa: con ${nsub} incremento(s) no cierra; se reparte la carga en ${nsub * 2}`);
+    }
+    if (nsub > 16) nsub = 16;
+    this.Flast = F;
+    if (!first) for (let d = 0; d < ndof; d++) this.Utot[d] += u[d];
+    for (let e = 0; e < ne; e++) if (this.act[e]) for (let q = 0; q < NG; q++) {   // ε de SUS etapas activas (la 1 también)
+      const kk = e * NG + q, B = this.Bc.subarray(kk * 36, kk * 36 + 36); let e0 = 0, e1 = 0, e2 = 0;
+      for (let k = 0; k < 12; k++) { const v = u[this.edof[e * 12 + k]]; e0 += B[k] * v; e1 += B[12 + k] * v; e2 += B[24 + k] * v; }
+      this.EPSacc[kk * 4] += e0; this.EPSacc[kk * 4 + 1] += e1; this.EPSacc[kk * 4 + 3] += e2;
+    }
+    let na = 0; for (let e = 0; e < ne; e++) na += this.act[e];
+    let sF = 0; for (let i = 0; i < this.nn; i++) sF += F[2 * i + 1];
+    this.log(`    ETAPA ${first ? "inicial" : ""}: ${na} de ${ne} elementos activos, carga vertical ${sF.toFixed(3)} kN, ${c ? "CONVERGE" : "NO CONVERGE"} en ${it} iteraciones (${nsub} incremento(s))`);
+    return { conv: c, u: Float64Array.from(this.Utot), sig1: Float64Array.from(this.SIG), epl1: Float64Array.from(this.EPL), eps1: Float64Array.from(this.EPSacc) };
+  }
+
+  /** Construcción por etapas: TODAS en orden (fs = NaN: análisis de tensiones). Misma salida que GeoFemWasm.runStaged. */
+  runStaged(m: GeoModel, onStage?: (r: StageResult, index: number) => void): StageResult[] {
+    const ndof = this.ndof, ne = this.ne;
+    const LOADS: Record<string, ArrayLike<number>> = { ...(m.loads || {}), Fs: m.Fs, Fa: m.Fa };
+    return m.stages.map((st, si) => {
+      const F = new Float64Array(ndof);
+      for (const nm of st.loads) { if (nm === "Fg") continue; const v = LOADS[nm]; if (!v) throw new Error(`carga desconocida ${nm}`); for (let d = 0; d < ndof; d++) F[d] += v[d]; }
+      const t0 = performance.now();
+      this.log(""); this.log(`### ${st.name} ###`);
+      const r = this.stagedStep(st.active ?? new Array(ne).fill(1), F, si === 0);
+      const sec = (performance.now() - t0) / 1000;
+      this.log(`  ${st.name.padEnd(22)} >>> ${r.conv ? "equilibrio" : "NO CONVERGE"}  [${sec.toFixed(1)} s]`);
+      const res: StageResult = { name: st.name, fs: NaN, geo5: st.geo5, u: r.u, uel: r.u, steps: [], prog: "", seconds: sec, u1: r.u, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: ne * NG };
+      onStage?.(res, si); return res;
+    });
   }
 
   /** Escalera SRM de GEO5 para una etapa (carga total Ftot). */
@@ -636,6 +704,7 @@ export class GeoFem {
   /** Corre las etapas pedidas del modelo (cada una independiente: cargas según `stages[i].loads`).
    *  φ y c se leen de m.MAT en cada corrida (sliders); E, ν y γ requieren un GeoFem nuevo. */
   run(m: GeoModel, stageIdx: number[] = m.stages.map((_, i) => i), onStage?: (r: StageResult, index: number) => void): StageResult[] {
+    if (m.staged) return this.runStaged(m, onStage);
     const t0 = performance.now();
     this.MAT = m.MAT;
     this.rigid = m.RIGID ?? (m.MATNAMES ?? []).map((n) => /muro|hormig|concret|wall/i.test(n));
