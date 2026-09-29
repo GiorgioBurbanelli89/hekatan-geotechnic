@@ -3,9 +3,12 @@
 // `stageIdx` = qué etapas calcular (cada etapa es independiente: arranca de cero con su carga total).
 import { GeoFem, GeoModel, StageResult } from "./solver";
 import { GeoFemWasm } from "./geofemWasm";
+import { correrDinamico, DynIn, DynOut } from "../dyn/dinamico";
 
-export type WorkerIn = { type: "run"; model: GeoModel; stageIdx: number[]; engine?: "wasm" | "ts" };
+export type WorkerIn = { type: "run"; model: GeoModel; stageIdx: number[]; engine?: "wasm" | "ts" } | { type: "dyn"; model: GeoModel; opts: DynIn };
 export type WorkerOut =
+  | { type: "dynprog"; frac: number; fase: string }
+  | { type: "dyndone"; result: DynOut }
   | { type: "log"; line: string }
   | { type: "engine"; engine: "wasm" | "ts" }
   | { type: "stage"; index: number; result: { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; prog: string; seconds: number } }
@@ -17,8 +20,15 @@ let femKey = "";
 
 self.onmessage = async (ev: MessageEvent<WorkerIn>) => {
   const msg = ev.data;
+  const post = (m: WorkerOut, tr: Transferable[] = []) => (self as unknown as Worker).postMessage(m, tr);
+  if (msg.type === "dyn") {   // DINÁMICO LINEAL (motor TS: el WASM no tiene dinámico). Cancelar = terminar el Worker.
+    try {
+      const r = correrDinamico(msg.model, msg.opts, (frac, fase) => post({ type: "dynprog", frac, fase }));
+      post({ type: "dyndone", result: r }, [...r.snapU.map((a) => a.buffer), r.envU.buffer]);
+    } catch (e) { post({ type: "error", message: (e as Error).message }); }
+    return;
+  }
   if (msg.type !== "run") return;
-  const post = (m: WorkerOut) => (self as unknown as Worker).postMessage(m);
   const log = (line: string) => post({ type: "log", line });
   try {
     const t0 = performance.now();

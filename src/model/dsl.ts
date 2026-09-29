@@ -24,7 +24,7 @@
 //
 // Compatibilidad: también se aceptan `contorno x,y …` + `capa NOMBRE bajo|sobre x,y …` (forma vieja).
 export type Pt = [number, number];
-export type Soil = { name: string; E: number; nu: number; phi: number; c: number; gamma: number; psi: number; rigido?: boolean };
+export type Soil = { name: string; E: number; nu: number; phi: number; c: number; gamma: number; psi: number; rigido?: boolean; vs?: number };   // vs [m/s]: onda de corte para el DINÁMICO (E_din = 2(1+ν)·(γ/g)·Vs²); sin vs, el dinámico usa E
 /** Muro cantilever (GEO5 «Rigid body»): x = cara delantera del fuste, H = altura vista sobre el terreno de delante,
  *  fuste/zapata = espesores, talon/dedo = voladizos de la zapata, emp = profundidad de la BASE bajo el terreno. */
 export type WallParam = {
@@ -201,7 +201,7 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
       else if (cmd === "talud") { const o = kv(toks.slice(1)); def.param = { xpie: num(o.xpie ?? "10"), zpie: num(o.zpie ?? "-10"), H: num(o.h ?? "6"), beta: num(o.beta ?? "33"), corona: num(o.corona ?? "8"), zfin: num(o.zfin ?? String(num(o.zpie ?? "-10") + num(o.h ?? "6"))), beta2: num(o.beta2 ?? "28.6") }; def.interfaces.unshift([]); }
       else if (cmd === "suelo") {
         const o = kv(toks.slice(2));
-        def.soils.push({ name: toks[1], E: num(o.e ?? "0"), nu: num(o.nu ?? "0.3"), phi: num(o.phi ?? "0"), c: num(o.c ?? "0"), gamma: num(o.gamma ?? "0"), psi: num(o.psi ?? "0"), rigido: /^(1|si|sí|true|yes)$/i.test(o.rigido ?? o.rigid ?? "") || undefined });
+        def.soils.push({ name: toks[1], E: num(o.e ?? "0"), nu: num(o.nu ?? "0.3"), phi: num(o.phi ?? "0"), c: num(o.c ?? "0"), gamma: num(o.gamma ?? "0"), psi: num(o.psi ?? "0"), rigido: /^(1|si|sí|true|yes)$/i.test(o.rigido ?? o.rigid ?? "") || undefined, ...(o.vs ? { vs: num(o.vs) } : {}) });
       } else if (cmd === "asignar") { const en = toks.indexOf("en"); def.assign.push({ soil: toks[1], p: pts([toks[en + 1]])[0] }); }
       else if (cmd === "capa") {
         const side = toks[2].toLowerCase();
@@ -274,7 +274,7 @@ export function serializeHgeo(def: SlopeDef): string {
   if (def.margins) L.push(`margenes xmin=${r(def.margins.xmin)} xmax=${r(def.margins.xmax)} fondo=${r(def.margins.bottom)}`);
   def.interfaces.forEach((it, k) => { if (k === 0 && def.param) { const q = def.param; L.push(`talud xpie=${r(q.xpie)} zpie=${r(q.zpie)} H=${r(q.H)} beta=${r(q.beta)} corona=${r(q.corona)} zfin=${r(q.zfin)} beta2=${r(q.beta2)}`); } else L.push(`interfaz ${it.map(p).join(" ")}`); });
   if (!def.interfaces.length && def.outline.length) L.push(`contorno ${def.outline.map(p).join(" ")}`);
-  for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}`);
+  for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.vs ? ` vs=${r(s.vs)}` : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}`);
   for (const w of def.walls ?? []) L.push(`muro ${w.soil} x=${r(w.pm.x)}${Number.isFinite(w.pm.z as number) ? ` z=${r(w.pm.z as number)}` : ""} H=${r(w.pm.H)} fuste=${r(w.pm.fuste)} zapata=${r(w.pm.zapata)} talon=${r(w.pm.talon)} dedo=${r(w.pm.dedo)} emp=${r(w.pm.emp)}`);
   for (const ln of def.lines ?? []) L.push(`linea ${ln.map(p).join(" ")}`);   // GEO5 Free line
   for (const a of def.assign) L.push(`asignar ${a.soil} en ${p(a.p)}`);
@@ -323,6 +323,26 @@ etapa peso propio
 etapa +sobrecarga q=25 en 24,-3 -> 34,-3   # en la corona, detras del relleno: FS 1.93 -> 1.76
 # OJO: la MISMA q puesta sobre el talon (13,-5 -> 18.5,-5) SUBE el FS a 2.32: ahi la carga aplasta el talon
 #      del muro y lo estabiliza, en vez de empujar la masa que desliza. La carga no es buena ni mala: importa DONDE.
+`;
+
+/** Muro de Manabí (Portoviejo): el de la serie de vídeos, 0.70 m de tierra delante, geometría de GeoFEM (fuste 0.25→0.40,
+ *  líneas libres), malla 0.8 (≈ 2800 nudos: malla en segundos). `vs=` = onda de corte estimada del SPT (para el DINÁMICO).
+ *  Con `malla 0.5` es el modelo que tests/dinamico_muro.ts valida contra Abaqus (6900 nudos, 608.8673 t, f1 6.1277 Hz). */
+export const MANABI_HGEO = `# Muro de Manabi (Portoviejo): 0.70 m de tierra delante, geometria de GeoFEM
+margenes xmin=0 xmax=30 fondo=-12
+interfaz 0,-2.3 10.00625,-2.3 10.15,0 30,0
+interfaz 0,-3 30,-3
+suelo ARENA_SP    E=25000 nu=0.28 phi=30 c=0 gamma=18.5 vs=195
+suelo ARENA_SPSM  E=15500 nu=0.3 phi=29.97 c=0 gamma=17.5 vs=286
+suelo HORMIGON    E=21538105.77 nu=0.2 phi=0 c=0 gamma=23 rigido=1
+asignar HORMIGON en 10.25,-1.2
+asignar ARENA_SP en 20,-1.5
+asignar ARENA_SP en 5,-2.6
+asignar ARENA_SPSM en 15,-8
+linea 9.28,-3 9.30,-2.6 9.98,-2.6 10.00625,-2.3
+linea 10.40,0 10.42,-2.6 12.30,-2.6 12.32,-3
+malla 0.8
+etapa peso propio
 `;
 
 /** GEO5: una interfaz no puede estar por encima del terreno. Donde una capa sube sobre el terreno, la capa pasa a SEGUIR

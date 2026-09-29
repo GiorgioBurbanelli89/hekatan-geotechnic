@@ -139,7 +139,8 @@ export class SlopePlot {
           const v = vs / ws;
           const vc = Math.min(Math.max(v, lv[0]), lv[lv.length - 1]);
           let b = 0; while (b < lv.length - 2 && vc >= lv[b + 1]) b++;
-          const c = cmap[b]; d[q] = c[0]; d[q + 1] = c[1]; d[q + 2] = c[2]; d[q + 3] = 255;
+          // rango diminuto (p. ej. |u| ~1e-6 mm al final de un sismo): geo5Levels puede dar menos bandas → índice acotado
+          const c = cmap[Math.min(b, cmap.length - 1)] ?? [255, 255, 255]; d[q] = c[0]; d[q + 1] = c[1]; d[q + 2] = c[2]; d[q + 3] = 255;
         }
       }
       ctx.putImageData(img, Math.round(ax0), Math.round(az0));

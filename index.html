@@ -100,7 +100,7 @@
         <input type="file" id="fFile" accept=".hgeo,.txt" hidden>
       </div>
       <label>Ejemplo</label>
-      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option></select>
+      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option><option value="manabi">Muro de Manabí · con Vs para el dinámico</option></select>
       <div id="editor" hidden>
         <textarea id="hgeo" spellcheck="false" rows="11"></textarea>
         <div class="row"><button class="run" id="apply" style="margin-top:6px">✎ Aplicar (Ctrl+Enter)</button></div>
@@ -158,6 +158,50 @@
         <canvas id="w2Cv" width="340" height="460" style="width:100%;margin-top:6px;background:#0b1220;border-radius:6px;display:none"></canvas>
         <div id="w2out" class="mats"></div>
       </div>
+      <div id="dinwrap">
+        <h2 style="margin-top:14px">Dinámico <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(sismo en la base · Newmark de GEO5)</span></h2>
+        <div id="dinLineal" class="mats" style="color:var(--oro)">El dinámico es LINEAL: el suelo se trata como elástico (sin plasticidad) y el muro va pegado al terreno (sin deslizamiento ni despegue).</div>
+        <label>Acelerograma</label>
+        <select id="dAcc"><option value="pulso">pulso de ejemplo (medio seno)</option><option value="archivo">archivo propio (RENAC o dos columnas t, a)</option></select>
+        <div id="dPulso" class="row">
+          <div><label>amplitud [g]</label><input id="dAmp" type="number" value="0.3" step="0.05" /></div>
+          <div><label>duración [s]</label><input id="dDur" type="number" value="0.2" step="0.05" min="0.01" /></div>
+          <div><label>total [s]</label><input id="dTot" type="number" value="2" step="0.5" min="0.1" /></div>
+        </div>
+        <div id="dArch" hidden>
+          <div class="row">
+            <div><input type="file" id="dFile" accept=".txt,.csv,.dat,.acc,.at2" /></div>
+            <div style="flex:0 0 96px"><select id="dUni" title="unidades de «a» si el archivo es de dos columnas t, a (el formato RENAC las lee de la cabecera)"><option value="m/s2">m/s²</option><option value="cm/s2">cm/s²</option><option value="g">g</option></select></div>
+          </div>
+          <div class="row">
+            <div><label>desde [s]</label><input id="dT0" type="number" value="0" step="1" min="0" /></div>
+            <div><label>hasta [s]</label><input id="dT1" type="number" value="" step="1" placeholder="final" /></div>
+          </div>
+        </div>
+        <canvas id="dAccCv" width="560" height="120" style="width:100%;margin-top:6px;background:#0b0906;border-radius:6px"></canvas>
+        <div id="dAccInfo" class="mats" style="margin-top:2px"></div>
+        <div class="row">
+          <div><label>dirección</label><select id="dDir"><option value="x">horizontal (x)</option></select></div>
+          <div><label>Δt [s]</label><input id="dDt" type="number" value="0.01" step="0.005" min="0.0005" /></div>
+        </div>
+        <div class="row">
+          <div><label>ξ Rayleigh [%]</label><input id="dXi" type="number" value="5" step="1" min="0" /></div>
+          <div><label>modo i</label><input id="dMi" type="number" value="1" step="1" min="1" max="10" /></div>
+          <div><label>modo j</label><input id="dMj" type="number" value="3" step="1" min="1" max="10" /></div>
+        </div>
+        <div class="row">
+          <div><label>α HHT</label><input id="dAlpha" type="number" value="0" step="0.05" min="-0.3333" max="0" title="0 = Newmark β = ¼, γ = ½ (aceleración media). α ∈ [−⅓, 0]: β = (1−α)²/4, γ = ½ − α" /></div>
+          <div><label>nudo vigilado</label><select id="dPick"><option value="0">por defecto</option><option value="1">elegir con clic</option></select></div>
+        </div>
+        <div id="dVs" class="mats"></div>
+        <div class="row">
+          <button class="run" id="dRun">▶ calcular dinámico</button>
+          <button id="dCancel" style="margin-top:10px;flex:0 0 90px" disabled>✕ cancelar</button>
+        </div>
+        <div id="dProg" style="height:8px;background:#0b0906;border:1px solid #3a3020;border-radius:4px;margin-top:6px;overflow:hidden"><div id="dBar" style="height:100%;width:0;background:var(--oro)"></div></div>
+        <div id="dMsg" class="mats"></div>
+        <div id="dModos" class="fs"></div>
+      </div>
       <h2 style="margin-top:14px">Vista</h2>
       <div class="row">
         <div><label>Etapa</label><select id="stage"></select></div>
@@ -207,6 +251,19 @@
         <div class="cmdrow"><span id="cmdprompt">Orden:</span><input id="cmdin" autocomplete="off" spellcheck="false" placeholder="escribe una orden o una coordenada x,y y pulsa Enter"></div>
       </div>
       <div id="hover">mueve el ratón sobre el talud para leer el valor</div>
+      <div id="dinres" hidden style="margin-top:8px;border-top:1px solid #3a3020;padding-top:8px">
+        <div class="tools">
+          <span class="tl">Dinámico</span>
+          <label class="il">vista <select id="dVista"><option value="t">deformada en el instante</option><option value="env">envolvente de |u|</option><option value="no">resultados estáticos</option></select></label>
+          <label class="il" style="flex:1">t <input id="dT" type="range" min="0" max="0" step="1" value="0" style="flex:1;accent-color:var(--oro)"></label>
+          <span id="dTv" class="il" style="font:12px Consolas,monospace;color:var(--txt);min-width:80px">0.00 s</span>
+          <label class="il">deformada × <input id="dEsc" type="number" value="200" min="0" step="50" style="width:64px"></label>
+        </div>
+        <div id="dRes" class="mats"></div>
+        <canvas id="dCvU" width="1180" height="230" style="width:100%;background:#0b0906;border-radius:6px;margin-top:6px"></canvas>
+        <canvas id="dCvA" width="1180" height="230" style="width:100%;background:#0b0906;border-radius:6px;margin-top:6px"></canvas>
+        <canvas id="dCvE" width="1180" height="230" style="width:100%;background:#0b0906;border-radius:6px;margin-top:6px"></canvas>
+      </div>
       <div id="log">Pulsa «Calcular FS». El cálculo corre en tu navegador (Web Worker); el log es el mismo que imprime el driver de Hekatan Python y coincide iteración a iteración con GEO5.</div>
     </section>
   </main>

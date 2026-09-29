@@ -7,13 +7,14 @@ import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
 import { FieldKind, FIELD_LABEL, FIELD_UNIT, nodalField, stressField, isStressField } from "./viewer/geo5scale";
-import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, MURO_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims, effectiveTerrain } from "./model/dsl";
+import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, MURO_HGEO, MANABI_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims, effectiveTerrain } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
 import { criticalCircle, LemMethod } from "./lem/slices";
 import { Pasos } from "./pasos";
 import { hgeoToDxf, recetaGeo5 } from "./model/dxf";
 import { actualizarMuro, engancharMuro } from "./wall/panel";
+import { engancharDinamico, actualizarDinamico, dinActivo, dibujar as dibujarDinamico } from "./dyn/panel";
 
 type Stage = { name: string; fs: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean; u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number };
 
@@ -282,6 +283,7 @@ function setBase(m: GeoModel, only?: number[]) {
   plot.draw({ field: "dx", vals: new Float64Array(m.X.length), title: m.name || "", stage: 0, showMesh: true });
   draw.setMap(plot.mapping());
   if (only) { selStage.value = String(only[0]); for (const i of m.stages.keys()) if (!only.includes(i)) stages[i] = undefined; }
+  actualizarDinamico();
   run(only ?? m.stages.map((_, i) => i));   // como Struct: calcula al abrir / al aplicar (un slider geométrico: solo la etapa visible)
 }
 
@@ -312,7 +314,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
       edMsg.textContent = !def.interfaces[0]?.length ? "borrador: falta el terreno (dibújalo con «interfaz» o escríbelo)" : "borrador: falta al menos un suelo"; edMsg.style.color = "var(--oro)";
       draw.prompt(); pasos.actualizar(def); actualizarMuro(def, visibleStage()); return;
     }
-    const { model: m, stats } = meshSlope(def);
+    const { model: m, stats } = meshSlope(def, { topeMs: 20000 });   // 20 s: el muro de Manabí con malla 0.5 malla en 12–15 s en Chrome (8 s lo cortaba); una geometría degenerada (interfaces que se cruzan) se corta a los 20 s
     if (stats.avisos.length) dStatus.textContent = stats.avisos.join(" · ");   // p. ej. "ARCILLA asignado a la región de la línea libre"
     m.MATNAMES = def.soils.map((s) => s.name);
     m.name = `Talud .hgeo`;
@@ -362,6 +364,7 @@ function stageLoads(si: number): Float64Array {
 
 function redraw() {
   if (!model || !plot) return;
+  if (dinActivo()) { dibujarDinamico(); return; }   // resultados del dinámico sobre la gráfica (deslizador de tiempo)
   const si = visibleStage(), st = stages[si];
   if (!st) {   // aún sin resultado (remallado en curso): geometría + malla nueva ya, sin esperar al cálculo
     plot.draw({ field: "dx", vals: new Float64Array(model.X.length), stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, title: `${model.name || "Talud"} · calculando…`, deformScale: 0, u: new Float64Array(model.X.length * 2), uel: new Float64Array(model.X.length * 2) });
@@ -467,6 +470,9 @@ function runLem() {
 }
 selMetodo.addEventListener("change", runLem);
 (window as unknown as { __lem: () => unknown }).__lem = () => draw.lem;   // para el arnés puppeteer
+// FS y escalera SRM de cada etapa, para comparar con GEO5 sin mirar la pantalla (22-sep-2026).
+(window as unknown as { __fem: () => unknown }).__fem = () =>
+  stages.map((r, i) => (r ? { etapa: i + 1, fs: r.fs, pasos: r.steps.map((s) => s.srf), stale: r.stale } : null));
 (window as unknown as { __terrEf: () => unknown }).__terrEf = () => (def ? effectiveTerrain(def).map((p) => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]) : null);
 $<HTMLInputElement>("snap").addEventListener("change", (e) => { draw.state.snap = (e.target as HTMLInputElement).checked; });
 $<HTMLInputElement>("osnap").addEventListener("change", (e) => { draw.state.osnap = (e.target as HTMLInputElement).checked; });
@@ -534,6 +540,7 @@ btn.addEventListener("click", () => run(base!.stages.map((_, i) => i).slice(0, p
 selN.addEventListener("change", () => { const n = parseInt(selN.value); const falta = base!.stages.map((_, i) => i).slice(0, n).filter((i) => !stages[i] || stages[i]!.stale); if (falta.length) run(falta); });
 selModel.addEventListener("change", () => {
   if (selModel.value === "muro") { edWrap.hidden = false; edText.value = MURO_HGEO; applyHgeo(); return; }   // ejemplo del muro, de un clic
+  if (selModel.value === "manabi") { edWrap.hidden = false; edText.value = MANABI_HGEO; applyHgeo(); return; }   // muro de Manabí con Vs (dinámico)
   if (selModel.value === "hgeo") { edWrap.hidden = false; if (!edText.value.trim()) edText.value = DEMO04_HGEO; applyHgeo(); } else loadFixture(selModel.value);
 });
 edApply.addEventListener("click", applyHgeo);
@@ -542,6 +549,7 @@ selStage.addEventListener("change", () => { const i = visibleStage(); buildStage
 for (const el of [selField, selStep, chkMesh, inpDef]) el.addEventListener("change", redraw);
 inpDef.addEventListener("input", redraw);
 engancharMuro(() => actualizarMuro(def, visibleStage()));
+engancharDinamico({ modelo: () => base, def: () => def, plot: () => plot, canvas, redibujarEstatico: () => redraw() });
 edText.value = DEMO04_HGEO;
 setTool("ver");
 loadFixture(selModel.value);
