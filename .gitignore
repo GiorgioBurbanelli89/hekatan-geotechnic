@@ -10,3 +10,8 @@ tests/video/
 tests/video_estado/
 
 *.mp4
+
+# salidas grandes de los guiones del muro de Manabi
+tools/variaciones_muro_manabi/*_malla.json
+tools/variaciones_muro_manabi/*.png
+tools/dinamico/muro_din_ts.json

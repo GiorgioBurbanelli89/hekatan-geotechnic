@@ -1,0 +1,12 @@
+# modelo de examples/muro_manabi.hgeo (0.60 m delante, malla 0.8) (generado por tools/variaciones_muro_manabi.ts)
+margenes xmin=0 xmax=30 fondo=-12
+interfaz 0,-2.4 30,-2.4
+interfaz 0,-3.05 30,-3.05
+suelo ARENA_SP    E=25000 nu=0.28 phi=30 c=0 gamma=18.5
+suelo ARENA_SPSM  E=15500 nu=0.30 phi=29.97 c=0 gamma=17.5
+suelo HORMIGON    E=21166510 nu=0.2 phi=0 c=0 gamma=23
+asignar ARENA_SP en 20,-1.5
+asignar ARENA_SPSM en 15,-8
+muro HORMIGON x=10 H=2.40 fuste=0.40 zapata=0.40 talon=1.90 dedo=0.70 emp=0.6
+malla 0.8
+etapa peso propio
