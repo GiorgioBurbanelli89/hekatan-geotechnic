@@ -84,3 +84,11 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
   por bueno). Ahora: un incremento que mueve > 1 m es mecanismo; si ni con 16 incrementos cierra, se queda en el último
   bueno y dice «carga alcanzada x %» (como GEO5, «Attained loading»). En la interfaz: «✖ no converge (x % de la carga)».
 
+- ✅ Mohr-Coulomb en el ÁPICE (arena c = 0 traccionada): tangente elástica y sin ε plástica, como el Drucker-Prager del motor.
+- ❌ SRM del muro en UNA etapa con Mohr-Coulomb (malla 0.5, 6802 nudos, `examples/muro_manabi_geofem_mc.hgeo`): el estado
+  inicial (SRF = 1, todo el peso de una vez) NO converge, ni con 16 incrementos de carga → FS 1.0000 (GEO5: 1.36). No es
+  el Mohr-Coulomb: con Drucker-Prager la misma geometría con malla 0.5 tampoco convergía a SRF = 1 (tabla de variaciones).
+  El cálculo POR ETAPAS sí converge y cuadra con GeoFEM. ⏳ Probable causa: GEO5 arma el estado inicial con un procedimiento
+  geostático (K0) — memoria reference_geo5_solver_output_re — hay que EXTRAERLO del binario, no suponerlo.
+- ❌→✅ El reintento por incrementos en TODOS los peldaños rompía Demo04 (etapa 3: 1.7369 en vez de 1.69): la divergencia
+  de los peldaños SRF > 1 es la que fija el FS de GEO5. Ahora solo en SRF = 1. `npm test` en verde (1.6935 / 1.4810 / 1.6935).
