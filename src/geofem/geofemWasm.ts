@@ -1,6 +1,7 @@
 // Motor WASM (C++ compilado con emscripten, src/geofem/cpp/geofem.cpp). Misma interfaz de resultados
 // que GeoFem (solver.ts); el log llega línea a línea por Module.geoLog.
 import type { GeoModel, StageResult, Log } from "./solver";
+import { GEO5_SRM } from "./solver";
 // @ts-ignore — módulo generado por emcc (build_wasm.sh)
 import createModule from "./built/geofem.js";
 
@@ -11,6 +12,7 @@ type Mod = {
   _geofem_set_mat: (h: number, MAT: number) => void;
   _geofem_set_rigid: (h: number, rigid: number, n: number) => void;
   _geofem_set_model: (h: number, model: number, n: number) => void;
+  _geofem_set_srm: (h: number, continua: number) => void;
   _geofem_band: (h: number) => number; _geofem_nfree: (h: number) => number;
   _geofem_gravity: (h: number) => number; _geofem_nsteps: (h: number) => number;
   _geofem_ngp: (h: number) => number; _geofem_state1: (h: number, sig: number, epl: number, eps: number, u1: number) => void;
@@ -55,6 +57,7 @@ export class GeoFemWasm {
     const h = mod._geofem_create(nn, ne, pX, pY, pE, pM, m.FIXED.length, pF, nmat, pMat);
     // materiales RÍGIDOS (muro = «Rigid body» de GEO5: región elástica que la SRM no reduce)
     if (m.RIGID?.some((r) => r)) { const pR = mod._geofem_alloc_i(nmat); mod.HEAP32.set(m.RIGID.map((r) => (r ? 1 : 0)), pR >> 2); mod._geofem_set_rigid(h, pR, nmat); mod._geofem_free(pR); }
+    if (m.srmContinua) mod._geofem_set_srm(h, typeof m.srmContinua === "number" ? m.srmContinua : GEO5_SRM);   // modo GEO5 (bits: ver geofem.cpp)
     if (m.MODEL?.some((v) => v)) { const pD = mod._geofem_alloc_i(nmat); mod.HEAP32.set(m.MODEL, pD >> 2); mod._geofem_set_model(h, pD, nmat); mod._geofem_free(pD); }   // Mohr-Coulomb por material
     for (const p of [pX, pY, pE, pM, pF, pMat]) mod._geofem_free(p);
     return new GeoFemWasm(mod, h, m, log);

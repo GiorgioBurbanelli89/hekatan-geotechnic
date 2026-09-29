@@ -93,3 +93,32 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
   geostático (K0) — memoria reference_geo5_solver_output_re — hay que EXTRAERLO del binario, no suponerlo.
 - ❌→✅ El reintento por incrementos en TODOS los peldaños rompía Demo04 (etapa 3: 1.7369 en vez de 1.69): la divergencia
   de los peldaños SRF > 1 es la que fija el FS de GEO5. Ahora solo en SRF = 1. `npm test` en verde (1.6935 / 1.4810 / 1.6935).
+
+## 29-sep (tarde) — SRM de GEO5 con Mohr-Coulomb en la malla EXACTA de GeoFEM (`examples/geofem_muro_manabi_malla.json`)
+
+- ✅ **Fallo real en la arista de Mohr-Coulomb (C++ y TS).** Se probaban las dos aristas en orden y ganaba la primera
+  «ordenada». Esa podía ser la equivocada, con multiplicador negativo. En el muro movía σy de −33 a −25 kPa en todo el
+  estrato sin cohesión, y el peldaño SRF 1.23 arrancaba con residuo 45 kN (GEO5 ~14). Ahora se aplica el criterio literal
+  del binario (FUN_005a67e0): σ2_new > σ1_new → arista σ1=σ2; si no, σ2=σ3; si no vale, ápice. Demo04 sigue en
+  1.6935 / 1.4810 / 1.6935 y las etapas MC siguen cuadrando con GeoFEM (coronación dz 16.39 mm, GEO5 16.38).
+- ✅ **Estado inicial SRF=1 = GEO5.** Leí `Restart_In.bin`: registro de nudo de 144 B con 4 doubles (σx, σy, τxy, σz)
+  al final. Comparación nudo a nudo en 5686 nudos: |dif| medio 0.3 / 0.7 / 0.2 / 0.2 kPa. Solo difiere en la esquina del
+  muro, que es singular. La diferencia de FS NO viene del estado inicial.
+- ✅ **Modo GEO5 = bits 19** (`srmContinua: true`): 1 peldaños encadenados + 2 tangente del SRF nuevo al empezar el peldaño
+  + 16 retorno desde el inicio del paso con el incremento acumulado. Es lo que dice el line search del binario:
+  `f_int(ADisp + DDisp)`. Contra el Log_File de GEO5 en SRF 1.1111, (GT | GEO5):
+  paso completo 7.94e-3 | 7.95e-3 · ENorm 9.496e-3 | 9.492e-3 · |gi| it2 3.28 | 2.83 · it3 0.603 | 0.617 · converge en 3 | 3.
+  Solo difiere η en it1 (0.39 | 0.45).
+- ❌ Probado y descartado:
+  - Reducir el ÁNGULO (φ/SRF): en el muro la escalera se separa de GEO5 en 1.2311. El muro trae `safetyfactorstage` y
+    reduce la tangente.
+  - Line search de 3 pasadas (bit 4): FS 1.52–2.15.
+  - Energía con el residuo previo (bit 8): ENorm 4.2e-2, contra 9.49e-3 de GEO5.
+- ⚠️ **El FS de este muro (arenas con c = 0) es CAÓTICO.** TS y WASM ejecutan el mismo algoritmo y solo difieren en
+  redondeo (1e-5 relativo en ENorm), pero la escalera termina en 2.15 (TS) y 1.47 (WASM). Con distintos bits: 1.29, 1.31,
+  1.47, 1.51, 2.14, 2.15. GEO5 da 1.36 (su log: converge en 1.3283 y los Iter_File .bin.8 muestran dos intentos fallidos
+  del peldaño 8 → FS 1.3624). Con paso de relajación 0.9875 converger o divergir depende del redondeo, y los
+  desplazamientos siguen chicos (8 mm): no hay mecanismo claro, la «falla» es numérica. No se puede calcar 1.36 cifra a
+  cifra. Sí se calca el algoritmo iteración a iteración.
+- ⏳ η de la iteración 1 (0.39 contra 0.45): con el mismo paso completo, la diferencia está en R(η=1).
+- ⏳ TS ≠ WASM en la SRM continuada, solo por redondeo (el orden de la factorización banda/skyline).

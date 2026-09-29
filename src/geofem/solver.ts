@@ -30,6 +30,7 @@ export type GeoModel = {
   // Las respetan modes(), dynamic() y la SRM (nrstep/srm: gather/scatter por `map`).
   TIES?: number[][];
   stages: { name: string; loads: string[]; geo5?: number; active?: number[] }[];   // active: 1/0 por elemento (construcción por etapas)
+  srmContinua?: boolean | number;   // modo GEO5 (true = 1; número = bits de geofem_set_srm). SRM de GEO5: cada peldaño desde el estado convergido del anterior (no desde cero)
   staged?: boolean;          // true = CONSTRUCCIÓN POR ETAPAS: análisis de tensiones encadenado (sin SRM); motores TS y WASM
   REGK?: number[];           // región de cada elemento (la que señala `activa/inactiva`)
 };
@@ -95,6 +96,7 @@ const c7 = 0.1012865073235, C7 = 0.7974269853531, e7 = 0.4701420641051, E7 = 0.0
 const GP = [[1 / 3, 1 / 3], [c7, c7], [C7, c7], [c7, C7], [e7, e7], [E7, e7], [e7, E7]];
 const GW = [0.225 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2];
 const NG = 7;
+export const GEO5_SRM = 19;   // bits de la SRM en modo GEO5 (ver setSrm / geofem_set_srm)
 
 function t6(L1: number, L2: number): [number[], number[], number[]] {
   const L3 = 1 - L1 - L2;
@@ -143,7 +145,7 @@ export class GeoFem {
   constructor(m: GeoModel, log: Log = () => {}) {
     this.log = log;
     this.X = m.X; this.Y = m.Y; this.ELE = m.ELE; this.EMAT = m.EMAT; this.MAT = m.MAT;
-    this.model = m.MODEL ?? [];
+    this.model = m.MODEL ?? []; this.setSrm(m.srmContinua);
     this.rigid = m.RIGID ?? (m.MATNAMES ?? []).map((n) => /muro|hormig|concret|wall/i.test(n));   // Rigid body: región elástica que la SRM no reduce
     const nn = (this.nn = m.X.length), ne = (this.ne = m.ELE.length), ndof = (this.ndof = 2 * nn);
     const fixed = new Uint8Array(ndof); for (const d of m.FIXED) fixed[d] = 1;
@@ -310,6 +312,16 @@ export class GeoFem {
   private EPL!: Float64Array; private Dinv!: Float64Array[];
   private rigid: boolean[] = [];   // material rígido (muro): la SRM no le reduce c ni φ
   private model: number[] = [];    // 1 = Mohr-Coulomb en ese material
+  private srmContinua = false;      // SRM de GEO5: peldaños encadenados + tensiones en pasos de 0.1
+  private lsMax = 1;                // pasadas de la búsqueda lineal (GEO5 max_ls_iterations)
+  private soloTangente = false; private tangIni = false; private energiaPrev = false; private porPaso = false;
+  /** Modo GEO5 de la SRM, los mismos bits que geofem_set_srm: 1 peldaños encadenados, 2 tangente del SRF nuevo al
+   *  empezar el peldaño, 4 line search de 3 pasadas, 8 energía con el residuo previo, 16 retorno desde el inicio del paso.
+   *  true = 19 (el que calca el Log_File de GeoFEM: registros_etapas.md). */
+  private setSrm(f: boolean | number | undefined): void {
+    const b = f === true ? GEO5_SRM : typeof f === "number" ? f : 0;
+    this.srmContinua = (b & 1) !== 0; this.tangIni = (b & 2) !== 0; this.lsMax = b & 4 ? 3 : 1; this.energiaPrev = (b & 8) !== 0; this.porPaso = (b & 16) !== 0;
+  }
   private mcp: [number, number, number][] = [];   // (φ, c, ψ) reducidos por la SRF del peldaño (índice 1..)
 
   // ---- MOHR-COULOMB: el mismo retorno de Clausen que geofem.cpp (portado de mc_stress.m). Tracción positiva.
@@ -323,7 +335,7 @@ export class GeoFem {
     const d1 = (L22 * q1 - L12 * q2) / Om, d2 = (L11 * q2 - L21 * q1) / Om;
     return [0, 1, 2].map((i) => ss[i] - d1 * Dg1[i] - d2 * Dg2[i]);
   }
-  private static mcReturn(st: ArrayLike<number>, De: Float64Array, phi: number, psi: number, c: number, out: Float64Array): number {   // región: 0 elástico, 1 cara, 2 arista, 3 ápice
+  private static mcReturn(st: ArrayLike<number>, De: Float64Array, phi: number, psi: number, c: number, out: Float64Array, info?: { t2: number; ix: number[]; reg: number }): number {   // región: 0 elástico, 1 cara, 2 arista, 3 ápice
     const sxx = st[0], syy = st[1], szz = st[2], sxy = st[3];
     const cen = (sxx + syy) / 2, R = Math.sqrt(((sxx - syy) / 2) * ((sxx - syy) / 2) + sxy * sxy), t2 = Math.atan2(2 * sxy, sxx - syy);
     const str = [cen + R, cen - R, szz];
@@ -332,6 +344,7 @@ export class GeoFem {
     const tol = 1e-7 * Math.max(1, Math.max(Math.abs(str[0]), Math.max(Math.abs(str[1]), Math.abs(str[2]))));
     const sp = Math.sin(phi), sg = Math.sin(psi), ccos = c * Math.cos(phi);
     for (let i = 0; i < 4; i++) out[i] = st[i];
+    if (info) { info.t2 = t2; info.ix = ix.slice(); info.reg = 0; }
     if (GeoFem.fmc(ss, sp, ccos) <= tol) return 0;
     let reg = 1;
     const D = [0, 1, 2].map((i) => [De[i * 4], De[i * 4 + 1], De[i * 4 + 2]]);
@@ -340,16 +353,49 @@ export class GeoFem {
     const den = n1[0] * Dg1[0] + n1[1] * Dg1[1] + n1[2] * Dg1[2], dl = GeoFem.fmc(ss, sp, ccos) / den;
     let r = [ss[0] - dl * Dg1[0], ss[1] - dl * Dg1[1], ss[2] - dl * Dg1[2]];
     if (!GeoFem.mcValido(r, sp, ccos, tol)) {
-      r = GeoFem.mcArista(ss, D, n1, g1, [0.5 * (1 + sp), -0.5 * (1 - sp), 0], [0.5 * (1 + sg), -0.5 * (1 - sg), 0], ccos); reg = 2;
-      if (!GeoFem.mcValido(r, sp, ccos, tol)) {
-        r = GeoFem.mcArista(ss, D, n1, g1, [0, 0.5 * (1 + sp), -0.5 * (1 - sp)], [0, 0.5 * (1 + sg), -0.5 * (1 - sg)], ccos);
-        if (!GeoFem.mcValido(r, sp, ccos, tol)) { const a = Math.tan(phi) > 1e-12 ? c / Math.tan(phi) : 0; r = [a, a, a]; reg = 3; }
-      }
+      // GEO5 (FUN_005a67e0): la arista se elige por σ2_new > σ1_new (→ σ1 = σ2, caras (σ1,σ3)+(σ2,σ3)); si no, σ2 = σ3.
+      // Si la arista no vale, ápice. (Probar las dos en orden elegía a veces la equivocada: ver geofem.cpp)
+      if (r[1] > r[0]) { r = GeoFem.mcArista(ss, D, n1, g1, [0, 0.5 * (1 + sp), -0.5 * (1 - sp)], [0, 0.5 * (1 + sg), -0.5 * (1 - sg)], ccos); reg = 4; }
+      else { r = GeoFem.mcArista(ss, D, n1, g1, [0.5 * (1 + sp), -0.5 * (1 - sp), 0], [0.5 * (1 + sg), -0.5 * (1 - sg), 0], ccos); reg = 2; }
+      if (!GeoFem.mcValido(r, sp, ccos, tol)) { const a = Math.tan(phi) > 1e-12 ? c / Math.tan(phi) : 0; r = [a, a, a]; reg = 3; }
     }
     const pr = [0, 0, 0]; for (let k = 0; k < 3; k++) pr[ix[k]] = r[k];
     const cen2 = (pr[0] + pr[1]) / 2, R2 = (pr[0] - pr[1]) / 2;
     out[0] = cen2 + R2 * Math.cos(t2); out[1] = cen2 - R2 * Math.cos(t2); out[2] = pr[2]; out[3] = R2 * Math.sin(t2);
+    if (info) info.reg = reg;
     return reg;
+  }
+  /** Tangente de Mohr-Coulomb de GEO5 (la misma que geofem.cpp: bloque normal De − (De·M)L⁻¹(Nᵀ·De), corte principal
+   *  elástico G, vértice → 0; rotación Rᵀ·D·R). EXTRAIDO_GeoFEM_MC_multisuperficie.md §4. */
+  private static mcTangenteGeo5(inf: { t2: number; ix: number[]; reg: number }, De: Float64Array, phi: number, psi: number, Dep: Float64Array): void {
+    const sp = Math.sin(phi), sg = Math.sin(psi), a = 0.5 * (1 + sp), b = 0.5 * (sp - 1), ag = 0.5 * (1 + sg), bg = 0.5 * (sg - 1);
+    const D = [0, 1, 2].map((i) => [De[i * 4], De[i * 4 + 1], De[i * 4 + 2]]);
+    const n1 = [a, 0, b], n2 = [0, a, b], n3 = [a, b, 0], g1 = [ag, 0, bg], g2 = [0, ag, bg], g3 = [ag, bg, 0];
+    const Dn = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    if (inf.reg !== 3) {
+      const N = [n1], M = [g1];
+      if (inf.reg === 2) { N.push(n3); M.push(g3); } else if (inf.reg === 4) { N.push(n2); M.push(g2); }
+      const k = N.length;
+      const DM = M.map((m) => [0, 1, 2].map((i) => D[i][0] * m[0] + D[i][1] * m[1] + D[i][2] * m[2]));
+      const ND = N.map((n) => [0, 1, 2].map((i) => n[0] * D[0][i] + n[1] * D[1][i] + n[2] * D[2][i]));
+      const L = N.map((n) => DM.map((dm) => n[0] * dm[0] + n[1] * dm[1] + n[2] * dm[2]));
+      let Li: number[][];
+      if (k === 1) Li = [[1 / L[0][0]]];
+      else { const det = L[0][0] * L[1][1] - L[0][1] * L[1][0]; Li = [[L[1][1] / det, -L[0][1] / det], [-L[1][0] / det, L[0][0] / det]]; }
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+        let s = 0; for (let p = 0; p < k; p++) for (let q = 0; q < k; q++) s += DM[p][i] * Li[p][q] * ND[q][j];
+        Dn[i][j] = D[i][j] - s;
+      }
+    }
+    const P = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) P[inf.ix[i]][inf.ix[j]] = Dn[i][j];
+    P[3][3] = De[15];
+    const th = inf.t2 / 2, c = Math.cos(th), s = Math.sin(th);
+    const Rm = [[c * c, s * s, 0, c * s], [s * s, c * c, 0, -c * s], [0, 0, 1, 0], [-2 * c * s, 2 * c * s, 0, c * c - s * s]];
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      let v = 0; for (let p = 0; p < 4; p++) for (let q = 0; q < 4; q++) v += Rm[p][i] * P[p][q] * Rm[q][j];
+      Dep[i * 4 + j] = v;
+    }
   }
 
   /** Fuerzas internas con σ = retorno(SIG + De·B·du). Si commit: guarda σ y la tangente del retorno. */
@@ -370,20 +416,14 @@ export class GeoFem {
         let got: boolean;
         if (this.model[mm - 1] === 1 && !this.rigid[mm - 1]) {   // MOHR-COULOMB, tangente NUMÉRICA (como geofem.cpp)
           const q = this.mcp[mm];
+          const inf = { t2: 0, ix: [0, 1, 2], reg: 0 };
           const ret = (de: ArrayLike<number>, out: Float64Array): number => {
             const tr = new Float64Array(4); for (let i = 0; i < 4; i++) { let v = sigN[i]; for (let j = 0; j < 4; j++) v += De[i * 4 + j] * de[j]; tr[i] = v; }
-            return GeoFem.mcReturn(tr, De, q[0], q[2], q[1], out);
+            return GeoFem.mcReturn(tr, De, q[0], q[2], q[1], out, inf);
           };
           got = ret(deps, sig) !== 0;   // también en el ápice, tangente numérica (con la elástica la etapa 6 no convergía)
-          if (got && commit) {
-            Dep.set(De);
-            for (const j of [0, 1, 3]) {
-              const dp = Float64Array.from(deps), h = 1e-8 * Math.max(1, Math.abs(deps[j]) * 1e4); dp[j] += h;
-              const sp4 = new Float64Array(4); ret(dp, sp4);
-              for (let i = 0; i < 4; i++) Dep[i * 4 + j] = (sp4[i] - sig[i]) / h;
-            }
-          }
-        } else got = this.dpReturn(deps, al, k, De, commit, sigN, sig, Dep);
+          if (got && (commit || this.soloTangente)) GeoFem.mcTangenteGeo5(inf, De, q[0], q[2], Dep);   // la de GEO5
+        } else got = this.dpReturn(deps, al, k, De, commit || this.soloTangente, sigN, sig, Dep);
         const w = this.dJw[kk];
         const t0 = sig[0] * w, t1 = sig[1] * w, t3 = sig[3] * w;
         for (let c = 0; c < 12; c++) Fi[this.edof[e * 12 + c]] += B[c] * t0 + B[12 + c] * t1 + B[24 + c] * t3;
@@ -400,7 +440,7 @@ export class GeoFem {
   }
 
   /** Un peldaño de la escalera (Newton completo con line-search). Devuelve [conv, u, it]. */
-  private nrstep(SRF: number, Fext: Float64Array, rstep: number, trace?: { u: Float64Array }[], keep = false): [boolean, Float64Array, number] {
+  private nrstep(SRF: number, Fext: Float64Array, rstep: number, trace?: { u: Float64Array }[], keep = false, Fref?: Float64Array): [boolean, Float64Array, number] {
     const maxit = 100;
     const ab: [number, number][] = [];
     for (let mm = 0; mm < this.MAT.length; mm++) {   // TODOS los suelos (antes tope 2: con 3+ suelos leía fuera del arreglo)
@@ -417,10 +457,20 @@ export class GeoFem {
     const ADDisp = new Float64Array(nf), DForce = new Float64Array(nf);
     let conv = false, it = 0;
     if (!keep) this.resetState();   // keep = la etapa arranca del estado (σ, ε_pl) que dejó la anterior
+    if (keep && Fref && this.tangIni) { this.soloTangente = true; this.assembleInc(du, ab, false, Fi); this.soloTangente = false; }
     this.assembleInc(du, ab, false, Fi);
     this.gather(Fext, Fi, Rf);                                   // con TIES el esclavo suma en la fila del maestro
     DForce.set(Rf);
+    if (Fref) this.gather(Fref, null, DForce);                   // SRM de GEO5: normas respecto a la carga total (como geofem.cpp)
     let rPrev = 1e300, ndiv = 0;
+    // porPaso: el retorno de cada iteración sale del estado del INICIO del paso con el incremento ACUMULADO (como geofem.cpp)
+    const S0 = Float64Array.from(this.SIG), E0 = Float64Array.from(this.EPL), uT = new Float64Array(ndof), CLoad = new Float64Array(nf);
+    const evalInc = (dinc: Float64Array, commit: boolean, Fo: Float64Array): void => {
+      if (!this.porPaso) { this.assembleInc(dinc, ab, commit, Fo); return; }
+      for (let d = 0; d < ndof; d++) uT[d] = u[d] + dinc[d];
+      if (commit) { this.SIG.set(S0); this.EPL.set(E0); this.assembleInc(uT, ab, true, Fo); return; }
+      const cur = Float64Array.from(this.SIG); this.SIG.set(S0); this.assembleInc(uT, ab, false, Fo); this.SIG.set(cur);
+    };
     for (it = 1; it <= maxit; it++) {
       if (!Number.isFinite(norm(Rf))) break;
       this.assembleK(this.Kt, false);
@@ -429,20 +479,28 @@ export class GeoFem {
       if (!ok) bandSolve(this.Kel, Rf, duf);
       this.scatter(duf, du);                                     // fijos = 0, esclavo = su maestro
       const s0 = dot(duf, Rf), n0 = norm(Rf);
-      let al = 1.0;
-      this.assembleInc(du, ab, false, F1);                       // retorno de PRUEBA desde el estado
-      this.gather(Fext, F1, R1);
-      const s1 = dot(duf, R1), n1 = norm(R1), den = s0 - s1;
-      if (n0 > 1e-10 && n1 > 1e-10 && Math.abs(den) > 1e-10 && n1 / n0 >= 0.8) al = al * s0 / den;
-      if (al < 0.1) al = 0.1; else if (al >= 1.0) al = 1.0;
+      // line search de GEO5: secante acumulativa mientras ‖R(η)‖/‖R(0)‖ ≥ 0.8, recorte a [0.1, 1], hasta lsMax pasadas (como geofem.cpp)
+      let al = 1.0, acc = 1.0, nls = 0, ratio: number;
+      const dut = new Float64Array(ndof);
+      do {
+        for (let d = 0; d < ndof; d++) dut[d] = du[d] * al;
+        evalInc(dut, false, F1);                                  // retorno de PRUEBA desde el estado
+        this.gather(Fext, F1, R1);
+        const s1 = dot(duf, R1), n1 = norm(R1), den = s0 - s1;
+        ratio = 0;
+        if (n0 > 1e-10 && n1 > 1e-10 && Math.abs(den) > 1e-10) { ratio = n1 / n0; if (ratio >= 0.8) acc = acc * s0 / den; }
+        if (acc < 0.1) { al = 0.1; ratio = 0; } else if (acc >= 1.0) { al = 1.0; ratio = 0; } else { nls++; al = acc; }
+      } while (nls < this.lsMax && ratio >= 0.8);
       for (let k = 0; k < nf; k++) drf[k] = al * duf[k];
-      for (let d = 0; d < ndof; d++) { du[d] *= al; u[d] += du[d]; }
-      this.assembleInc(du, ab, true, Fi);                        // COMMIT: σ_i y tangente
+      for (let d = 0; d < ndof; d++) du[d] *= al;
+      if (this.energiaPrev) CLoad.set(Rf);                        // residuo ANTES de la iteración (bit 8)
+      evalInc(du, true, Fi);                                     // COMMIT: σ_i y tangente
+      for (let d = 0; d < ndof; d++) u[d] += du[d];
       this.gather(Fext, Fi, Rf);
       if (trace) trace.push({ u: Float64Array.from(u) });
       for (let k = 0; k < nf; k++) ADDisp[k] += drf[k];
       const nDD = norm(drf), dA = norm(ADDisp), nDL = norm(Rf), dF = norm(DForce);
-      const nEN = Math.sqrt(Math.abs(dot(drf, Rf))), dE = Math.sqrt(Math.abs(dot(ADDisp, DForce)));
+      const nEN = Math.sqrt(Math.abs(dot(drf, this.energiaPrev ? CLoad : Rf))), dE = Math.sqrt(Math.abs(dot(ADDisp, DForce)));
       const eu = dA > 1 ? nDD / dA : nDD, ef = dF > 1 ? nDL / dF : nDL, ee = dE > 1 ? nEN / dE : nEN;
       let dxmax = 0; for (let i = 0; i < this.nn; i++) dxmax = Math.max(dxmax, Math.abs(u[2 * i]));
       this.log(`  RS=${rstep} SRF=${f4(SRF)} it=${pad2(it)} eta=${f4(al)} DNorm=${e5(eu)} OBFNorm=${e5(ef)} ENorm=${e5(ee)} |gi|=${e4(nDL)} dx=${(dxmax * 1e3).toFixed(1)}`);
@@ -539,13 +597,30 @@ export class GeoFem {
     return [false, r0[1], it];
   }
 
+  /** Análisis de tensiones como GEO5: carga en pasos de 0.1 desde cero, relajación del paso a la mitad (≤ 5). Como geofem.cpp. */
+  private nrstepPasos(SRF: number, F: Float64Array): [boolean, Float64Array, number] {
+    this.resetState(); const ndof = this.ndof, u = new Float64Array(ndof), Fk = new Float64Array(ndof);
+    let t = 0, dt = 0.1, nrel = 0, k = 0, it = 0;
+    while (t < 1 - 1e-12) {
+      const tn = Math.min(1, t + dt);
+      const s0 = Float64Array.from(this.SIG), e0 = Float64Array.from(this.EPL), d0 = Float64Array.from(this.DEP), h0 = Uint8Array.from(this.hasDep);
+      for (let d = 0; d < ndof; d++) Fk[d] = F[d] * tn;
+      const [cc, du, itk] = this.nrstep(SRF, Fk, ++k, undefined, true); let c = cc; it += itk;
+      if (c) { let m = 0; for (let d = 0; d < ndof; d++) m = Math.max(m, Math.abs(du[d])); if (!(m < 1.0)) c = false; }
+      if (c) { for (let d = 0; d < ndof; d++) u[d] += du[d]; t = tn; }
+      else { this.SIG.set(s0); this.EPL.set(e0); this.DEP.set(d0); this.hasDep.set(h0); dt /= 2; if (++nrel > 5) { this.log(`    tensiones: carga alcanzada ${(100 * t).toFixed(1)} %`); return [false, u, it]; } }
+    }
+    this.log(`    tensiones: 100 % de la carga en ${k - nrel} pasos (${nrel} relajaciones)`);
+    return [true, u, it];
+  }
+
   /** Escalera SRM de GEO5 para una etapa (carga total Ftot). */
   private srm(Ftot: Float64Array): { fs: number; prog: string; ulo: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; u1: Float64Array; sig1: Float64Array; epl1: Float64Array; eps1: Float64Array } {
     const RED0 = 0.9, RELAX = 2, MINSTEP = 0.99, MAXRELAX = 3;
     let Racc = 1, fs = 1, nrelax = 0, rs = 0, prog = "";
     let ulo: Float64Array = new Float64Array(this.ndof);
     const steps: { srf: number; u: Float64Array }[] = [];
-    const [c0, u1, n0] = this.nrstepInc(1.0, Ftot, 0);
+    const [c0, u1, n0] = this.srmContinua ? this.nrstepPasos(1.0, Ftot) : this.nrstepInc(1.0, Ftot, 0);   // GEO5: pasos de 0.1
     // instantánea del estado de tensión (SRF=1) para los campos del visor
     const sig1 = Float64Array.from(this.SIG), epl1 = Float64Array.from(this.EPL), eps1 = new Float64Array(this.ne * NG * 4);
     for (let e = 0; e < this.ne; e++) for (let q = 0; q < NG; q++) {
@@ -559,13 +634,21 @@ export class GeoFem {
     bandSolve(this.Kel, rhs, x);
     const uel = this.scatter(x);
     this.log(`    SRM rs00 paso=1.0000 SRF=1.0000 ${c0 ? "CONVERGE" : "DIVERGE"} it=${n0}`);
+    let uBase: Float64Array = Float64Array.from(u1);   // SRM continuada: desplazamiento del último estado convergido
     for (;;) {
       const s = 1 - (1 - RED0) / Math.pow(RELAX, nrelax);
       if (s > MINSTEP) break;
       const trial = 1 / (Racc * s);                            // SRF EXACTO (GEO5 no redondea)
       if (trial > 3) break;
       rs++;
-      const [conv, u, nit] = this.nrstep(trial, Ftot, rs);   // SRF > 1: sin reintento por incrementos (la divergencia fija el FS; con reintento Demo04 etapa 3 daba 1.7369)
+      let conv: boolean, u: Float64Array, nit: number;
+      if (this.srmContinua) {   // GEO5: desde el último estado convergido; si diverge, se vuelve a él (como geofem.cpp)
+        const s0 = Float64Array.from(this.SIG), e0 = Float64Array.from(this.EPL), d0 = Float64Array.from(this.DEP), h0 = Uint8Array.from(this.hasDep);
+        const [cc, du, it] = this.nrstep(trial, Ftot, rs, undefined, true, Ftot); conv = cc; nit = it;
+        if (conv) { let m = 0; for (let d = 0; d < this.ndof; d++) m = Math.max(m, Math.abs(du[d])); if (!(m < 1.0)) conv = false; }
+        if (conv) { u = Float64Array.from(uBase); for (let d = 0; d < this.ndof; d++) u[d] += du[d]; uBase = u; }
+        else { u = Float64Array.from(du); this.SIG.set(s0); this.EPL.set(e0); this.DEP.set(d0); this.hasDep.set(h0); }
+      } else [conv, u, nit] = this.nrstep(trial, Ftot, rs);   // SRF > 1: sin reintento por incrementos (la divergencia fija el FS; con reintento Demo04 etapa 3 daba 1.7369)
       if (conv && Number.isFinite(norm(u))) {
         Racc *= s; fs = trial; ulo = u; steps.push({ srf: trial, u });
         let dxmax = 0; for (let i = 0; i < this.nn; i++) dxmax = Math.max(dxmax, Math.abs(u[2 * i]));
@@ -794,7 +877,7 @@ export class GeoFem {
     if (m.staged) return this.runStaged(m, onStage);
     const t0 = performance.now();
     this.MAT = m.MAT;
-    this.model = m.MODEL ?? [];
+    this.model = m.MODEL ?? []; this.setSrm(m.srmContinua);
     this.rigid = m.RIGID ?? (m.MATNAMES ?? []).map((n) => /muro|hormig|concret|wall/i.test(n));
     const results: StageResult[] = [];
     // Con sliders de γ la gravedad de la fixture ya no vale: se usa la recalculada (N·ρ·detJ·w por
