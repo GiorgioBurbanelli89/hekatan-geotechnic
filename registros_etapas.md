@@ -155,3 +155,18 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
   Un 0.13 % de E mueve el FS de GEO5 un 20 %. Geotechnic: banda 1.33–1.47 con ±0.1 %. El FS de este muro (arenas
   c = 0, peldaños de 1.25 %) es una BANDA en los dos programas: comparar la banda y el Log iteración a iteración.
   Capturas: tests/shots/geo5/muro_perturbar.
+
+## 30-sep (mañana) — mallador: uniones en T y muro de lindero
+- ❌→✅ `examples/muro_lindero_etapas_mc.hgeo` no mallaba (0.2°, tope de 8 s con 16 puntos de Steiner). Causas, en orden:
+  1. `belowTerrain` metía las x del terreno como vértices de la capa (cara vista 9.99 → 10.00 = tramos de 1 cm en −3.9).
+     Ahora solo sirven para hallar cruces.
+  2. Extremos de interfaz sobre los MÁRGENES no se insertaban en el contorno (solo los que caen en el terreno).
+  3. **Uniones en T y cruces entre cadenas** (pie del muro sobre la interfaz −3.9, dentellón que la cruza, capas que llegan
+     al trasdós) no partían la otra cadena → el Delaunay restringido no recupera el segmento y `enforce` gasta 50
+     pasadas en cada iteración de Ruppert. Nuevo `nodeChains()`.
+- ✅ Efecto colateral bueno: los muros de Manabí por etapas mallaban cortados por tiempo con el tope por defecto (10.4°);
+  ahora completos (25.5°, 7054 nudos). Taludes: ángulo mínimo 26 → 29–32°. Manabí-MC por etapas da lo mismo que la tabla
+  validada (coronación 5.26/2.78 … 16.40 mm; σz 210.9, J 69.6). `npm test` OK (Demo04, dinámicos, TS = WASM).
+- ✅ Lindero (malla 0.6: 1986 T6, 25.6°, 2.2 s) por etapas con MC: todas convergen. ❌ antes: el hueco del dentellón vacío
+  en la etapa inicial (corte vertical en arena c = 0) → 0 % de carga; ahora el dentellón está activo desde el principio.
+  Coronación al final: d_x −8.8 mm (hacia el lindero), d_z −28.6 mm.

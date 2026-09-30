@@ -62,7 +62,7 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
   // vértice del contorno (si no, el tramo coincidente con el borde rompía la triangulación: FS=1.0000 divergiendo).
   for (let k = 1; k < spans.length; k++) for (const ch of belowTerrain(spans[k], spans[0])) {
     chains.push(ch);
-    for (const e of [ch[0], ch[ch.length - 1]]) if (Math.abs(interfaceY(spans[0], e[0]) - e[1]) < 1e-6) insertOnOutline(outline, e);
+    for (const e of [ch[0], ch[ch.length - 1]]) if (Math.abs(interfaceY(spans[0], e[0]) - e[1]) < 1e-6) insertOnOutline(outline, e); else insertOnOutline(outline, e, 1e-6);   // también en los márgenes
   }
   // LÍNEAS LIBRES (GEO5 Free line): polilíneas cualesquiera recortadas al dominio; sus extremos sobre el contorno pasan a ser
   // vértices del contorno. Cierran regiones (componentes de la malla separadas por líneas) que reciben su propio suelo.
@@ -85,6 +85,7 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     // El muro se asigna por polígono, más abajo.
   }
   chains[0] = outline.concat([outline[0]]);   // el contorno con los cruces insertados
+  nodeChains(chains);                          // uniones en T y cruces entre cadenas → vértices de ambas
   // TAMAÑO LOCAL DE ELEMENTO (malla graduada). Un muro de 0.40 m de fuste dentro de una malla de h=1.8 m es un
   // rasgo mucho más pequeño que h: con un solo h global el refinamiento de Ruppert se dispara (miles de puntos de
   // Steiner, corte por tiempo y malla rota). Se le da al muro su propio tamaño (su espesor mínimo) y se vuelve al
@@ -378,21 +379,56 @@ function belowTerrain(layer: Pt[], terr: Pt[]): Pt[][] {
   const xs = new Set<number>(); for (const p of layer) xs.add(p[0]); for (const p of terr) if (p[0] > x0 + 1e-9 && p[0] < x1 - 1e-9) xs.add(p[0]);
   const X = [...xs].sort((a, b) => a - b);
   const f = (x: number) => interfaceY(layer, x) - interfaceY(terr, x);   // <0: la capa está debajo
-  const pts: { x: number; y: number; below: boolean }[] = [];
-  const push = (x: number) => { const d = f(x); pts.push({ x, y: d < 0 ? interfaceY(layer, x) : interfaceY(terr, x), below: d < -1e-6 }); };
+  // las x del terreno solo sirven para encontrar los cruces: un vértice del terreno muy por encima NO debe quedar como
+  // vértice de la capa (muro de lindero: la cara vista 9.99 → 10.00 dejaba tramos de 1 cm en la interfaz −3.9 y el
+  // refinamiento de Ruppert se atascaba hasta el tope de tiempo, ángulo mínimo 0.2°; 2026-09-30)
+  const propias = new Set(layer.map((p) => p[0]));
+  const pts: { x: number; y: number; below: boolean; aux?: boolean }[] = [];
+  const push = (x: number, aux = false) => { const d = f(x); pts.push({ x, y: d < 0 ? interfaceY(layer, x) : interfaceY(terr, x), below: d < -1e-6, aux }); };
   for (let i = 0; i < X.length; i++) {
-    push(X[i]);
+    push(X[i], !propias.has(X[i]));
     if (i + 1 < X.length) { const a = f(X[i]), b = f(X[i + 1]); if ((a < 0 && b > 0) || (a > 0 && b < 0)) push(X[i] + (X[i + 1] - X[i]) * a / (a - b)); }   // cruce (f lineal a trozos entre X)
   }
   const out: Pt[][] = []; let cur: Pt[] = [];
   for (let i = 0; i < pts.length; i++) {
     const p = pts[i], prev = pts[i - 1], next = pts[i + 1];
-    const useful = p.below || (prev?.below ?? false) || (next?.below ?? false);   // un punto "en el terreno" solo vale como extremo de un tramo por debajo
+    const useful = (p.below || (prev?.below ?? false) || (next?.below ?? false))   // un punto "en el terreno" solo vale como extremo de un tramo por debajo
+      && !(p.aux && p.below && (prev?.below ?? false) && (next?.below ?? false));    // auxiliar en medio de un tramo por debajo: sobra (colineal)
     if (useful) cur.push([p.x, p.y]);
     if (!p.below && cur.length && !(next?.below ?? false)) { if (cur.length >= 2) out.push(cur); cur = []; }
   }
   if (cur.length >= 2) out.push(cur);
   return out;
+}
+/** Parte todas las cadenas restringidas donde otra las toca (unión en T: el pie del muro sobre una interfaz, una capa
+ *  que llega al trasdós) o las cruza (el dentellón atraviesa la interfaz de la base). Sin esto el segmento restringido
+ *  tiene un punto encima, el Delaunay restringido no lo puede recuperar y `enforce` gasta sus 50 pasadas en cada
+ *  iteración de Ruppert: tope de tiempo con 20 puntos y ángulo mínimo 0.2° (muro de lindero, 2026-09-30). */
+function nodeChains(chains: Pt[][]) {
+  const extra: { t: number; p: Pt }[][][] = chains.map((ch) => ch.slice(1).map(() => []));
+  const put = (ci: number, si: number, t: number, p: Pt) => { if (t > 1e-9 && t < 1 - 1e-9) extra[ci][si].push({ t, p }); };
+  for (let ci = 0; ci < chains.length; ci++) for (let si = 0; si + 1 < chains[ci].length; si++) {
+    const a = chains[ci][si], b = chains[ci][si + 1], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy; if (L2 < 1e-18) continue;
+    for (let cj = 0; cj < chains.length; cj++) for (let sj = 0; sj + 1 < chains[cj].length; sj++) {
+      if (cj === ci && Math.abs(sj - si) <= 1) continue;
+      const c = chains[cj][sj], d = chains[cj][sj + 1], ex = d[0] - c[0], ey = d[1] - c[1];
+      for (const q of [c, d]) {                                     // vértice de la otra cadena sobre este segmento
+        const t = ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L2;
+        if (Math.abs(cross(dx, dy, q[0] - a[0], q[1] - a[1])) / Math.sqrt(L2) < 1e-6) put(ci, si, t, [q[0], q[1]]);
+      }
+      const den = cross(dx, dy, ex, ey); if (Math.abs(den) < 1e-12) continue;   // cruce propio
+      const t = cross(c[0] - a[0], c[1] - a[1], ex, ey) / den, u = cross(c[0] - a[0], c[1] - a[1], dx, dy) / den;
+      if (t > 1e-9 && t < 1 - 1e-9 && u > 1e-9 && u < 1 - 1e-9) put(ci, si, t, [a[0] + t * dx, a[1] + t * dy]);
+    }
+  }
+  for (let ci = 0; ci < chains.length; ci++) {
+    const ch = chains[ci], out: Pt[] = [ch[0]];
+    for (let si = 0; si + 1 < ch.length; si++) {
+      for (const e of extra[ci][si].sort((x, y) => x.t - y.t)) { const q = out[out.length - 1]; if (Math.hypot(q[0] - e.p[0], q[1] - e.p[1]) > 1e-7) out.push(e.p); }
+      const q = out[out.length - 1]; if (Math.hypot(q[0] - ch[si + 1][0], q[1] - ch[si + 1][1]) > 1e-7) out.push(ch[si + 1]); else out[out.length - 1] = ch[si + 1];
+    }
+    chains[ci] = out;
+  }
 }
 /** Inserta p como vértice del contorno si cae sobre una de sus aristas (y aún no es vértice). */
 function insertOnOutline(outline: Pt[], p: Pt, tol = 1e-6) {

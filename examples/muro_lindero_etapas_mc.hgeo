@@ -25,9 +25,11 @@ linea 10.68,-2.8 25,-2.8
 linea 10.61,-2.1 25,-2.1
 linea 10.54,-1.4 25,-1.4
 linea 10.47,-0.7 25,-0.7
-malla 0.4
-etapa terreno inactiva=10.3,-2;13.05,-4.3;5,-3.5;18,-3.7;18,-3.1;18,-2.4;18,-1.7;18,-1.0;18,-0.3
-etapa muro activa=10.3,-2;13.05,-4.3;5,-3.5
+malla 0.6
+# el dentellón se hormigona contra la excavación: activo desde el principio (un hueco vertical en arena con c = 0 no
+# se sostiene y el estado inicial no convergía)
+etapa terreno inactiva=10.3,-2;5,-3.5;18,-3.7;18,-3.1;18,-2.4;18,-1.7;18,-1.0;18,-0.3
+etapa muro activa=10.3,-2;5,-3.5
 etapa bajo-talon activa=18,-3.7
 etapa capa1 activa=18,-3.1
 etapa capa2 activa=18,-2.4
