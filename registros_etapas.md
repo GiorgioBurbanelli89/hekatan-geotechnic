@@ -150,3 +150,8 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
 - ⏳ Web, ejemplo con Drucker-Prager (`muro_manabi_etapas.hgeo`): la etapa 6 tarda 134 s porque en el navegador necesita
   16 incrementos (213 it.), y en Node con el MISMO WASM y la MISMA malla (7186 nudos, 3503 T6, 25.3°) cierra con 2
   (31 it.); las 5 primeras etapas dan las mismas iteraciones. La causa no está en las opciones del motor (srm, modelo).
+- ✅ **GEO5 TAMBIÉN es caótico** (30-sep, GeoFEM, muro de una etapa `muro_manabi_fem.gmk`, SRM con los suelos editados
+  por la interfaz): E 24.97/15.48 → FS 1.28 · E 25.00/15.50 → FS 1.36 (se reproduce) · E 25.03/15.52 → FS 1.53.
+  Un 0.13 % de E mueve el FS de GEO5 un 20 %. Geotechnic: banda 1.33–1.47 con ±0.1 %. El FS de este muro (arenas
+  c = 0, peldaños de 1.25 %) es una BANDA en los dos programas: comparar la banda y el Log iteración a iteración.
+  Capturas: tests/shots/geo5/muro_perturbar.
