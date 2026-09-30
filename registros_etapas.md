@@ -122,3 +122,13 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
   cifra. Sí se calca el algoritmo iteración a iteración.
 - ⏳ η de la iteración 1 (0.39 contra 0.45): con el mismo paso completo, la diferencia está en R(η=1).
 - ⏳ TS ≠ WASM en la SRM continuada, solo por redondeo (el orden de la factorización banda/skyline).
+
+### 29-sep (noche) — pendientes
+- ✅ **Sensibilidad (modo GEO5 = 19, WASM):** con E del suelo multiplicado por 1.001 / 1.0001 / 0.999999 / 1.000001 / 0.9999
+  el FS da 1.3320 / 1.4014 / 1.4737 / 1.4737 / 1.4014. Un 0.1 % de E no cambia la física y mueve el FS 10 %. GEO5 1.36
+  cae dentro de la banda 1.33–1.47. Para este muro, el FS de la SRM hay que leerlo como banda, no como número exacto.
+- ❌ ψ = φ (flujo asociado) para explicar el η: cambia el paso completo (5.98e-3 contra 7.95e-3 de GEO5). El muro usa ψ = 0.
+- ✅ Line search literal del binario (decompiled/NewtonLoop_decomp.c, FUN_00510a90) = el nuestro. Con la bandera 0x2000
+  (inicio de paso) y estado[200] ≠ 0, GEO5 salta el line search (η = 1); en el Log del muro no lo salta. La diferencia de
+  η (0.39 contra 0.45) está en R(η = 1). El residuo tras el paso casi coincide (6.24e-2 contra 6.35e-2): no se persigue más.
+- ⏳ La misma perturbación de E en GEO5 (desde su ventana), para ver si su FS también salta.
