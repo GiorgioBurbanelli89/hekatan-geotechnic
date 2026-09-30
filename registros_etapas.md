@@ -144,3 +144,9 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
 - ✅ Puppeteer en los dos deploys públicos: botón visible, Struct abre con los parámetros (coronación −2.79 mm con el
   fuste de 0.34 m arriba; −2.80 con el de 0.25), sin errores.
 - ✅ Quitado el código del estudio de suelos de la cabecera de `examples/muro_manabi.hgeo` (sale en el editor público).
+- ✅ Etapas con Mohr-Coulomb: tangente del ápice 0.1·De desde el primer intento (solo en construcción por etapas; la
+  SRM sigue con la de GEO5). Muro de Manabí: etapa 6 en 11 iteraciones (antes 192), 7 etapas en 28 s (antes 168),
+  coronación dz 16.39 mm (GeoFEM 16.38). `npm test` en verde.
+- ⏳ Web, ejemplo con Drucker-Prager (`muro_manabi_etapas.hgeo`): la etapa 6 tarda 134 s porque en el navegador necesita
+  16 incrementos (213 it.), y en Node con el MISMO WASM y la MISMA malla (7186 nudos, 3503 T6, 25.3°) cierra con 2
+  (31 it.); las 5 primeras etapas dan las mismas iteraciones. La causa no está en las opciones del motor (srm, modelo).
