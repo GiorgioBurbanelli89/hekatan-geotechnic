@@ -1,0 +1,36 @@
+# Muro en L de LINDERO con dentellón, construido por etapas (registros/2026-09-30_PLAN_muro_lindero_y_sismo_real.md).
+# Sin puntera (el lindero está en la cara vista), trasdós inclinado 0.40 → 0.75 m, zapata 3.25 × 0.40, dentellón
+# 0.40 × 0.85 al final del talón, relleno en talud 12.5°. z = 0 en la coronación; base de la zapata a −3.90.
+# Suelos de Manabí (arena SP sobre SP-SM, c = 0), Mohr-Coulomb. Las caras «verticales» llevan 1 cm de inclinación:
+# en GEO5 una interfaz es y(x) (misma regla que el muro de Manabí).
+margenes xmin=0 xmax=25 fondo=-12
+interfaz 0,-3.1 9.99,-3.1 10.00,0 10.40,0 25,3.2361
+interfaz 0,-3.9 25,-3.9
+suelo ARENA_SP    E=25000 nu=0.28 phi=30 c=0 gamma=18.5 modelo=mc
+suelo ARENA_SPSM  E=15500 nu=0.30 phi=29.97 c=0 gamma=17.5 modelo=mc
+suelo HORMIGON    E=21538105.77 nu=0.2 phi=0 c=0 gamma=23 rigido=1
+asignar HORMIGON en 10.3,-2
+asignar HORMIGON en 13.05,-4.3
+asignar ARENA_SP en 5,-3.5
+asignar ARENA_SP en 18,-3.7
+asignar ARENA_SP en 18,-2.0
+asignar ARENA_SPSM en 15,-8
+# contorno del muro: cara vista bajo el terreno, trasdós, talón y dentellón
+linea 9.98,-3.9 9.99,-3.1
+linea 10.40,0 10.75,-3.5 13.25,-3.5 13.26,-4.75 12.84,-4.75 12.85,-3.9
+# capas del relleno (0.70 m) desde el trasdós; la última llega hasta la superficie del talud (una línea horizontal
+# en z = 0 dejaba una esquina de 12.5° con el talud y el mallador no terminaba)
+linea 13.25,-3.5 25,-3.5
+linea 10.68,-2.8 25,-2.8
+linea 10.61,-2.1 25,-2.1
+linea 10.54,-1.4 25,-1.4
+linea 10.47,-0.7 25,-0.7
+malla 0.4
+etapa terreno inactiva=10.3,-2;13.05,-4.3;5,-3.5;18,-3.7;18,-3.1;18,-2.4;18,-1.7;18,-1.0;18,-0.3
+etapa muro activa=10.3,-2;13.05,-4.3;5,-3.5
+etapa bajo-talon activa=18,-3.7
+etapa capa1 activa=18,-3.1
+etapa capa2 activa=18,-2.4
+etapa capa3 activa=18,-1.7
+etapa capa4 activa=18,-1.0
+etapa capa5 activa=18,-0.3
