@@ -100,7 +100,7 @@
         <input type="file" id="fFile" accept=".hgeo,.txt" hidden>
       </div>
       <label>Ejemplo</label>
-      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option><option value="manabi">Muro de Manabí · con Vs para el dinámico</option></select>
+      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option><option value="manabi">Muro de Manabí · con Vs para el dinámico</option><option value="manabi_etapas">Muro de Manabí por etapas · Mohr-Coulomb, 7 etapas (= GeoFEM)</option><option value="manabi_etapas_e">Muro de Manabí por etapas · E de las correlaciones del SPT (13 / 12.4 MPa)</option></select>
       <div id="editor" hidden>
         <textarea id="hgeo" spellcheck="false" rows="11"></textarea>
         <div class="row"><button class="run" id="apply" style="margin-top:6px">✎ Aplicar (Ctrl+Enter)</button></div>

@@ -7,6 +7,8 @@ import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
 import { FieldKind, FIELD_LABEL, FIELD_UNIT, nodalField, stressField, isStressField } from "./viewer/geo5scale";
+import MANABI_ETAPAS_HGEO from "../examples/muro_manabi_etapas_mc.hgeo?raw";
+import MANABI_ETAPAS_E_HGEO from "../examples/muro_manabi_etapas_mc_ebowles.hgeo?raw";
 import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, MURO_HGEO, MANABI_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims, effectiveTerrain } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
@@ -578,9 +580,12 @@ draw.onChange = (d) => {
 
 btn.addEventListener("click", () => run(base!.stages.map((_, i) => i).slice(0, parseInt(selN.value))));
 selN.addEventListener("change", () => { const n = parseInt(selN.value); const falta = base!.stages.map((_, i) => i).slice(0, n).filter((i) => !stages[i] || stages[i]!.stale); if (falta.length) run(falta); });
+const EJEMPLOS_HGEO: Record<string, string> = { manabi_etapas: MANABI_ETAPAS_HGEO, manabi_etapas_e: MANABI_ETAPAS_E_HGEO };
 selModel.addEventListener("change", () => {
   if (selModel.value === "muro") { edWrap.hidden = false; edText.value = MURO_HGEO; applyHgeo(); return; }   // ejemplo del muro, de un clic
   if (selModel.value === "manabi") { edWrap.hidden = false; edText.value = MANABI_HGEO; applyHgeo(); return; }   // muro de Manabí con Vs (dinámico)
+  const ej = EJEMPLOS_HGEO[selModel.value];   // muro de Manabí POR ETAPAS (Mohr-Coulomb, las 7 etapas de GeoFEM)
+  if (ej) { edWrap.hidden = false; edText.value = ej; applyHgeo(); return; }
   if (selModel.value === "hgeo") { edWrap.hidden = false; if (!edText.value.trim()) edText.value = DEMO04_HGEO; applyHgeo(); } else loadFixture(selModel.value);
 });
 edApply.addEventListener("click", applyHgeo);
@@ -592,4 +597,9 @@ engancharMuro(() => actualizarMuro(def, visibleStage()));
 engancharDinamico({ modelo: () => base, def: () => def, plot: () => plot, canvas, redibujarEstatico: () => redraw() });
 edText.value = DEMO04_HGEO;
 setTool("ver");
-loadFixture(selModel.value);
+// ?ejemplo=manabi_etapas (o cualquier valor de la lista «Ejemplo»): abre ese modelo directamente (enlace para compartir)
+{
+  const ej = new URLSearchParams(location.search).get("ejemplo");
+  if (ej && Array.from(selModel.options).some((o) => o.value === ej)) { selModel.value = ej; selModel.dispatchEvent(new Event("change")); }
+  else loadFixture(selModel.value);
+}
