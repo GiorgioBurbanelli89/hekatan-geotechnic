@@ -367,11 +367,13 @@ export class GeoFem {
   }
   /** Tangente de Mohr-Coulomb de GEO5 (la misma que geofem.cpp: bloque normal De − (De·M)L⁻¹(Nᵀ·De), corte principal
    *  elástico G, vértice → 0; rotación Rᵀ·D·R). EXTRAIDO_GeoFEM_MC_multisuperficie.md §4. */
+  static gApex = 0;   // rigidez del ápice como fracción de De: solo en el REINTENTO de una etapa (ver geofem.cpp)
   private static mcTangenteGeo5(inf: { t2: number; ix: number[]; reg: number }, De: Float64Array, phi: number, psi: number, Dep: Float64Array): void {
     const sp = Math.sin(phi), sg = Math.sin(psi), a = 0.5 * (1 + sp), b = 0.5 * (sp - 1), ag = 0.5 * (1 + sg), bg = 0.5 * (sg - 1);
     const D = [0, 1, 2].map((i) => [De[i * 4], De[i * 4 + 1], De[i * 4 + 2]]);
     const n1 = [a, 0, b], n2 = [0, a, b], n3 = [a, b, 0], g1 = [ag, 0, bg], g2 = [0, ag, bg], g3 = [ag, bg, 0];
     const Dn = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    if (inf.reg === 3) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) Dn[i][j] = GeoFem.gApex * D[i][j];
     if (inf.reg !== 3) {
       const N = [n1], M = [g1];
       if (inf.reg === 2) { N.push(n3); M.push(g3); } else if (inf.reg === 4) { N.push(n2); M.push(g2); }
@@ -550,6 +552,14 @@ export class GeoFem {
       if (nsub < 16) this.log(`    etapa: con ${nsub} incremento(s) no cierra; se reparte la carga en ${nsub * 2}`);
     }
     if (nsub > 16) nsub = 16;
+    if (!c) {   // REINTENTO: toda la carga, con 0.1·De en el ápice (como geofem.cpp)
+      const sa = Float64Array.from(this.SIG), ea = Float64Array.from(this.EPL), da = Float64Array.from(this.DEP), ha = Uint8Array.from(this.hasDep), alc = this.alcanzada;
+      this.SIG.set(sig0); this.EPL.set(epl0); this.DEP.set(dep0); this.hasDep.set(has0);
+      GeoFem.gApex = 0.1; const [cr0, dur, itr] = this.nrstep(1.0, F, 1, undefined, true); GeoFem.gApex = 0; it += itr;
+      let cr = cr0; if (cr) { let m = 0; for (let d = 0; d < ndof; d++) m = Math.max(m, Math.abs(dur[d])); if (!(m < 1.0)) cr = false; }
+      if (cr) { u.set(dur); c = true; this.alcanzada = 1; nsub = 1; this.log("    etapa: cierra con la tangente del ápice regularizada (0.1·De)"); }
+      else { this.SIG.set(sa); this.EPL.set(ea); this.DEP.set(da); this.hasDep.set(ha); this.alcanzada = alc; }
+    }
     this.Flast = c ? F : Float64Array.from(Fk);
     if (!first) for (let d = 0; d < ndof; d++) this.Utot[d] += u[d];
     for (let e = 0; e < ne; e++) if (this.act[e]) for (let q = 0; q < NG; q++) {   // ε de SUS etapas activas (la 1 también)

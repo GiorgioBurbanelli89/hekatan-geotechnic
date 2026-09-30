@@ -357,11 +357,16 @@ struct GeoFem {
    *      cara F1: N = n1, M = g1 · arista: N = (n1, n2), M = (g1, g2) · VÉRTICE: N = M = (n1, n2, n3) → Dep = 0
    *    bloque de CORTE principal: se queda ELÁSTICO (G): GEO5 no aplica los factores de Clausen.
    *  Luego Dep_cart = Rᵀ·Dep_princ·R con R la transformación de deformación (εx, εy, εz, γxy) → (εa, εb, εz, γab). */
+  // fracción de la rigidez elástica en el ÁPICE (GEO5: 0, bloque normal nulo). Solo la usa el REINTENTO de una etapa que no
+  // cierra: con c = 0 el problema es homogéneo de grado 1 (el residuo relativo no baja al repartir la carga) y los puntos del
+  // ápice, con tangente nula, hacen oscilar a Newton. La tangente cambia el camino, no la solución.
+  static inline double gApex = 0.0;
   static void mcTangenteGeo5(const McInfo& in, const double* De, double phi, double psi, double* Dep) {
     double sp = std::sin(phi), sg = std::sin(psi), a = 0.5 * (1 + sp), b = 0.5 * (sp - 1), ag = 0.5 * (1 + sg), bg = 0.5 * (sg - 1);
     double D[3][3]; for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) D[i][j] = De[i * 4 + j];
     const double n1[3] = {a, 0, b}, n2[3] = {0, a, b}, n3[3] = {a, b, 0}, g1[3] = {ag, 0, bg}, g2[3] = {0, ag, bg}, g3[3] = {ag, bg, 0};
     double Dn[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};                 // bloque normal en el orden ordenado σ1 ≥ σ2 ≥ σ3
+    if (in.reg == 3) for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) Dn[i][j] = gApex * D[i][j];
     if (in.reg != 3) {
       const double *N[2] = {n1, nullptr}, *M[2] = {g1, nullptr}; int k = 1;
       if (in.reg == 2) { N[1] = n3; M[1] = g3; k = 2; }                    // arista σ2 = σ3 (caras (σ1,σ3) y (σ1,σ2))
@@ -563,6 +568,14 @@ struct GeoFem {
       if (nsub < 16) LOG(fmt("    etapa: con %d incremento(s) no cierra; se reparte la carga en %d", nsub, nsub * 2));
     }
     if (nsub > 16) nsub = 16;
+    if (!c) {   // REINTENTO: toda la carga, con 0.1·De en el ápice (muro de Manabí con E de Bowles: la etapa 6 cierra en 20 it.)
+      const vector<double> sa = SIG, ea = EPL, da = DEP; const vector<unsigned char> ha = hasDep; const double alc = alcanzada;
+      SIG = sig0; EPL = epl0; DEP = dep0; hasDep = has0;
+      gApex = 0.1; int itr; bool cr = nrstep(1.0, F.data(), 1, du1, itr, true); gApex = 0.0; it += itr;
+      if (cr) { double m = 0; for (int d = 0; d < ndof; d++) m = std::max(m, std::fabs(du1[d])); if (!(m < 1.0)) cr = false; }
+      if (cr) { u = du1; c = true; alcanzada = 1; nsub = 1; LOG("    etapa: cierra con la tangente del ápice regularizada (0.1·De)"); }
+      else { SIG = sa; EPL = ea; DEP = da; hasDep = ha; alcanzada = alc; }
+    }
     Flast = c ? F : Fk;
     {
       if (!first) for (int d = 0; d < ndof; d++) Utot[d] += u[d];
@@ -690,6 +703,7 @@ int geofem_create(int nn, int ne, const double* X, const double* Y, const int* E
 EMSCRIPTEN_KEEPALIVE void geofem_set_rigid(int h, const int* rigid, int n) { GeoFem* g = handles[h]; g->rigid.assign(rigid, rigid + n); }
 // modo GEO5 por bits: 1 SRM continuada + tensiones en pasos de 0.1 + normas respecto a ‖F‖ · 2 tangente inicial con la
 // resistencia reducida · 4 búsqueda lineal de 3 pasadas · 8 norma de energía con el residuo de la iteración ANTERIOR
+EMSCRIPTEN_KEEPALIVE void geofem_set_apex(double a) { GeoFem::gApex = a; }
 EMSCRIPTEN_KEEPALIVE void geofem_set_srm(int h, int f) { GeoFem* g = handles[h]; g->srmContinua = f & 1; g->tangIni = (f & 2) != 0; g->lsMax = (f & 4) ? 3 : 1; g->energiaPrev = (f & 8) != 0; g->porPaso = (f & 16) != 0; }
 EMSCRIPTEN_KEEPALIVE void geofem_set_model(int h, const int* m, int n) { GeoFem* g = handles[h]; g->model.assign(m, m + n); }
 EMSCRIPTEN_KEEPALIVE void geofem_set_mat(int h, const double* MAT) { GeoFem* g = handles[h]; std::memcpy(g->MAT.data(), MAT, sizeof(double) * 6 * g->nmat); }

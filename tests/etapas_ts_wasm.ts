@@ -7,7 +7,7 @@ import { GeoFem } from "../src/geofem/solver";
 import { GeoFemWasm } from "../src/geofem/geofemWasm";
 
 let ok = true;
-for (const f of ["examples/muro_manabi_etapas.hgeo", "examples/muro_manabi_etapas_mc.hgeo"]) {   // Drucker-Prager y Mohr-Coulomb
+for (const f of ["examples/muro_manabi_etapas.hgeo", "examples/muro_manabi_etapas_mc.hgeo", "examples/muro_manabi_etapas_mc_ebowles.hgeo"]) {   // Drucker-Prager y Mohr-Coulomb
 const def = parseHgeo(readFileSync(f, "utf-8"));
 def.h = 1.0;
 const { model, stats } = meshSlope(def, { topeMs: 120000, maxIter: 40000 });

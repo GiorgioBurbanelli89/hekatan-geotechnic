@@ -299,7 +299,7 @@ class Geo5:
         c = self.put_at(self.main, 326, 1211, h); time.sleep(0.3)
         g = [c for c in self.buttons() if c.window_text().startswith("&Generate")][0]; g.click(); time.sleep(5.0); self.dismiss_modals(); self.shot("malla")
     def stage_tab(self, i):
-        self.click(707 + 62 * i, 88); time.sleep(1.0); self.dismiss_modals()
+        self.click(707 + 53.2 * i, 88); time.sleep(1.0); self.dismiss_modals()   # pestañas cada 53.2 px (medido; antes 62: desde la 4.ª caía en la de al lado)
     def add_stage(self):
         self.click(503, 70); time.sleep(1.0); self.dismiss_modals()
     def surcharge(self, sc):
