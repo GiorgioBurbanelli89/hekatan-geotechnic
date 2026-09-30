@@ -170,3 +170,21 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
 - ✅ Lindero (malla 0.6: 1986 T6, 25.6°, 2.2 s) por etapas con MC: todas convergen. ❌ antes: el hueco del dentellón vacío
   en la etapa inicial (corte vertical en arena c = 0) → 0 % de carga; ahora el dentellón está activo desde el principio.
   Coronación al final: d_x −8.8 mm (hacia el lindero), d_z −28.6 mm.
+
+## 30-sep (09:20) — muro de lindero en GeoFEM por etapas (juez) — `tools/muro_lindero_a_geofem.py`
+- ❌ Primeros intentos: clics de actividad desplazados. (1) El marco Analysis tiene OTRO encuadre que Topo/Activity
+  (Activity = Topo con x = 0 unos 15 px a la izquierda). (2) Desde la etapa 2 aparece «Adopt» delante de Active/Inactive
+  y los botones se corren: se activó al revés. (3) Pestañas [10]..[12] más anchas (tabla TABS medida).
+  ✅ Ahora: botones por su TEXTO y cada región COMPROBADA por su color (verde activa / rojo inactiva) antes de calcular.
+- ❌ La cuña del talud entera en una etapa: GEO5 W071 al 30 %. ✅ Capas horizontales de 0.70 m también sobre la coronación
+  (z = 0.7, 1.4, 2.1, 2.8, mueren contra el talud): 12 etapas. Malla Geotechnic 0.6: 2154 T6, mínimo 12.5° (el del talud).
+- ❌ GEO5 etapa 10 al 85 % (W071, «maximum number of relaxations of one calculation step exceeded») con los ajustes por
+  defecto (2 relajaciones). A mano el muro es estable (Rankine con talud Ka 0.3596, vuelco FS 5.0, e = 0.229 < B/6,
+  q 126/51 kPa, deslizamiento sin dentellón 1.58) → numérico. ✅ Analysis settings: 5 relajaciones → 12/12 al 100 %.
+- Comparación final (monitores de punto, d_z / d_x mm): coronación 31.3/8.2 vs 29.6/11.5 · pie 31.3/8.4 vs 29.9/8.7 ·
+  talón 31.5/8.4 vs 28.4/8.7 · σz en el relleno y en profundidad a 1–2 % (105.1/107.1, 41.3/41.9, 180.0/179.6).
+  Extremos: σz 261.5/245.0, J 86.3/81.1, E_d 4.59/4.11 %.
+- ⏳ Dos diferencias abiertas: (a) nudos del relleno colocado en etapas tardías: GEO5 les da el asiento de TODO lo anterior
+  (58.5, 54.4, 67.5 mm) y Geotechnic solo el de después de colocarlos (27.8, 9.7, 1.6) → buscar en el binario qué hace
+  GEO5 con los nudos que se activan (no inventarlo). (b) d_x de la coronación 8.2 vs 11.5 (giro del muro; plástico al pie
+  E_d,pl 4.56 vs 4.00).

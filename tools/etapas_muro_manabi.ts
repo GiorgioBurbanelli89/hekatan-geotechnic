@@ -13,9 +13,12 @@ const def = parseHgeo(readFileSync(f, "utf-8"));
 const { model, stats } = meshSlope(def, { topeMs: 120000, maxIter: 40000 });
 console.log(`malla: ${stats.nodes} nudos, ${stats.elements} T6, ángulo mínimo ${stats.minAngle.toFixed(1)}°`, stats.avisos);
 const nudo = (x: number, y: number) => { let b = 0, d = 1e9; model.X.forEach((xx, i) => { const q = Math.hypot(xx - x, model.Y[i] - y); if (q < d) { d = q; b = i; } }); return b; };
-const cor = nudo(10.40, 0), pie = nudo(10.42, -2.6), punta = nudo(9.28, -3);
+// muro de lindero (sin puntera): pie de la cara vista a (9.98, −3.9), «punta» = extremo del talón (13.26, −3.9); franja bajo la zapata −3.90 a −4.25
+const LINDERO = f.includes("lindero");
+const cor = nudo(10.40, 0), pie = LINDERO ? nudo(9.98, -3.9) : nudo(10.42, -2.6), punta = LINDERO ? nudo(13.26, -3.9) : nudo(9.28, -3);
 // tensión vertical efectiva en el suelo bajo la zapata: media de los puntos de Gauss de los elementos cuyo centro cae en la franja
-const XS = [9.3, 9.8, 10.3, 10.8, 11.3, 11.8, 12.3];
+const XS = LINDERO ? [10.2, 10.7, 11.2, 11.7, 12.2, 12.6, 13.05] : [9.3, 9.8, 10.3, 10.8, 11.3, 11.8, 12.3];
+const Z0 = LINDERO ? -3.9 : -3.0, Z1 = LINDERO ? -4.25 : -3.35;
 const fem = await GeoFemWasm.create(model, (l) => { if (l.includes("ETAPA")) console.log("  " + l.trim()); });
 const salida: Record<string, unknown>[] = [];
 let ultimo: import("../src/geofem/solver").StageResult | undefined;
@@ -24,7 +27,7 @@ fem.runStaged(model, (r, si) => {
     let s = 0, n = 0;
     model.ELE.forEach((e, k) => {
       const gx = (model.X[e[0]] + model.X[e[1]] + model.X[e[2]]) / 3, gy = (model.Y[e[0]] + model.Y[e[1]] + model.Y[e[2]]) / 3;
-      if (Math.abs(gx - x) < 0.3 && gy < -3.0 && gy > -3.35 && model.EMAT[k] !== 3) for (let q = 0; q < r.ngp / model.ELE.length; q++) { s += r.sig1![(k * 7 + q) * 4 + 1]; n++; }
+      if (Math.abs(gx - x) < 0.3 && gy < Z0 && gy > Z1 && model.EMAT[k] !== 3) for (let q = 0; q < r.ngp / model.ELE.length; q++) { s += r.sig1![(k * 7 + q) * 4 + 1]; n++; }
     });
     return n ? -s / n : NaN;
   });

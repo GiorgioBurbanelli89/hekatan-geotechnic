@@ -17,22 +17,31 @@ asignar ARENA_SP en 18,-2.0
 asignar ARENA_SPSM en 15,-8
 # contorno del muro: cara vista bajo el terreno, trasdós, talón y dentellón
 linea 9.98,-3.9 9.99,-3.1
-linea 10.40,0 10.75,-3.5 13.25,-3.5 13.26,-4.75 12.84,-4.75 12.85,-3.9
-# capas del relleno (0.70 m) desde el trasdós; la última llega hasta la superficie del talud (una línea horizontal
-# en z = 0 dejaba una esquina de 12.5° con el talud y el mallador no terminaba)
+linea 10.40,0 10.75,-3.5 13.25,-3.5 13.26,-3.9 13.25,-4.75 12.85,-4.75 12.84,-3.9
+# capas del relleno (0.70 m) desde el trasdós y, sobre la coronación, capas horizontales que mueren contra el talud
+# (no se pone z = 0: saldría de la esquina de la coronación con 12.5°). La cuña entera de una vez (hasta 4 m en x = 25)
+# no la cerraba GEO5 (W071, 30 % de la carga), y en obra también se coloca por capas.
 linea 13.25,-3.5 25,-3.5
 linea 10.68,-2.8 25,-2.8
 linea 10.61,-2.1 25,-2.1
 linea 10.54,-1.4 25,-1.4
 linea 10.47,-0.7 25,-0.7
+linea 13.5581,0.7 25,0.7
+linea 16.7162,1.4 25,1.4
+linea 19.8744,2.1 25,2.1
+linea 23.0325,2.8 25,2.8
 malla 0.6
 # el dentellón se hormigona contra la excavación: activo desde el principio (un hueco vertical en arena con c = 0 no
 # se sostiene y el estado inicial no convergía)
-etapa terreno inactiva=10.3,-2;5,-3.5;18,-3.7;18,-3.1;18,-2.4;18,-1.7;18,-1.0;18,-0.3
+etapa terreno inactiva=10.3,-2;5,-3.5;18,-3.7;18,-3.1;18,-2.4;18,-1.7;18,-1.0;18,0;18,1.05;21,1.75;24,2.45;24.5,2.95
 etapa muro activa=10.3,-2;5,-3.5
 etapa bajo-talon activa=18,-3.7
 etapa capa1 activa=18,-3.1
 etapa capa2 activa=18,-2.4
 etapa capa3 activa=18,-1.7
 etapa capa4 activa=18,-1.0
-etapa capa5 activa=18,-0.3
+etapa capa5 activa=18,0
+etapa capa6 activa=18,1.05
+etapa capa7 activa=21,1.75
+etapa capa8 activa=24,2.45
+etapa capa9 activa=24.5,2.95
