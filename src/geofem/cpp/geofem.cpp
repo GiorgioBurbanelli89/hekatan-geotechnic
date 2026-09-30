@@ -548,6 +548,10 @@ struct GeoFem {
     const vector<double> sig0 = SIG, epl0 = EPL, dep0 = DEP; const vector<unsigned char> has0 = hasDep;
     vector<double> u(ndof, 0.0), du1, Fk(ndof); int it = 0; bool c = false; int nsub = 1;
     alcanzada = 1;
+    // CONSTRUCCIÓN POR ETAPAS: tangente del ápice = 0.1·De (no la nula de GEO5). Cambia el camino de Newton, no el
+    // equilibrio: muro de Manabí, etapa 6 en 11 iteraciones en vez de 192 (7 etapas: 28 s en vez de 168 s) y la
+    // coronación a 16.387 mm (GEO5 tangente: 16.393; GeoFEM 16.38). La SRM sigue con la tangente de GEO5.
+    gApex = 0.1;
     for (; nsub <= 16; nsub *= 2) {
       if (nsub > 1) { SIG = sig0; EPL = epl0; DEP = dep0; hasDep = has0; std::fill(u.begin(), u.end(), 0.0); }
       c = true;
@@ -568,14 +572,15 @@ struct GeoFem {
       if (nsub < 16) LOG(fmt("    etapa: con %d incremento(s) no cierra; se reparte la carga en %d", nsub, nsub * 2));
     }
     if (nsub > 16) nsub = 16;
-    if (!c) {   // REINTENTO: toda la carga, con 0.1·De en el ápice (muro de Manabí con E de Bowles: la etapa 6 cierra en 20 it.)
+    if (!c) {   // REINTENTO: toda la carga, con la tangente del ápice de GEO5 (nula)
       const vector<double> sa = SIG, ea = EPL, da = DEP; const vector<unsigned char> ha = hasDep; const double alc = alcanzada;
       SIG = sig0; EPL = epl0; DEP = dep0; hasDep = has0;
-      gApex = 0.1; int itr; bool cr = nrstep(1.0, F.data(), 1, du1, itr, true); gApex = 0.0; it += itr;
+      gApex = 0.0; int itr; bool cr = nrstep(1.0, F.data(), 1, du1, itr, true); it += itr;
       if (cr) { double m = 0; for (int d = 0; d < ndof; d++) m = std::max(m, std::fabs(du1[d])); if (!(m < 1.0)) cr = false; }
-      if (cr) { u = du1; c = true; alcanzada = 1; nsub = 1; LOG("    etapa: cierra con la tangente del ápice regularizada (0.1·De)"); }
+      if (cr) { u = du1; c = true; alcanzada = 1; nsub = 1; LOG("    etapa: cierra con la tangente del ápice de GEO5"); }
       else { SIG = sa; EPL = ea; DEP = da; hasDep = ha; alcanzada = alc; }
     }
+    gApex = 0.0;
     Flast = c ? F : Fk;
     {
       if (!first) for (int d = 0; d < ndof; d++) Utot[d] += u[d];

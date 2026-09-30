@@ -534,6 +534,7 @@ export class GeoFem {
     const sig0 = Float64Array.from(this.SIG), epl0 = Float64Array.from(this.EPL), dep0 = Float64Array.from(this.DEP), has0 = Uint8Array.from(this.hasDep);
     const u = new Float64Array(ndof), Fk = new Float64Array(ndof); let it = 0, c = false, nsub = 1;
     this.alcanzada = 1;
+    GeoFem.gApex = 0.1;   // construcción por etapas: tangente del ápice 0.1·De (como geofem.cpp); la SRM sigue con la de GEO5
     for (; nsub <= 16; nsub *= 2) {
       if (nsub > 1) { this.SIG.set(sig0); this.EPL.set(epl0); this.DEP.set(dep0); this.hasDep.set(has0); u.fill(0); }
       c = true;
@@ -552,14 +553,15 @@ export class GeoFem {
       if (nsub < 16) this.log(`    etapa: con ${nsub} incremento(s) no cierra; se reparte la carga en ${nsub * 2}`);
     }
     if (nsub > 16) nsub = 16;
-    if (!c) {   // REINTENTO: toda la carga, con 0.1·De en el ápice (como geofem.cpp)
+    if (!c) {   // REINTENTO: toda la carga, con la tangente del ápice de GEO5 (como geofem.cpp)
       const sa = Float64Array.from(this.SIG), ea = Float64Array.from(this.EPL), da = Float64Array.from(this.DEP), ha = Uint8Array.from(this.hasDep), alc = this.alcanzada;
       this.SIG.set(sig0); this.EPL.set(epl0); this.DEP.set(dep0); this.hasDep.set(has0);
-      GeoFem.gApex = 0.1; const [cr0, dur, itr] = this.nrstep(1.0, F, 1, undefined, true); GeoFem.gApex = 0; it += itr;
+      GeoFem.gApex = 0; const [cr0, dur, itr] = this.nrstep(1.0, F, 1, undefined, true); it += itr;
       let cr = cr0; if (cr) { let m = 0; for (let d = 0; d < ndof; d++) m = Math.max(m, Math.abs(dur[d])); if (!(m < 1.0)) cr = false; }
-      if (cr) { u.set(dur); c = true; this.alcanzada = 1; nsub = 1; this.log("    etapa: cierra con la tangente del ápice regularizada (0.1·De)"); }
+      if (cr) { u.set(dur); c = true; this.alcanzada = 1; nsub = 1; this.log("    etapa: cierra con la tangente del ápice de GEO5"); }
       else { this.SIG.set(sa); this.EPL.set(ea); this.DEP.set(da); this.hasDep.set(ha); this.alcanzada = alc; }
     }
+    GeoFem.gApex = 0;
     this.Flast = c ? F : Float64Array.from(Fk);
     if (!first) for (let d = 0; d < ndof; d++) this.Utot[d] += u[d];
     for (let e = 0; e < ne; e++) if (this.act[e]) for (let q = 0; q < NG; q++) {   // ε de SUS etapas activas (la 1 también)
