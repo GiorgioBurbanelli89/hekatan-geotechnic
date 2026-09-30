@@ -5,7 +5,7 @@
 //   ¿vuelca, desliza, aplasta el terreno?  → cuerpo rígido + empuje de Coulomb (esta verificación)
 //   ¿cuánto flexa, qué tensión hay dentro? → sólidos H8 (y el GeoFEM del talud, que ya está en la gráfica)
 import type { SlopeDef, Wall } from "../model/dsl";
-import { wallLevels, wallGround } from "../model/dsl";
+import { wallLevels, wallGround, MURO_BAT } from "../model/dsl";
 import { verificarMuro, type TeoriaEmpuje, type VerifResult } from "./verify";
 import { mallaMuroSolido, type MuroSolidoParams } from "../solid/muroMalla";
 import { resolverMuro2DUI } from "./panel2d";
@@ -134,9 +134,35 @@ export function engancharMuro(onCambio: () => void): void {
     el.addEventListener("input", onCambio);
   }
   $<HTMLButtonElement>("wSolido").addEventListener("click", () => void resolverSolido());
+  $<HTMLButtonElement>("wStruct").addEventListener("click", abrirEnStruct);
   $<HTMLButtonElement>("w2Run").addEventListener("click", () => { muro2DHecho = true; void resolver2D(); });
   for (const id of ["w2Corona", "w2Ms", "w2Bd", "w2Hd", "w2Xd", "w2Ks", "w2Inc"])
     document.getElementById(id)!.addEventListener("change", () => { if (muro2DHecho) void resolver2D(); });
+}
+
+/** 🏗 El mismo muro en Hekatan Struct (ejemplo `muro-manabi`, parámetros por el `&p=` de su botón Compartir):
+ *  fuste, zapata, puntera, talón, el relleno de la verificación (γ, φ, δ) y el terreno de delante (hDel = emp),
+ *  con suelo lateral. La cara vista de Geotechnic tiene MURO_BAT de talud: en Struct va como canto de coronación. */
+export function parametrosStruct(def: SlopeDef, w: Wall, etapa = 0): Record<string, number> {
+  const o = opcionesSeguras() as { delta?: number | "auto" };
+  const r = verificarMuro(def, w, o, etapa), pm = w.pm, r3 = (v: number) => Math.round(v * 1000) / 1000;
+  // δ: en Geotechnic «auto» es δ = φ en el plano FICTICIO del talón (suelo contra suelo, como GEO5); Struct pone el
+  // empuje en el TRASDÓS del fuste, donde δ es rozamiento muro-suelo: ⅔·φ (rango de Das, 15–25° para φ = 30°)
+  const phi = r.suelos.relleno.phi, delta = o.delta === undefined || o.delta === "auto" ? (2 / 3) * phi : o.delta;
+  return {
+    lat: 1, Hf: r3(r.geom.Hf), tf: r3(pm.zapata), tBase: r3(pm.fuste), tTop: r3(Math.max(0.15, pm.fuste - MURO_BAT)),
+    toe: r3(pm.dedo), heel: r3(pm.talon), gamma: r3(r.suelos.relleno.gamma), phi: r3(r.suelos.relleno.phi),
+    delta: r3(delta), hDel: r3(Math.max(0, pm.emp)),
+  };
+}
+export const STRUCT_URL = "https://giorgioburbanelli89.github.io/hekatan-struct-lineal/workspace/";
+export function enlaceStruct(p: Record<string, number>): string {
+  const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(p)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${STRUCT_URL}?t=muro-manabi&p=${b64}`;
+}
+function abrirEnStruct(): void {
+  if (!ultimo) return;
+  window.open(enlaceStruct(parametrosStruct(ultimo.def, ultimo.w, ultimo.etapa)), "_blank");
 }
 
 /** La tercera ventana (muro 2D en una sola área): el mismo muro y la misma verificación que las otras dos. */

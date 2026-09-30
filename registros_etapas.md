@@ -132,3 +132,15 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
   (inicio de paso) y estado[200] ≠ 0, GEO5 salta el line search (η = 1); en el Log del muro no lo salta. La diferencia de
   η (0.39 contra 0.45) está en R(η = 1). El residuo tras el paso casi coincide (6.24e-2 contra 6.35e-2): no se persigue más.
 - ⏳ La misma perturbación de E en GEO5 (desde su ventana), para ver si su FS también salta.
+
+## 30-sep — Geotechnic → Hekatan Struct
+- ✅ Botón «🏗 abrir este muro en Hekatan Struct» en el panel del muro (`src/wall/panel.ts`: `parametrosStruct`,
+  `enlaceStruct`). Abre `…/workspace/?t=muro-manabi&p=<JSON base64url>` (el `&p=` del botón Compartir de Struct) con:
+  Hf = alto libre del fuste de la verificación, tf, tBase = fuste, tTop = fuste − MURO_BAT (talud de la cara vista),
+  puntera, talón, γ y φ del relleno, hDel = emp y suelo lateral. δ: «auto» de Geotechnic es δ = φ en el plano
+  FICTICIO (suelo contra suelo, GEO5); en Struct el empuje va en el trasdós → δ = ⅔·φ (o el δ que ponga el usuario).
+- ✅ Ejemplo nuevo en la lista: «Muro de Manabí paramétrico» (`?ejemplo=manabi_muro`, examples/muro_manabi.hgeo).
+  Muro de Manabí → Hf 2.60, tf 0.40, tBase 0.40, tTop 0.34, puntera 0.70, talón 1.90, γ 18.5, φ 30, δ 20, hDel 0.60.
+- ✅ Puppeteer en los dos deploys públicos: botón visible, Struct abre con los parámetros (coronación −2.79 mm con el
+  fuste de 0.34 m arriba; −2.80 con el de 0.25), sin errores.
+- ✅ Quitado el código del estudio de suelos de la cabecera de `examples/muro_manabi.hgeo` (sale en el editor público).

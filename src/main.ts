@@ -9,6 +9,7 @@ import { SlopePlot } from "./viewer/plot";
 import { FieldKind, FIELD_LABEL, FIELD_UNIT, nodalField, stressField, isStressField } from "./viewer/geo5scale";
 import MANABI_ETAPAS_HGEO from "../examples/muro_manabi_etapas_mc.hgeo?raw";
 import MANABI_ETAPAS_E_HGEO from "../examples/muro_manabi_etapas_mc_ebowles.hgeo?raw";
+import MANABI_MURO_HGEO from "../examples/muro_manabi.hgeo?raw";
 import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, MURO_HGEO, MANABI_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims, effectiveTerrain } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
@@ -580,7 +581,7 @@ draw.onChange = (d) => {
 
 btn.addEventListener("click", () => run(base!.stages.map((_, i) => i).slice(0, parseInt(selN.value))));
 selN.addEventListener("change", () => { const n = parseInt(selN.value); const falta = base!.stages.map((_, i) => i).slice(0, n).filter((i) => !stages[i] || stages[i]!.stale); if (falta.length) run(falta); });
-const EJEMPLOS_HGEO: Record<string, string> = { manabi_etapas: MANABI_ETAPAS_HGEO, manabi_etapas_e: MANABI_ETAPAS_E_HGEO };
+const EJEMPLOS_HGEO: Record<string, string> = { manabi_etapas: MANABI_ETAPAS_HGEO, manabi_etapas_e: MANABI_ETAPAS_E_HGEO, manabi_muro: MANABI_MURO_HGEO };
 selModel.addEventListener("change", () => {
   if (selModel.value === "muro") { edWrap.hidden = false; edText.value = MURO_HGEO; applyHgeo(); return; }   // ejemplo del muro, de un clic
   if (selModel.value === "manabi") { edWrap.hidden = false; edText.value = MANABI_HGEO; applyHgeo(); return; }   // muro de Manabí con Vs (dinámico)
