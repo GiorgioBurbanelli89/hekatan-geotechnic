@@ -188,3 +188,15 @@ bajo el talón · 4-7 capas de 0.65 m. Tensiones por etapas (sin factor de segur
   (58.5, 54.4, 67.5 mm) y Geotechnic solo el de después de colocarlos (27.8, 9.7, 1.6) → buscar en el binario qué hace
   GEO5 con los nudos que se activan (no inventarlo). (b) d_x de la coronación 8.2 vs 11.5 (giro del muro; plástico al pie
   E_d,pl 4.56 vs 4.00).
+
+## 30-sep (10:15) — ✅ la diferencia del relleno tardío: regla de GEO5 extraída del binario
+- FRGeoFEM (`region.cpp`, decompilado en ingenieria-inversa/hekatan-geo5-bridge/geo5_2024_re/frgeofem_exe_decomp):
+  al activar elementos (desde la etapa 2) GEO5 resuelve un problema ELÁSTICO solo con los elementos nuevos, sin peso,
+  con el u de los nudos viejos impuesto en la frontera (FUN_005bfbe0 SetBoundaryNodesDisplacements, FUN_005c0280
+  GetDisplacementVector, FUN_005bf3e0 escribe «NEW SOLID ELEMENT NODES INITIAL DISPLACEMENTS»); < 2 nudos de frontera:
+  nada. «NODAL DISPLACEMENTS» = acumulado desde el final de la etapa 1 (+0x168); con la etapa 1 aparte (+0x178).
+- ✅ Implementado igual en solver.ts y geofem.cpp (`desplazamientoInicialRegion`), TS = WASM, `npm test` OK (59d050e).
+- Lindero, relleno tardío (GEO5 / antes / ahora, mm): (20,0) 58.5/27.8/54.3 · (18,1) 54.4/9.7/50.5 · (24,2.9) 67.5/1.6/63.1
+  → ≈ 7 %, como el muro. Muro y tensiones sin cambio.
+- Manabí-MC por etapas: d_z máx 27.12 (GEO5 27.1; antes 25.3). Coronación y tensiones iguales que antes.
+- ⏳ Queda: d_x de la coronación del lindero 8.2 (GEO5) vs 11.5.
