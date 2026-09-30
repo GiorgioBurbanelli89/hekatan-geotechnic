@@ -104,7 +104,7 @@ struct GeoFem {
   // CONSTRUCCIÓN POR ETAPAS (Activity de GEO5): elemento activo o no. Un elemento inactivo no aporta rigidez, ni
   // fuerza interna, ni peso. Los gdl de nudos que no tocan ningún elemento activo quedan «dormidos»: se les pone un
   // muelle muy rígido (du = 0) para que la matriz no sea singular. Utot = desplazamiento acumulado desde la etapa 1.
-  vector<unsigned char> act, dormido; vector<double> Utot, EPSacc;
+  vector<unsigned char> act, dormido, prevAct; vector<double> Utot, EPSacc;
   double alcanzada = 1;
   // SRM CONTINUADA (GEO5, Log_File del muro de Manabí capturado el 29-sep-2026): cada peldaño parte del estado convergido del
   // anterior (residuo inicial pequeño, 3-8 iteraciones); si diverge, se vuelve a ese estado y se relaja el paso. false = cada
@@ -525,6 +525,30 @@ struct GeoFem {
     return conv;
   }
 
+  /** DESPLAZAMIENTO INICIAL de los nudos de una región recién activada, como GEO5 (FRGeoFEM, region.cpp:
+   *  Region::SetBoundaryNodesDisplacements + Region::GetDisplacementVector; decompilado FUN_005bfbe0 / FUN_005c0280 /
+   *  FUN_005bf3e0): problema ELÁSTICO solo con los elementos nuevos, SIN peso, con el u de los nudos que ya existían
+   *  impuesto en la frontera (menos de 2 nudos de frontera: nada). No crea tensión ni deformación. = solver.ts */
+  void desplazamientoInicialRegion() {
+    vector<unsigned char> nuevo(ne, 0); bool hay = false;
+    for (int e = 0; e < ne; e++) if (act[e] && !prevAct[e]) { nuevo[e] = 1; hay = true; }
+    if (!hay) return;
+    vector<unsigned char> viejo(nn, 0), enRegion(nn, 0);
+    for (int e = 0; e < ne; e++) for (int k = 0; k < 6; k++) { int n = ELE[e * 6 + k]; if (prevAct[e]) viejo[n] = 1; if (nuevo[e]) enRegion[n] = 1; }
+    int nfront = 0; for (int i = 0; i < nn; i++) if (enRegion[i] && viejo[i]) nfront++;
+    if (nfront < 2) return;
+    vector<unsigned char> act0 = act, dor0 = dormido;
+    act = nuevo; dormido.assign(ndof, 1);
+    for (int i = 0; i < nn; i++) if (enRegion[i]) { dormido[2 * i] = 0; dormido[2 * i + 1] = 0; }
+    Band K; K.init(nfree, band); assembleK(K, true);
+    vector<double> rhs(nfree, 0.0); const double P = 1e15;
+    for (int i = 0; i < nn; i++) if (enRegion[i] && viejo[i]) for (int d = 2 * i; d <= 2 * i + 1; d++) { int r = map_[d]; if (r >= 0) { K.add(r, r, P); rhs[r] = P * Utot[d]; } }
+    act = act0; dormido = dor0;
+    if (!K.factor()) { LOG("    región nueva: K singular, sin desplazamiento inicial"); return; }
+    vector<double> x(nfree, 0.0); K.solve(rhs.data(), x.data());
+    for (int i = 0; i < nn; i++) if (enRegion[i] && !viejo[i]) for (int d = 2 * i; d <= 2 * i + 1; d++) { int r = map_[d]; if (r >= 0) Utot[d] = x[r]; }
+  }
+
   /** Una etapa de CONSTRUCCIÓN (análisis de tensiones de GEO5, SRF = 1): activa `a` (1 por elemento), carga = peso de
    *  los elementos activos + `Fextra`, y Newton desde el estado de la etapa anterior. En la PRIMERA etapa el estado se
    *  pone a cero y, al acabar, los desplazamientos también (GEO5: «la etapa 1 es el estado inicial»). */
@@ -532,6 +556,8 @@ struct GeoFem {
     for (int e = 0; e < ne; e++) act[e] = a[e] ? 1 : 0;
     std::fill(dormido.begin(), dormido.end(), 1);
     for (int e = 0; e < ne; e++) if (act[e]) for (int k = 0; k < 12; k++) dormido[edof[e * 12 + k]] = 0;
+    if (first) prevAct.clear();
+    else if (!prevAct.empty()) desplazamientoInicialRegion();
     vector<double> F(ndof, 0.0);
     for (int e = 0; e < ne; e++) {
       if (!act[e]) continue;
@@ -594,6 +620,7 @@ struct GeoFem {
         EPSacc[kk * 4] += e0; EPSacc[kk * 4 + 1] += e1; EPSacc[kk * 4 + 3] += e2;
       }
     }
+    prevAct = act;
     SIG1 = SIG; EPL1 = EPL; U1 = Utot; EPS1 = EPSacc;
     int na = 0; for (int e = 0; e < ne; e++) na += act[e];
     double sF = 0; for (int i = 0; i < nn; i++) sF += F[2 * i + 1];

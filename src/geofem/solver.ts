@@ -138,7 +138,7 @@ export class GeoFem {
   readonly Fg2: Float64Array;              // gravedad recalculada (N·ρ·detJ·w)
   // CONSTRUCCIÓN POR ETAPAS (Activity de GEO5), igual que geofem.cpp: elemento activo o no; los gdl de nudos sin
   // ningún elemento activo quedan «dormidos» (muelle 1e12). Utot: u desde la etapa 1; EPSacc: ε solo mientras activo.
-  private act: Uint8Array; private dormido: Uint8Array;
+  private act: Uint8Array; private dormido: Uint8Array; private prevAct: Uint8Array | null = null;
   private Utot!: Float64Array; private EPSacc!: Float64Array; private Flast!: Float64Array;
   alcanzada = 1;   // fracción de la carga NUEVA de la etapa que llegó al equilibrio (GEO5: «Attained loading»)
 
@@ -523,6 +523,8 @@ export class GeoFem {
     for (let e = 0; e < ne; e++) this.act[e] = a[e] ? 1 : 0;
     this.dormido.fill(1);
     for (let e = 0; e < ne; e++) if (this.act[e]) for (let k = 0; k < 12; k++) this.dormido[this.edof[e * 12 + k]] = 0;
+    if (first) this.prevAct = null;
+    else if (this.prevAct) this.desplazamientoInicialRegion(this.prevAct);
     const F = new Float64Array(ndof);
     for (let e = 0; e < ne; e++) {
       if (!this.act[e]) continue;
@@ -569,10 +571,37 @@ export class GeoFem {
       for (let k = 0; k < 12; k++) { const v = u[this.edof[e * 12 + k]]; e0 += B[k] * v; e1 += B[12 + k] * v; e2 += B[24 + k] * v; }
       this.EPSacc[kk * 4] += e0; this.EPSacc[kk * 4 + 1] += e1; this.EPSacc[kk * 4 + 3] += e2;
     }
+    this.prevAct = Uint8Array.from(this.act);
     let na = 0; for (let e = 0; e < ne; e++) na += this.act[e];
     let sF = 0; for (let i = 0; i < this.nn; i++) sF += F[2 * i + 1];
     this.log(`    ETAPA ${first ? "inicial" : ""}: ${na} de ${ne} elementos activos, carga vertical ${sF.toFixed(3)} kN, ${c ? "CONVERGE" : "NO CONVERGE"} en ${it} iteraciones (${nsub} incremento(s))${c ? "" : ` · carga alcanzada ${(100 * this.alcanzada).toFixed(1)} %`}`);
     return { conv: c, alcanzada: this.alcanzada, u: Float64Array.from(this.Utot), sig1: Float64Array.from(this.SIG), epl1: Float64Array.from(this.EPL), eps1: Float64Array.from(this.EPSacc) };
+  }
+
+  /** DESPLAZAMIENTO INICIAL de los nudos de una región recién activada, como GEO5 (FRGeoFEM, region.cpp:
+   *  Region::SetBoundaryNodesDisplacements + Region::GetDisplacementVector; decompilado FUN_005bfbe0 / FUN_005c0280 /
+   *  FUN_005bf3e0, registros 30-sep-2026): problema ELÁSTICO solo con los elementos nuevos, SIN peso, con el u de los
+   *  nudos que ya existían impuesto en la frontera (si hay menos de 2 nudos de frontera, nada). Los nudos nuevos nacen
+   *  con ese u (la capa se coloca ya «asentada» con lo de abajo); no crea tensión ni deformación. */
+  private desplazamientoInicialRegion(prev: Uint8Array): void {
+    const ne = this.ne, nn = this.nn, ndof = this.ndof;
+    const nuevo = new Uint8Array(ne); let hay = false;
+    for (let e = 0; e < ne; e++) if (this.act[e] && !prev[e]) { nuevo[e] = 1; hay = true; }
+    if (!hay) return;
+    const viejo = new Uint8Array(nn), enRegion = new Uint8Array(nn);
+    for (let e = 0; e < ne; e++) for (let k = 0; k < 6; k++) { if (prev[e]) viejo[this.ELE[e][k]] = 1; if (nuevo[e]) enRegion[this.ELE[e][k]] = 1; }
+    let nfront = 0; for (let i = 0; i < nn; i++) if (enRegion[i] && viejo[i]) nfront++;
+    if (nfront < 2) return;
+    const act0 = this.act, dor0 = this.dormido;
+    this.act = nuevo; this.dormido = new Uint8Array(ndof).fill(1);
+    for (let i = 0; i < nn; i++) if (enRegion[i]) { this.dormido[2 * i] = 0; this.dormido[2 * i + 1] = 0; }
+    const K = bandCreate(this.nfree, this.band); this.assembleK(K, true);
+    const rhs = new Float64Array(this.nfree), P = 1e15;
+    for (let i = 0; i < nn; i++) if (enRegion[i] && viejo[i]) for (const d of [2 * i, 2 * i + 1]) { const r = this.map[d]; if (r >= 0) { bandAdd(K, r, r, P); rhs[r] = P * this.Utot[d]; } }
+    this.act = act0; this.dormido = dor0;
+    if (!bandFactor(K)) { this.log("    región nueva: K singular, sin desplazamiento inicial"); return; }
+    const x = new Float64Array(this.nfree); bandSolve(K, rhs, x);
+    for (let i = 0; i < nn; i++) if (enRegion[i] && !viejo[i]) for (const d of [2 * i, 2 * i + 1]) { const r = this.map[d]; if (r >= 0) this.Utot[d] = x[r]; }
   }
 
   /** Construcción por etapas: TODAS en orden (fs = NaN: análisis de tensiones). Misma salida que GeoFemWasm.runStaged. */
