@@ -28,8 +28,8 @@ PELIGRO = re.compile(r"(Remove|Delete|Generate$|&?Generate|Analy[sz]e|Import|Exp
 os.makedirs(OUT, exist_ok=True)
 
 
-def ocr(fn, x, y, w, h):
-    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", os.path.join(AQUI, "ocr_cajas.ps1"), fn, str(x), str(y), str(w), str(h)],
+def ocr(fn, x, y, w, h, palabras=False):
+    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", os.path.join(AQUI, "ocr_cajas.ps1"), fn, str(x), str(y), str(w), str(h)] + (["-palabras"] if palabras else []),
                        capture_output=True, timeout=120).stdout.decode("utf-8", "replace")   # bytes: una notificación con tildes rompía la decodificación
     out = []
     for l in r.splitlines():
@@ -157,7 +157,12 @@ def pestanas(m, dn):
     out = []
     for pc in [c for c in m.descendants() if c.class_name() == "TEnvPageControl" and c.is_visible()]:
         r = pc.rectangle(); fn = foto(dn + "__tiras")
-        tiras = [b for b in ocr(fn, r.left, r.top, r.width(), 40) if b[0].strip()]
+        pal = sorted([b for b in ocr(fn, r.left, r.top, r.width(), 40, palabras=True) if b[0].strip()], key=lambda b: b[1])
+        tiras = []                      # palabras con hueco < 14 px = la misma pestaña (entre pestañas está el borde)
+        for b in pal:
+            if tiras and b[1] - (tiras[-1][1] + tiras[-1][3]) < 14:
+                t = tiras[-1]; x1 = max(t[1] + t[3], b[1] + b[3]); tiras[-1] = [t[0] + " " + b[0], t[1], t[2], x1 - t[1], max(t[4], b[4])]
+            else: tiras.append(list(b))
         for k, (t, x, y, w_, h) in enumerate(tiras):
             try:
                 mouse.click(coords=(x + w_ // 2, y + h // 2)); time.sleep(1.0)
