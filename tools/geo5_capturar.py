@@ -97,6 +97,24 @@ def cerrar_modales(dejar_principal=True):
             time.sleep(0.7)
 
 
+def limpiar():
+    """Algunos marcos ABREN otro programa (Exter. stability → Slope Stability) o dejan ventanas no modales
+    (In detail → «Internal stability»): se cierra el otro programa, se cierran las ventanas sueltas y se vuelve a la principal."""
+    t0 = psutil.Process(pid).create_time()   # solo los abiertos DESPUÉS del nuestro: otras sesiones pueden tener GEO5 abierto
+    for p in psutil.process_iter(["name", "pid", "create_time"]):
+        n = (p.info["name"] or "").lower()
+        if n.endswith("_5_en.exe") and p.info["pid"] != pid and p.info["create_time"] > t0:
+            try: p.kill(); print("   cerrado otro programa:", p.info["name"])
+            except Exception: pass
+    cerrar_modales()
+    for w in modales():
+        try: w.close(); time.sleep(0.5)
+        except Exception: pass
+    try: principal().set_focus()
+    except Exception: pass
+    time.sleep(0.5)
+
+
 main = principal(); main.maximize(); time.sleep(1.0)
 try: main.set_focus()
 except Exception: pass
@@ -176,8 +194,8 @@ def pestanas(m, dn):
 
 # ---------- etapa (los programas con etapas de construcción tienen pestañas [1], [2]…)
 TOPO = "--topo" in sys.argv
-if ETAPA or TOPO:   # pestañas medidas (pantalla 2560): GeoFEM [Topo] x = 826, [1] = 905; resto [1] = 816; cada 68 px; y = 112
-    x1 = 905 if PROG == "GeoFEM" else 816
+if ETAPA or TOPO:   # pestañas medidas (pantalla 2560): GeoFEM [Topo] x = 826, [1] = 905; Sheeting Check [1] = 720; resto [1] = 816; cada 68 px; y = 112
+    x1 = {"GeoFEM": 905, "SheetingCheck": 720}.get(PROG, 816)   # Sheeting Check: barras verdes entre pestañas
     mouse.click(coords=((826 if TOPO else x1 + 68 * (ETAPA - 1)), 112)); time.sleep(2.0); cerrar_modales()
 
 # ---------- lista de marcos (panel «Frames» a la derecha)
@@ -187,7 +205,7 @@ marcos = [b for b in cajas if b[0].strip() and not re.match(r"^(Frames|Outputs|A
 print("marcos:", [m[0] for m in marcos])
 inv = {"programa": PROG, "archivo": ARCH, "etapa": ETAPA, "ventana": [R.left, R.top, R.right, R.bottom], "marcos": []}
 for k, (nombre, x, y, w, h) in enumerate(marcos):
-    cerrar_modales()
+    limpiar()
     mouse.click(coords=(x + w // 2, y + h // 2)); time.sleep(1.6); cerrar_modales()
     base = "%02d_%s" % (k + 1, re.sub(r"[^A-Za-z0-9]+", "_", nombre).strip("_"))
     fn = foto(base)
@@ -204,7 +222,7 @@ for k, (nombre, x, y, w, h) in enumerate(marcos):
             item["dialogos"].append({"boton": t, "titulo": m.window_text(), "png": dn + ".png", "caja": [r.left, r.top, r.width(), r.height()],
                                      "ocr": ocr(fn2, r.left, r.top, r.width(), r.height()), "controles": controles(m), "listas": listas(m, dn), "pestanas": pestanas(m, dn)})
             print("   ", dn, "→", m.window_text())
-        cerrar_modales()
+        limpiar()
         cs = [c for c in botones_panel() if c.window_text().replace("&", "") == "Cancel"]
         if cs: cs[0].click(); time.sleep(0.6)
     hechos = set()
