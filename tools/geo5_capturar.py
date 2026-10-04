@@ -75,7 +75,8 @@ for _ in range(20):   # «Restoring files» (autoguardado de una sesión anterio
 
 def principal():
     ws = [w for w in app.windows() if w.is_visible()]
-    return max(ws, key=lambda w: w.rectangle().width() * w.rectangle().height())
+    geo = [w for w in ws if w.window_text().startswith("GEO5")]   # la principal; Slope Stability abierto desde un marco va en el MISMO proceso
+    return max(geo or ws, key=lambda w: w.rectangle().width() * w.rectangle().height())
 
 
 def modales():
@@ -106,6 +107,13 @@ def limpiar():
         if n.endswith("_5_en.exe") and p.info["pid"] != pid and p.info["create_time"] > t0:
             try: p.kill(); print("   cerrado otro programa:", p.info["name"])
             except Exception: pass
+    for w in modales():   # programa abierto dentro del mismo proceso (Exter. stability → Slope Stability, TStabFormMain)
+        if w.rectangle().width() > 1500:
+            t = w.window_text(); w.post_message(0x0010); time.sleep(2.0)   # WM_CLOSE sin esperar: pregunta «Really exit without loading data…?»
+            for q in modales():
+                ys = [c for c in q.descendants() if c.class_name() == "TEnvButton" and c.window_text().replace("&", "") == "Yes"]
+                if q.class_name() == "TMsgBox" and ys: ys[0].click(); time.sleep(1.5)   # Yes = salir SIN pasar datos: no cambia nada
+            print("   cerrado programa interno:", t)
     cerrar_modales()
     for w in modales():
         try: w.close(); time.sleep(0.5)
