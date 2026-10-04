@@ -108,7 +108,7 @@ def limpiar():
             try: p.kill(); print("   cerrado otro programa:", p.info["name"])
             except Exception: pass
     for w in modales():   # programa abierto dentro del mismo proceso (Exter. stability → Slope Stability, TStabFormMain)
-        if w.rectangle().width() > 1500:
+        if "FormMain" in w.class_name():   # solo ventanas de PROGRAMA, no diálogos grandes (plantilla, administrador)
             t = w.window_text(); w.post_message(0x0010); time.sleep(2.0)   # WM_CLOSE sin esperar: pregunta «Really exit without loading data…?»
             for q in modales():
                 ys = [c for c in q.descendants() if c.class_name() == "TEnvButton" and c.window_text().replace("&", "") == "Yes"]
