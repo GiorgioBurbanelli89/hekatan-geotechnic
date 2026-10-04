@@ -136,7 +136,7 @@ def listas(w, base, limite=40):
     """Abre CADA desplegable visible de w, captura la lista y la cierra con ESC (no cambia nada). El OCR es solo de la
     lista abierta: la ventana emergente nueva si aparece; si no, la franja bajo el desplegable."""
     res = []
-    dds = [c for c in w.descendants() if c.class_name() == "TEnvDropDown" and c.is_visible()][:limite]
+    dds = [c for c in w.descendants() if c.class_name() in ("TEnvDropDown", "TEnvToolDropDown") and c.is_visible()][:limite]
     for k, dd in enumerate(dds):
         try:
             r = dd.rectangle(); antes = ventanas_vis(); dd.click_input(); time.sleep(0.8)
@@ -194,11 +194,9 @@ for k, (nombre, x, y, w, h) in enumerate(marcos):
     panel_y = R.top + int(0.66 * R.height())
     item = {"marco": nombre, "png": base + ".png", "panel_ocr": ocr(fn, 0, panel_y, R.right - 280, R.bottom - panel_y - 60),
             "controles": [c for c in controles(principal()) if c[3] > panel_y - 40], "listas": listas(principal(), base), "dialogos": []}
-    for b in botones_panel():
-        t = b.window_text().replace("&", "").strip()
-        if not t or not SEGUROS.match(t) or PELIGRO.search(t): continue
-        try: b.click(); time.sleep(1.8)
-        except Exception: continue
+    def abrir(t, pulsar):
+        try: pulsar(); time.sleep(1.8)
+        except Exception: return
         ms = modales()
         if ms:
             m = ms[0]; r = m.rectangle(); dn = "%s__%s" % (base, re.sub(r"[^A-Za-z0-9]+", "_", t).strip("_"))
@@ -209,6 +207,16 @@ for k, (nombre, x, y, w, h) in enumerate(marcos):
         cerrar_modales()
         cs = [c for c in botones_panel() if c.window_text().replace("&", "") == "Cancel"]
         if cs: cs[0].click(); time.sleep(0.6)
+    hechos = set()
+    for b in botones_panel():
+        t = b.window_text().replace("&", "").strip()
+        if not t or not SEGUROS.match(t) or PELIGRO.search(t): continue
+        hechos.add(t); abrir(t, b.click)
+    # respaldo: barras dibujadas sin controles de Windows (Soils de zapatas y muros): «Add»/«Edit» por su caja de OCR
+    for txt, bx, by, bw, bh in item["panel_ocr"]:
+        t = re.sub(r"^[^A-Za-z]+", "", txt).strip()
+        if t in ("Add", "Edit") and t not in hechos:
+            hechos.add(t); abrir(t, lambda: mouse.click(coords=(bx + bw // 2, by + bh // 2)))
     inv["marcos"].append(item); print(base, "·", len(item["panel_ocr"]), "textos ·", len(item["dialogos"]), "diálogos")
     json.dump(inv, open(os.path.join(OUT, "inventario.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print("fin")
