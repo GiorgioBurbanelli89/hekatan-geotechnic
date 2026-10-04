@@ -203,7 +203,7 @@ def pestanas(m, dn):
 # ---------- etapa (los programas con etapas de construcción tienen pestañas [1], [2]…)
 TOPO = "--topo" in sys.argv
 if ETAPA or TOPO:   # pestañas medidas (pantalla 2560): GeoFEM [Topo] x = 826, [1] = 905; Sheeting Check [1] = 720; resto [1] = 816; cada 68 px; y = 112
-    x1 = {"GeoFEM": 905, "SheetingCheck": 720}.get(PROG, 816)   # Sheeting Check: barras verdes entre pestañas
+    x1 = {"GeoFEM": 905, "SheetingCheck": 720, "RockStability": 705}.get(PROG, 816)   # Sheeting Check: barras verdes entre pestañas
     mouse.click(coords=((826 if TOPO else x1 + 68 * (ETAPA - 1)), 112)); time.sleep(2.0); cerrar_modales()
 
 # ---------- lista de marcos (panel «Frames» a la derecha)
