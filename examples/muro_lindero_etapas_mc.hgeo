@@ -3,7 +3,7 @@
 # 0.40 × 0.85 al final del talón, relleno en talud 12.5°. z = 0 en la coronación; base de la zapata a −3.90.
 # Suelos de Manabí (arena SP sobre SP-SM, c = 0), Mohr-Coulomb. Las caras «verticales» llevan 1 cm de inclinación:
 # en GEO5 una interfaz es y(x) (misma regla que el muro de Manabí).
-margenes xmin=0 xmax=25 fondo=-12
+margenes xmin=0 xmax=25 fondo=-12.85   # GEO5 mide la profundidad (8.10) desde la interfaz mas baja, el dentellon (-4.75): su fondo real es -12.85
 interfaz 0,-3.1 9.99,-3.1 10.00,0 10.40,0 25,3.2361
 interfaz 0,-3.9 25,-3.9
 suelo ARENA_SP    E=25000 nu=0.28 phi=30 c=0 gamma=18.5 modelo=mc
