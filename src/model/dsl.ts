@@ -11,7 +11,7 @@
 //   suelo NOMBRE E=130347 nu=0.3 phi=22.7 c=9 gamma=18 [psi=0] [modelo=mc]   modelo: dp (Drucker-Prager de GEO5, por
 //       defecto) o mc (Mohr-Coulomb, retorno de Clausen en tensiones principales, el de GeoFEM)
 //   asignar NOMBRE en x,y                    la región que contiene el punto es de ese suelo
-//   muro NOMBRE x=20 [z=-9] H=4 [fuste=0.4 zapata=0.4 talon=1.5 dedo=0.6 emp=0.9]   MURO CANTILEVER = RIGID BODY:
+//   muro NOMBRE x=20 [z=-9] H=4 [fuste=0.4 zapata=0.4 talon=1.5 dedo=0.6 emp=0.9 dentp=0.3 dentb=0.5]   MURO CANTILEVER = RIGID BODY:
 //       región de hormigón que NO se reduce en la SRM (elástica). El terreno pasa por su cara vista y
 //       detrás queda el relleno retenido hasta la coronación. Sin `fuste=…` se predimensiona con H.
 //       `z` = cota del PIE de la cara vista; si falta, el muro se apoya en el terreno. Con `z` por debajo
@@ -39,6 +39,8 @@ export type WallParam = {
    *  DEBAJO del terreno, el muro queda EMBEBIDO: por delante se excava hasta esta cota y la pantalla
    *  sostiene el terreno de arriba (es el caso de un muro a media ladera). */
   z?: number;
+  /** DENTELLÓN pegado al extremo del talón: profundidad bajo el fondo de la zapata y ancho (GEO5 x1 − canto, x2; x3 = 0) */
+  dentp?: number; dentb?: number;
 };
 export type Wall = { soil: string; pm: WallParam };
 export type Layer = { soil: string; side: "bajo" | "sobre"; poly: Pt[] };
@@ -110,7 +112,9 @@ export function wallLevels(pm: WallParam, z: number) {
 /** Polígono cerrado del muro (antihorario), para pintarlo y para asignar el hormigón por punto interior. */
 export function wallPolygon(pm: WallParam, z: number): Pt[] {
   const { zb, ztf, ztop, xb } = wallLevels(pm, z), x = pm.x, xf = x + pm.fuste;
-  return [[x - pm.dedo, zb], [xf + pm.talon, zb], [xf + pm.talon, ztf], [xf, ztf], [xf, ztop], [xb, ztop], [x, z], [x, ztf], [x - pm.dedo, ztf]];
+  const xe = xf + pm.talon, dp = pm.dentp ?? 0, db = pm.dentb ?? 0;
+  const base: Pt[] = dp > 1e-9 && db > 1e-9 ? [[xe - db, zb], [xe - db, zb - dp], [xe, zb - dp]] : [[xe, zb]];
+  return [[x - pm.dedo, zb], ...base, [xe, ztf], [xf, ztf], [xf, ztop], [xb, ztop], [x, z], [x, ztf], [x - pm.dedo, ztf]];
 }
 /** Contorno ENTERRADO del muro: la polilínea que va de un punto del terreno al otro por dentro del suelo
  *  (trasdós → talón → base → dedo → intradós). Es la restricción que entra en la malla: los triángulos no
@@ -118,7 +122,9 @@ export function wallPolygon(pm: WallParam, z: number): Pt[] {
  *  es borde del dominio. */
 export function wallChain(pm: WallParam, z: number): Pt[] {
   const { zb, ztf, ztop } = wallLevels(pm, z), x = pm.x, xf = x + pm.fuste;
-  return [[xf, ztop], [xf, ztf], [xf + pm.talon, ztf], [xf + pm.talon, zb], [x - pm.dedo, zb], [x - pm.dedo, ztf], [x, ztf], [x, z]];
+  const xe = xf + pm.talon, dp = pm.dentp ?? 0, db = pm.dentb ?? 0;
+  const base: Pt[] = dp > 1e-9 && db > 1e-9 ? [[xe, zb - dp], [xe - db, zb - dp], [xe - db, zb]] : [[xe, zb]];
+  return [[xf, ztop], [xf, ztf], [xe, ztf], ...base, [x - pm.dedo, zb], [x - pm.dedo, ztf], [x, ztf], [x, z]];
 }
 /** Quita puntos repetidos y colineales de una polilínea (para no ensuciar el terreno con vértices de más). */
 function simplify(P: Pt[], tol = 1e-4): Pt[] {
@@ -221,7 +227,7 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
         def.layers.push({ soil: toks[1], side: side === "sobre" || side === "encima" ? "sobre" : "bajo", poly: pts(toks.slice(3)) });
       } else if (cmd === "muro" || cmd === "wall") {
         const o = kv(toks.slice(2)), H = num(o.h ?? "4"), d = wallDims(H);
-        def.walls.push({ soil: toks[1], pm: { x: num(o.x ?? o.xpie ?? "10"), H, ...(o.z ?? o.zpie ? { z: num((o.z ?? o.zpie)!) } : {}), fuste: num(o.fuste ?? String(d.fuste)), zapata: num(o.zapata ?? String(d.zapata)), talon: num(o.talon ?? o["talón"] ?? String(d.talon)), dedo: num(o.dedo ?? String(d.dedo)), emp: num(o.emp ?? String(d.emp)) } });
+        def.walls.push({ soil: toks[1], pm: { x: num(o.x ?? o.xpie ?? "10"), H, ...(o.z ?? o.zpie ? { z: num((o.z ?? o.zpie)!) } : {}), fuste: num(o.fuste ?? String(d.fuste)), zapata: num(o.zapata ?? String(d.zapata)), talon: num(o.talon ?? o["talón"] ?? String(d.talon)), dedo: num(o.dedo ?? String(d.dedo)), emp: num(o.emp ?? String(d.emp)), ...(o.dentp && o.dentb ? { dentp: num(o.dentp), dentb: num(o.dentb) } : {}) } });
       } else if (cmd === "malla") def.h = num(toks[1]);
       else if (cmd === "etapa") {
         let i = 1; const nm: string[] = [];
@@ -289,7 +295,7 @@ export function serializeHgeo(def: SlopeDef): string {
   def.interfaces.forEach((it, k) => { if (k === 0 && def.param) { const q = def.param; L.push(`talud xpie=${r(q.xpie)} zpie=${r(q.zpie)} H=${r(q.H)} beta=${r(q.beta)} corona=${r(q.corona)} zfin=${r(q.zfin)} beta2=${r(q.beta2)}${q.bermas ? ` bermas=${r(q.bermas)} berma=${r(q.berma ?? 0)}` : ""}`); } else L.push(`interfaz ${it.map(p).join(" ")}`); });
   if (!def.interfaces.length && def.outline.length) L.push(`contorno ${def.outline.map(p).join(" ")}`);
   for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.vs ? ` vs=${r(s.vs)}` : ""}${s.modelo === "mc" ? " modelo=mc" : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}`);
-  for (const w of def.walls ?? []) L.push(`muro ${w.soil} x=${r(w.pm.x)}${Number.isFinite(w.pm.z as number) ? ` z=${r(w.pm.z as number)}` : ""} H=${r(w.pm.H)} fuste=${r(w.pm.fuste)} zapata=${r(w.pm.zapata)} talon=${r(w.pm.talon)} dedo=${r(w.pm.dedo)} emp=${r(w.pm.emp)}`);
+  for (const w of def.walls ?? []) L.push(`muro ${w.soil} x=${r(w.pm.x)}${Number.isFinite(w.pm.z as number) ? ` z=${r(w.pm.z as number)}` : ""} H=${r(w.pm.H)} fuste=${r(w.pm.fuste)} zapata=${r(w.pm.zapata)} talon=${r(w.pm.talon)} dedo=${r(w.pm.dedo)} emp=${r(w.pm.emp)}${w.pm.dentp && w.pm.dentb ? ` dentp=${r(w.pm.dentp)} dentb=${r(w.pm.dentb)}` : ""}`);
   for (const ln of def.lines ?? []) L.push(`linea ${ln.map(p).join(" ")}`);   // GEO5 Free line
   for (const a of def.assign) L.push(`asignar ${a.soil} en ${p(a.p)}`);
   for (const c of def.layers) L.push(`capa ${c.soil} ${c.side} ${c.poly.map(p).join(" ")}`);

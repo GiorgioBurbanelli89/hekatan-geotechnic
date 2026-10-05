@@ -1,0 +1,12 @@
+# Muro en L con dentellon (Portoviejo): zapata 0.4, fuste 0.25, talon 1.9, dentellon 0.30 x 0.50 al extremo del talon
+margenes xmin=0 xmax=30 fondo=-12
+interfaz 0,0 30,0
+interfaz 0,-3 30,-3
+suelo ARENA_SP    E=25000 nu=0.28 phi=30 c=0 gamma=18.5
+suelo ARENA_SPSM  E=15500 nu=0.3 phi=29.97 c=0 gamma=17.5
+suelo HORMIGON    E=21538105.77 nu=0.2 phi=0 c=0 gamma=23 rigido=1
+asignar ARENA_SP en 20,-1.5
+asignar ARENA_SPSM en 15,-8
+muro HORMIGON x=10 H=2.6 fuste=0.25 zapata=0.4 talon=1.9 dedo=0 emp=3.0 dentp=0.3 dentb=0.5
+malla 0.8
+etapa peso propio
