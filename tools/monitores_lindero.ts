@@ -7,7 +7,7 @@ import { meshSlope } from "../src/mesh/mesher";
 import { GeoFemWasm } from "../src/geofem/geofemWasm";
 import { GeoFem } from "../src/geofem/solver";
 
-const f = "examples/muro_lindero_etapas_mc.hgeo";
+const f = process.env.HGEO ?? "examples/muro_lindero_etapas_mc.hgeo";
 const { model } = meshSlope(parseHgeo(readFileSync(f, "utf-8")), { topeMs: 120000, maxIter: 40000 });
 const P: [number, number][] = [[10.4, 0], [10.0, -3.9], [13.25, -3.9], [5, -3.1], [20, -3.5], [20, 0], [18, 1.0], [24, 2.9], [20, -8]];
 const { X, Y, ELE } = model;
@@ -37,4 +37,4 @@ fem.runStaged(model, (r) => {
 const ult = (filas[filas.length - 1] as { v: { dz: number; dx: number; sz: number; sx: number }[] }).v;
 console.log("\nfinal (dz / dx mm · σz / σx kPa, media del elemento):");
 P.forEach((p, i) => console.log(`  ${i + 1} (${p[0]}, ${p[1]}): ${ult[i].dz.toFixed(1)} / ${ult[i].dx.toFixed(1)} · ${ult[i].sz.toFixed(2)} / ${ult[i].sx.toFixed(2)}`));
-writeFileSync(`examples/muro_lindero_monitores_geotechnic${process.argv[2] === "ts" ? "_ts" : ""}.json`, JSON.stringify({ puntos: P, etapas: filas }, null, 1));
+writeFileSync(process.env.SALIDA ?? `examples/muro_lindero_monitores_geotechnic${process.argv[2] === "ts" ? "_ts" : ""}.json`, JSON.stringify({ puntos: P, etapas: filas }, null, 1));

@@ -38,6 +38,8 @@ export type MeshStats = { nodes: number; corners: number; elements: number; minA
  *  navegador). Fuera del navegador (tools/, tests/) conviene subirlos: con el tope de TIEMPO la malla depende de lo
  *  cargada que esté la máquina (2026-09-29: el muro de Manabí dio 179, 129 y 99 nudos huérfanos en tres corridas
  *  idénticas) y el resultado deja de ser reproducible. */
+/** E del cuerpo rígido relativo al suelo más rígido (GEO5 lo trata como rígido: sin flexión). */
+export const E_RIGIDO_REL = 1e6;
 export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: number } = {}): { model: GeoModel; stats: MeshStats } {
   const h = def.h;
   // el contorno DERIVA de las interfaces: si un slider o el ratón cambió el terreno, se rehace aquí
@@ -358,7 +360,11 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
   });
   const model: GeoModel = {
     name: "hgeo", X, Y, ELE, EMAT, FIXED, Fg: new Array(ndof).fill(0), Fs: new Array(ndof).fill(0), Fa: new Array(ndof).fill(0),
-    MAT: def.soils.map((s) => [s.E, s.nu, s.phi, s.c, s.gamma, s.psi]), recomputeGravity: true, loads, stages,
+    // «Rigid body» de GEO5: su InputFile.txt lo declara `rigidbody` SIN módulo (el fuste no se flecta: nudos con traslación y giro comunes).
+    // Aquí es una región elástica; para que no se flecte se le sube E hasta E_REL veces el del suelo más rígido
+    // (medido el 5-oct-2026: con E = 21.5 GPa el fuste de 3.5 m del muro de lindero se flecta ~3 mm y la coronación da d_x 11.5 mm; con
+    // el rígido da 8.6 contra 8.2 de GEO5).
+    MAT: def.soils.map((s) => [s.rigido ? Math.max(s.E, E_RIGIDO_REL * Math.max(...def.soils.filter((q) => !q.rigido).map((q) => q.E), 0)) : s.E, s.nu, s.phi, s.c, s.gamma, s.psi]), recomputeGravity: true, loads, stages,
     MATNAMES: def.soils.map((s) => s.name),
     RIGID: def.soils.map((s) => !!s.rigido),
     ...(def.soils.some((s) => s.modelo === "mc") ? { MODEL: def.soils.map((s) => (s.modelo === "mc" ? 1 : 0)) } : {}),   // muro de hormigón: región elástica, la SRM no le reduce c ni φ
