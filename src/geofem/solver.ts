@@ -93,12 +93,12 @@ export type Log = (line: string) => void;
 
 // ---- cuadratura de 7 puntos (Hammer grado 5) ----
 const c7 = 0.1012865073235, C7 = 0.7974269853531, e7 = 0.4701420641051, E7 = 0.0597158717898;
-const GP = [[1 / 3, 1 / 3], [c7, c7], [C7, c7], [c7, C7], [e7, e7], [E7, e7], [e7, E7]];
-const GW = [0.225 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2];
+export const GP = [[1 / 3, 1 / 3], [c7, c7], [C7, c7], [c7, C7], [e7, e7], [E7, e7], [e7, E7]];
+export const GW = [0.225 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2];
 const NG = 7;
 export const GEO5_SRM = 19;   // bits de la SRM en modo GEO5 (ver setSrm / geofem_set_srm)
 
-function t6(L1: number, L2: number): [number[], number[], number[]] {
+export function t6(L1: number, L2: number): [number[], number[], number[]] {
   const L3 = 1 - L1 - L2;
   return [
     [L1 * (2 * L1 - 1), L2 * (2 * L2 - 1), L3 * (2 * L3 - 1), 4 * L1 * L2, 4 * L2 * L3, 4 * L3 * L1],
