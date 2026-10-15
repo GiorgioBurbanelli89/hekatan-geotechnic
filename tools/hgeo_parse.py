@@ -28,7 +28,7 @@ def parse_hgeo(text):
         elif cmd in ("interfaz", "interface"): m["interfaces"].append(_pts(toks[1:]))
         elif cmd in ("linea", "línea", "line", "libre"): m["lines"].append(_pts(toks[1:]))
         elif cmd == "suelo":
-            o = _kv(toks[2:]); m["soils"].append({"name": toks[1], "E": float(o.get("e", 20000)), "nu": float(o.get("nu", 0.3)), "phi": float(o.get("phi", 25)), "c": float(o.get("c", 5)), "gamma": float(o.get("gamma", 18)),
+            o = _kv(toks[2:]); m["soils"].append({"name": toks[1], "E": float(o.get("e", 20000)), "nu": float(o.get("nu", 0.3)), "phi": float(o.get("phi", 25)), "c": float(o.get("c", 5)), "gamma": float(o.get("gamma", 18)), "gsat": float(o.get("gsat", o.get("gamma", 18))),
                                                   "rigido": str(o.get("rigido", o.get("rigid", ""))).lower() in ("1", "si", "sí", "true", "yes")})
         elif cmd == "asignar":
             i = toks.index("en"); m["assign"].append({"soil": toks[1], "p": _pts([toks[i + 1]])[0]})

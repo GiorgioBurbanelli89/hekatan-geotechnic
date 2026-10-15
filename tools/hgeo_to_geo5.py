@@ -235,9 +235,9 @@ class Geo5:
             if rigido: print("   OJO: %s es RIGIDO (muro) -> modelo = 1er elemento del desplegable; comprueba en la captura que dice Elastic" % s["name"])
         E = s["E"] / 1000.0
         if rigido:   # hormigon: solo nombre, peso y elasticidad (phi y c no existen en un material elastico)
-            campos = [(654, 444, s["name"]), (715, 660, s["gamma"]), (715, 702, E), (715, 828, s["nu"]), (715, 957, s["gamma"]), (1435, 444, E)]
+            campos = [(654, 444, s["name"]), (715, 660, s["gamma"]), (715, 702, E), (715, 828, s["nu"]), (715, 957, s.get("gsat", s["gamma"])), (1435, 444, E)]
         else:
-            campos = [(654, 444, s["name"]), (715, 660, s["gamma"]), (715, 702, E), (715, 828, s["nu"]), (715, 957, s["gamma"]), (1435, 444, E), (1435, 486, s["phi"]), (1435, 528, s["c"]), (1435, 570, 0)]
+            campos = [(654, 444, s["name"]), (715, 660, s["gamma"]), (715, 702, E), (715, 828, s["nu"]), (715, 957, s.get("gsat", s["gamma"])), (1435, 444, E), (1435, 486, s["phi"]), (1435, 528, s["c"]), (1435, 570, 0)]
         for intento in range(3):
             for (l, t, v) in campos: self.put_at(d, l, t, v)
             vacios = [(l, t) for (l, t, v) in campos if not self.field_text(d, l, t).strip()]
@@ -400,6 +400,7 @@ def run(hgeo, out_gmk, keep=False):
         g.calibrate(m["margins"], ifs[0]); g.assign(m["soils"], asg)
     if hacer("malla"): print("5) malla h=%g" % m["h"]); g.mesh(m["h"])
     if hacer("malla"): topo = os.path.splitext(out_gmk)[0] + "_topo.gmk"; print("5b) guardar topología:", topo); g.save_as(topo)
+    if "--hasta-malla" in sys.argv: print("listo hasta la malla"); return
     res = []
     for i, st in enumerate(m["stages"] if hacer("etapas") else []):
         print("6) etapa %d «%s»" % (i + 1, st["name"]))

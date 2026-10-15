@@ -15,7 +15,7 @@ for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
 const nn = X.length, FIXED: number[] = [];
 for (let n = 0; n < nn; n++) { if (X[n] === 0 || X[n] === W) FIXED.push(2 * n); if (Y[n] === 0) { FIXED.push(2 * n + 1); if (X[n] !== 0 && X[n] !== W) FIXED.push(2 * n); } }
 const z = () => new Array(2 * nn).fill(0);
-const m: GeoModel = { X, Y, ELE, EMAT: ELE.map(() => 1), FIXED, Fg: z(), Fs: z(), Fa: z(), MAT: [[30000, 0.3, 30, 5, -gam, 0]], stages: [{ name: "s", loads: ["Fg"] }] };
+const m: GeoModel = { X, Y, ELE, EMAT: ELE.map(() => 1), FIXED, Fg: z(), Fs: z(), Fa: z(), MAT: [[30000, 0.3, 30, 5, gam, 0]], stages: [{ name: "s", loads: ["Fg"] }] };
 const ag = { gwt: [[0, yw], [W, yw]] as [number, number][], gammaSat: [gsat], gammaW: gw };
 const { Fg, Fp } = cargaAgua(m, ag);
 m.Fg = Array.from(Fg);

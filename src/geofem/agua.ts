@@ -45,7 +45,7 @@ export function cargaAgua(m: GeoModel, a: AguaGWT): { Fg: Float64Array; Fp: Floa
       for (let k = 0; k < 6; k++) { j11 += dL1[k] * xs[k]; j12 += dL1[k] * ys[k]; j21 += dL2[k] * xs[k]; j22 += dL2[k] * ys[k]; xg += N[k] * xs[k]; yg += N[k] * ys[k]; pg += N[k] * p[nd[k]]; }
       const dJ = j11 * j22 - j12 * j21, w = dJ * GW[q];
       const bajo = yg < yGWT(a.gwt, xg);
-      const rho = bajo ? -a.gammaSat[mm] : m.MAT[mm][4];   // MAT[.,4] es negativo (hacia abajo)
+      const rho = bajo ? -a.gammaSat[mm] : -m.MAT[mm][4];   // MAT[.,4] = γ positivo; el peso va hacia abajo (como solver.ts: rho = -γ)
       for (let k = 0; k < 6; k++) {
         Fg[2 * nd[k] + 1] += N[k] * rho * w;
         const dNx = (j22 * dL1[k] - j12 * dL2[k]) / dJ, dNy = (-j21 * dL1[k] + j11 * dL2[k]) / dJ;

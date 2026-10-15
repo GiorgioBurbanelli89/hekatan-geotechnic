@@ -1,0 +1,9 @@
+# EL MISMO TALUD QUE SE TECLEO EN GEO5 GeoFEM POR LA INTERFAZ (22-sep-2026):
+# terreno llano a -9 hasta x=12, talud de 6 m a 30 grados, y llano a -3 hasta x=40.
+# Un suelo Drucker-Prager, sin agua ni sobrecarga. GEO5 GeoFEM da FS = 1.98 (reduccion c-phi).
+margenes xmin=0 xmax=40 fondo=-20
+interfaz 0,-9 12,-9 22.39,-3 40,-3
+suelo LIMO_ARENOSO E=22000 nu=0.3 phi=28 c=7 gamma=18.5 gsat=20.5
+asignar LIMO_ARENOSO en 20,-12
+malla 1.8
+etapa peso propio
