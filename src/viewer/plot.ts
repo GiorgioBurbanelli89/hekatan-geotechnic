@@ -11,6 +11,7 @@ export type PlotOptions = {
   stage: number;            // índice de etapa
   Fst?: Float64Array;       // cargas de la etapa SIN gravedad (sobrecargas y anclas) para dibujarlas
   showMesh: boolean;
+  surface?: "iso" | "line" | "none";   // GEO5 «Surface»: isosuperficie (relleno) · isolínea · no visualizar
   deformScale?: number;     // 0 = sin deformada
   u?: Float64Array; uel?: Float64Array;
   active?: ArrayLike<number>;   // construcción por etapas: 1/0 por elemento; los inactivos no se pintan (solo sus aristas)
@@ -121,6 +122,7 @@ export class SlopePlot {
       // relleno por píxel con interpolación BILINEAL de la rejilla (como el contourf: bandas lisas, no
       // escalones de celda); una celda con NaN parcial se interpola con las esquinas válidas.
       const img = ctx.createImageData(iw, ih);
+      const bandArr = new Int16Array(iw * ih).fill(-1);   // banda de cada píxel (isolíneas de GEO5 = cambio de banda)
       const d = img.data, NX = grid.NX, NZ = grid.NZ, Zg = grid.Z;
       const bgR = this.dark ? 0 : 255, bgG = bgR, bgB = bgR;
       for (let py = 0; py < ih; py++) {
@@ -143,6 +145,19 @@ export class SlopePlot {
           let b = 0; while (b < lv.length - 2 && vc >= lv[b + 1]) b++;
           // rango diminuto (p. ej. |u| ~1e-6 mm al final de un sismo): geo5Levels puede dar menos bandas → índice acotado
           const c = cmap[Math.min(b, cmap.length - 1)] ?? [255, 255, 255]; d[q] = c[0]; d[q + 1] = c[1]; d[q + 2] = c[2]; d[q + 3] = 255;
+          bandArr[py * iw + px] = b;
+        }
+      }
+      if (o.surface === "line" || o.surface === "none") {   // GEO5: «isoline» = solo líneas de nivel sobre gris claro; «do not visualize» = gris liso
+        const gray = this.dark ? 28 : 240;
+        for (let i = 0; i < iw * ih; i++) if (bandArr[i] >= 0) { d[4 * i] = d[4 * i + 1] = d[4 * i + 2] = gray; }
+        if (o.surface === "line") for (let py = 0; py < ih; py++) for (let px = 0; px < iw; px++) {
+          const i = py * iw + px, b = bandArr[i]; if (b < 0) continue;
+          for (const j of [px + 1 < iw ? i + 1 : -1, py + 1 < ih ? i + iw : -1]) {
+            if (j < 0 || bandArr[j] < 0 || bandArr[j] === b) continue;
+            const hi = Math.max(b, bandArr[j]), cc = cmap[Math.min(hi, cmap.length - 1)] ?? [0, 0, 0];
+            for (const t of [i, j]) { d[4 * t] = cc[0] * 0.8; d[4 * t + 1] = cc[1] * 0.8; d[4 * t + 2] = cc[2] * 0.8; }
+          }
         }
       }
       ctx.putImageData(img, Math.round(ax0), Math.round(az0));

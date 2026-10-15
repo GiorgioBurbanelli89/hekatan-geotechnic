@@ -212,7 +212,14 @@
         <div><label>Peldaño (SRF)</label><select id="step"></select></div>
         <div><label>Deformada ×</label><input id="defscale" type="number" value="0" min="0" step="10" /></div>
       </div>
-      <label><input type="checkbox" id="mesh" checked style="width:auto" /> malla T6</label>
+      <div class="row">
+        <div><label>Superficie</label><select id="surf" title="como GEO5: isosuperficie (relleno por bandas) · isolínea (solo líneas de nivel) · no visualizar"><option value="iso">isosuperficie</option><option value="line">isolínea</option><option value="none">(no visualizar)</option></select></div>
+        <div><label>Malla</label><select id="meshmode" title="como GEO5: no visualizar · solo bordes (todas las aristas de la malla T6)"><option value="edges">solo bordes (malla T6)</option><option value="none">(no visualizar)</option></select></div>
+      </div>
+      <div class="row">
+        <div><label>Deformada</label><select id="defmode" title="como GEO5: sin deformar · por magnitud (escala automática, aproximada: el factor exacto de GEO5 no está medido) · por coeficiente (el factor de la casilla)"><option value="none">sin deformar</option><option value="mag">por magnitud</option><option value="coef" selected>por coeficiente</option></select></div>
+      </div>
+      <input type="checkbox" id="mesh" checked hidden />
     </aside>
     <section class="panel">
       <div class="tools">

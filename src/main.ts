@@ -24,7 +24,7 @@ type Stage = { name: string; fs: number; alcanzada?: number; geo5?: number; u: F
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const selModel = $<HTMLSelectElement>("model"), selN = $<HTMLSelectElement>("nstages"), btn = $<HTMLButtonElement>("run");
 const selStage = $<HTMLSelectElement>("stage"), selField = $<HTMLSelectElement>("field"), selStep = $<HTMLSelectElement>("step");
-const inpDef = $<HTMLInputElement>("defscale"), chkMesh = $<HTMLInputElement>("mesh"), chkAuto = $<HTMLInputElement>("auto");
+const inpDef = $<HTMLInputElement>("defscale"), chkMesh = $<HTMLInputElement>("mesh"), selSurf = $<HTMLSelectElement>("surf"), selMeshMode = $<HTMLSelectElement>("meshmode"), selDefMode = $<HTMLSelectElement>("defmode"), chkAuto = $<HTMLInputElement>("auto");
 const logEl = $<HTMLDivElement>("log"), fsEl = $<HTMLDivElement>("fs"), matsEl = $<HTMLDivElement>("mats"), hoverEl = $<HTMLDivElement>("hover");
 const slidersEl = $<HTMLDivElement>("sliders");
 const canvas = $<HTMLCanvasElement>("plot"), drawCanvas = $<HTMLCanvasElement>("draw");
@@ -405,6 +405,16 @@ function stageLoads(si: number): Float64Array {
   return F;
 }
 
+/** factor de la deformada según el modo (GEO5: undeformed · deformed by magnitude · deformed by coefficient) */
+function factorDeformada(u: Float64Array, uel: Float64Array | undefined): number {
+  if (selDefMode.value === "none") return 0;
+  if (selDefMode.value === "coef") return parseFloat(inpDef.value) || 0;
+  // «por magnitud»: el mayor desplazamiento del mecanismo se dibuja como el 3 % del ancho del modelo (aprox.; falta medir el de GEO5)
+  let mx = 0; for (let i = 0; i < model!.X.length; i++) { const a = u[2 * i] - (uel?.[2 * i] ?? 0), b = u[2 * i + 1] - (uel?.[2 * i + 1] ?? 0); mx = Math.max(mx, Math.hypot(a, b)); }
+  const ancho = Math.max(...model!.X) - Math.min(...model!.X);
+  return mx > 1e-12 ? 0.03 * ancho / mx : 0;
+}
+
 function redraw() {
   if (!model || !plot) return;
   if (dinActivo()) { dibujarDinamico(); return; }   // resultados del dinámico sobre la gráfica (deslizador de tiempo)
@@ -422,9 +432,9 @@ function redraw() {
     : stress ? stressField(kind, model.ELE, model.X.length, st.ngp!, st.sig1!, st.eps1!, st.epl1!) : nodalField(u, st.uel, model.X.length, kind);
   const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress && !model.staged ? " · estado de tensión SRF=1" : "");
   const rango = plot.draw({
-    field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked,
+    field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, surface: selSurf.value as "iso" | "line" | "none",
     title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${model.staged ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
-    deformScale: parseFloat(inpDef.value) || 0, u, uel: st.uel, active: model.stages[si]?.active,
+    deformScale: factorDeformada(u, st.uel), u, uel: st.uel, active: model.stages[si]?.active,
   });
   draw.setMap(plot.mapping());
   (window as unknown as { __geoMap: unknown }).__geoMap = plot.mapping();   // para el arnés puppeteer (clics en coordenadas del mundo)
@@ -592,7 +602,8 @@ selModel.addEventListener("change", () => {
 edApply.addEventListener("click", applyHgeo);
 edText.addEventListener("keydown", (ev) => { if (ev.ctrlKey && ev.key === "Enter") applyHgeo(); });
 selStage.addEventListener("change", () => { const i = visibleStage(); buildStageTabs(); actualizarMuro(def, i); if (!stages[i] || stages[i]!.stale) run([i]); else { fillStepSelect(); redraw(); } });
-for (const el of [selField, selStep, chkMesh, inpDef]) el.addEventListener("change", redraw);
+selMeshMode.addEventListener("change", () => { chkMesh.checked = selMeshMode.value === "edges"; });
+for (const el of [selField, selStep, chkMesh, inpDef, selSurf, selMeshMode, selDefMode]) el.addEventListener("change", redraw);
 inpDef.addEventListener("input", redraw);
 engancharMuro(() => actualizarMuro(def, visibleStage()));
 engancharDinamico({ modelo: () => base, def: () => def, plot: () => plot, canvas, redibujarEstatico: () => redraw() });
