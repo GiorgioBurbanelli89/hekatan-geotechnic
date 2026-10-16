@@ -175,15 +175,16 @@ proc aguanta {F} {
     for {set i 0} {$i < $nsteps} {incr i} { if {[analyze 1] != 0} { return 0 } }
     return 1
 }
+# bisección del factor F: devuelve {FS, último F que aguanta}
 proc factorSeguridad {} {
     set lo 1.0
     set hi 3.0
-    if {![aguanta $lo]} { return 1.0 }
+    if {![aguanta $lo]} { return {1.0 1.0} }
     while {$hi - $lo > 0.01} {
         set mid [expr {0.5*($lo+$hi)}]
         if {[aguanta $mid]} { set lo $mid } else { set hi $mid }
     }
-    return [expr {0.5*($lo+$hi)}]
+    return [list [expr {0.5*($lo+$hi)}] $lo]
 }
 
 array set geo5 {sin 1.98 gwt 1.76 poros 1.74 ru 1.42}
@@ -193,9 +194,12 @@ foreach caso {sin gwt poros ru} {
     foreach n [array names P] { if {$P($n) > $pmax} { set pmax $P($n) } }
     set sumFy 0.0
     foreach n [array names Fy] { set sumFy [expr {$sumFy+$Fy($n)}] }
-    set FSc($caso) [factorSeguridad]
+    lassign [factorSeguridad] FSc($caso) loc($caso)
     set nsatc($caso) $nsat; set pmaxc($caso) $pmax; set sumFyc($caso) $sumFy
 }
+# se deja montado el caso con freático con el último F que aguanta, para ver su deformada
+cargas gwt
+aguanta $loc(gwt)
 
 #show
 puts "HEKATAN:gamma_w=$gw"
@@ -212,6 +216,9 @@ puts "HEKATAN:elementos_saturados_freatico=$nsatc(gwt)"
 puts "HEKATAN:elementos_saturados_isolineas=$nsatc(poros)"
 puts "HEKATAN:peso_total_seco=$sumFyc(sin)"
 puts "HEKATAN:peso_total_freatico=$sumFyc(gwt)"
+## Deformada del caso con freático
+# Con **F = el último F estable** (el último que aguanta) el desplazamiento crece en la zona de falla; el color es |u|.
+#plot
 ## Resultados
 #values
 '''
