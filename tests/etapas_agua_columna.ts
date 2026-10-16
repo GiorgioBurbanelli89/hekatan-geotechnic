@@ -5,11 +5,12 @@ import { parseHgeo } from "../src/model/dsl";
 import { meshSlope } from "../src/mesh/mesher";
 import { GeoFemWasm } from "../src/geofem/geofemWasm";
 import { GeoFem } from "../src/geofem/solver";
+import { GAMMA_W_GEO5 } from "../src/geofem/agua";
 const [f, motor = "wasm"] = process.argv.slice(2);
 const { model } = meshSlope(parseHgeo(readFileSync(f, "utf-8")), { topeMs: 120000, maxIter: 40000 });
 const fem: any = motor === "ts" ? new GeoFem(model, () => {}) : await GeoFemWasm.create(model);
 const rs = fem.runStaged(model), r = rs[rs.length - 1], ne = model.ELE.length, per = Math.round(r.ngp / ne);
-const a = model.agua, gw = a?.gammaW ?? 9.81;
+const a = model.agua, gw = a?.gammaW ?? GAMMA_W_GEO5;
 // perfil analítico en x>26: capas por y (según los suelos asignados en el ejemplo: 0..-3 ARENA_SP, -3..-12 ARENA_SPSM), GWT en yw
 const yw = a ? a.gwt[0][1] : -1e9, capa = (y: number) => y > -3 ? 0 : 1;
 const g = [18.5, 17.5], gs = [20, 19];

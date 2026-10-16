@@ -8,6 +8,9 @@
 // Aquí solo se arma el vector de carga: el solver no cambia (σ del solver = σ efectiva).
 import { GP, GW, t6, type GeoModel } from "./solver";
 
+/** γw que usa GEO5 GeoFEM (medido en su InputFile) */
+export const GAMMA_W_GEO5 = 10;
+
 export type AguaGWT = {
   /** línea freática: polilínea [x, y] ordenada por x (fuera de su rango se extiende horizontal) */
   gwt: [number, number][];
@@ -16,7 +19,7 @@ export type AguaGWT = {
   ru?: number; terreno?: [number, number][];
   /** peso unitario saturado por material (mismo orden que MAT); positivo, kN/m³ */
   gammaSat: number[];
-  /** peso unitario del agua (GEO5: 9.81) */
+  /** peso unitario del agua (GEO5: 10, `gamma_w=1.0E+01` en su InputFile) */
   gammaW?: number;
   /** GEO5 «Pore pressure» (presión dada): u NODAL [kPa], un valor por nudo de la malla. El solver solo conoce `load.porepressures`
    *  (binario: PorePressureLoading), así que es el mismo camino que GWT con `p` ya calculada; manda sobre `gwt`. */
@@ -48,12 +51,28 @@ export function yGWT(gwt: [number, number][], x: number): number {
   return gwt[gwt.length - 1][1];
 }
 
-/** presión de poros nodal hidrostática: p = γw·(yGWT − y) bajo el GWT, 0 sobre él */
+/** distancia d ≥ 0 del punto (x, y) al freático, como la mide GEO5 (medido nudo a nudo en su InputFile, 743 de 744 nudos a 1e-3):
+ *  PERPENDICULAR a la recta del tramo que queda verticalmente encima del punto (no la profundidad vertical): bajo un tramo inclinado
+ *  p = γw·h·cos θ. En un quiebre ENTRANTE (la pendiente aumenta hacia la derecha: el suelo de abajo ve un ángulo > 180°) GEO5 prolonga las
+ *  rectas hasta el empalme a inglete: en esa cuña vale el máximo de las dos distancias. En un quiebre saliente el reparto es el vertical. */
+export function distGWT(gwt: [number, number][], x: number, y: number): number {
+  const n = gwt.length - 1; if (n < 1) return Math.max(0, gwt[0][1] - y);
+  let i = 0; while (i < n - 1 && x > gwt[i + 1][0]) i++;      // tramo cuyo rango x contiene al punto (el último si se sale)
+  const pend = (k: number) => (gwt[k + 1][1] - gwt[k][1]) / (gwt[k + 1][0] - gwt[k][0] || 1e-12);
+  const dist = (k: number) => { const [x0, y0] = gwt[k], [x1, y1] = gwt[k + 1], L = Math.hypot(x1 - x0, y1 - y0) || 1e-12; return ((x - x0) * (y1 - y0) - (y - y0) * (x1 - x0)) / L; };   // >0 si el punto está debajo de la recta
+  if (y >= yGWT(gwt, x)) return 0;
+  let d = dist(i);
+  if (i > 0 && pend(i) > pend(i - 1) + 1e-12) d = Math.max(d, dist(i - 1));
+  if (i < n - 1 && pend(i + 1) > pend(i) + 1e-12) d = Math.max(d, dist(i + 1));
+  return Math.max(0, d);
+}
+
+/** presión de poros nodal del freático (GEO5, γw = 10 kN/m³ como su InputFile `gamma_w=1.0E+01`): p = γw·d, 0 sobre el GWT. Ver `distGWT`. */
 export function presionNodal(m: GeoModel, a: AguaGWT): Float64Array {
-  const gw = a.gammaW ?? 9.81, p = new Float64Array(m.X.length);
+  const gw = a.gammaW ?? GAMMA_W_GEO5, p = new Float64Array(m.X.length);
   if (a.pNodal) { for (let i = 0; i < p.length; i++) p[i] = Math.max(0, a.pNodal[i]); return p; }
   if (a.poros?.length) { for (let i = 0; i < p.length; i++) p[i] = Math.max(0, uPoros(a.poros, m.X[i], m.Y[i])); return p; }
-  for (let i = 0; i < p.length; i++) p[i] = Math.max(0, gw * (yGWT(a.gwt, m.X[i]) - m.Y[i]));
+  for (let i = 0; i < p.length; i++) p[i] = gw * distGWT(a.gwt, m.X[i], m.Y[i]);
   return p;
 }
 
