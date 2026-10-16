@@ -1,5 +1,6 @@
 // Motor WASM (C++ compilado con emscripten, src/geofem/cpp/geofem.cpp). Misma interfaz de resultados
 // que GeoFem (solver.ts); el log llega línea a línea por Module.geoLog.
+import { fgConAgua } from "./agua";
 import type { GeoModel, StageResult, Log } from "./solver";
 import { GEO5_SRM } from "./solver";
 // @ts-ignore — módulo generado por emcc (build_wasm.sh)
@@ -101,7 +102,7 @@ export class GeoFemWasm {
     mod.geoLog = this.log;
     const pMat = mod._geofem_alloc(6 * m.MAT.length); mod.HEAPF64.set(m.MAT.flat(), pMat >> 3); mod._geofem_set_mat(this.h, pMat); mod._geofem_free(pMat);
     const pF = mod._geofem_alloc(ndof), pU = mod._geofem_alloc(ndof), pUel = mod._geofem_alloc(ndof), pSrf = mod._geofem_alloc(MAXS), pSU = mod._geofem_alloc(MAXS * ndof);
-    const LOADS: Record<string, number[] | Float64Array> = { ...(m.loads || {}), Fg: m.recomputeGravity ? this.Fg2 : m.Fg, Fs: m.Fs, Fa: m.Fa };
+    const LOADS: Record<string, number[] | Float64Array> = { ...(m.loads || {}), Fg: m.agua ? fgConAgua(m) : m.recomputeGravity ? this.Fg2 : m.Fg, Fs: m.Fs, Fa: m.Fa };
     const t0 = performance.now();
     const results: StageResult[] = [];
     for (const si of stageIdx) {

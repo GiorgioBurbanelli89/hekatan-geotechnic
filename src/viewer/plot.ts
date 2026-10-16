@@ -12,6 +12,7 @@ export type PlotOptions = {
   Fst?: Float64Array;       // cargas de la etapa SIN gravedad (sobrecargas y anclas) para dibujarlas
   showMesh: boolean;
   surface?: "iso" | "line" | "none";   // GEO5 «Surface»: isosuperficie (relleno) · isolínea · no visualizar
+  gwt?: [number, number][];   // línea freática (GEO5 Water → GWT): se dibuja azul a trazos
   deformScale?: number;     // 0 = sin deformada
   u?: Float64Array; uel?: Float64Array;
   active?: ArrayLike<number>;   // construcción por etapas: 1/0 por elemento; los inactivos no se pintan (solo sus aristas)
@@ -169,6 +170,11 @@ export class SlopePlot {
     if (o.showMesh) { ctx.beginPath(); ctx.strokeStyle = this.dark ? "rgba(255,255,255,0.35)" : "rgba(60,60,60,0.45)"; ctx.lineWidth = 0.5 * k; for (const e of this.edges) line(e.a, e.b); ctx.stroke(); }
     ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = 1.6 * k; ctx.setLineDash([6 * k, 4 * k]); for (const e of this.edges) if (e.mats.size === 2) line(e.a, e.b); ctx.stroke(); ctx.setLineDash([]);
     ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = 1.4 * k; for (const e of this.edges) if (e.count === 1) line(e.a, e.b); ctx.stroke();
+    if (o.gwt && o.gwt.length > 1) {   // freático: azul a trazos con ▽ en el extremo derecho (como GEO5)
+      ctx.beginPath(); ctx.strokeStyle = this.dark ? "#6ab0ff" : "#1f3fff"; ctx.lineWidth = 1.6 * k; ctx.setLineDash([7 * k, 4 * k]);
+      o.gwt.forEach((p, i) => { const [a, b] = tf(p[0], p[1]); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
+      ctx.stroke(); ctx.setLineDash([]);
+    }
     // MURO (región rígida): su contorno se remarca en gris hormigón, para verlo dentro del mapa de color
     const rig = this.m.RIGID;
     if (rig?.some((r) => r)) {

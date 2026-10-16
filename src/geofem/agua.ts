@@ -61,3 +61,9 @@ export function conAgua(m: GeoModel, a: AguaGWT): GeoModel {
   const { Fg, Fp } = cargaAgua(m, a);
   return { ...m, Fg: Array.from(Fg, (v, i) => v + Fp[i]), recomputeGravity: false };
 }
+
+/** Fg + Fp listo para el solver (lo que usan run() de TS y WASM cuando el modelo trae `agua`). */
+export function fgConAgua(m: GeoModel): number[] {
+  const { Fg, Fp } = cargaAgua(m, m.agua!);
+  return Array.from(Fg, (v, i) => v + Fp[i]);
+}

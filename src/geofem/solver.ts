@@ -13,7 +13,9 @@
 //   - escalera SRM: paso 0.90, relajación /2 (máx 3), tope 0.99, SRF EXACTO (sin round).
 import { BandMatrix, bandAdd, bandClear, bandCreate, bandFactor, bandMul, bandSolve, reverseCuthillMcKee } from "./band";
 
+import { fgConAgua } from "./agua";
 export type GeoModel = {
+  agua?: import("./agua").AguaGWT;   // freático GWT: el peso usa γsat bajo la línea y se suma la presión de poros (ver agua.ts)
   name?: string;
   X: number[]; Y: number[];
   ELE: number[][];          // T6: 3 esquinas CCW + 3 medios (0-based)
@@ -923,7 +925,7 @@ export class GeoFem {
     const results: StageResult[] = [];
     // Con sliders de γ la gravedad de la fixture ya no vale: se usa la recalculada (N·ρ·detJ·w por
     // punto de Gauss, la misma cuenta que comprueba la fixture en el constructor).
-    const LOADS: Record<string, number[] | Float64Array> = { ...(m.loads || {}), Fg: m.recomputeGravity ? this.Fg2 : m.Fg, Fs: m.Fs, Fa: m.Fa };
+    const LOADS: Record<string, number[] | Float64Array> = { ...(m.loads || {}), Fg: m.agua ? fgConAgua(m) : m.recomputeGravity ? this.Fg2 : m.Fg, Fs: m.Fs, Fa: m.Fa };
     for (const si of stageIdx) {
       const st = m.stages[si];
       const F = new Float64Array(this.ndof);

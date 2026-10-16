@@ -1,0 +1,27 @@
+// Casilla de agua: carga el ejemplo con GWT, calcula con y sin agua y fotografía.  node tests/shot_agua.mjs [url] [outdir]
+import { createRequire } from "node:module";
+import { mkdirSync, writeFileSync } from "node:fs";
+const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const puppeteer = require("puppeteer");
+const url = process.argv[2] || "http://localhost:4702/", out = process.argv[3] || "tests/shots/agua";
+mkdirSync(out, { recursive: true });
+const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
+const page = await browser.newPage(); await page.setViewport({ width: 1500, height: 1000 });
+const consola = [];
+page.on("console", (m) => consola.push(`[${m.type()}] ${m.text()}`)); page.on("pageerror", (e) => consola.push(`[pageerror] ${e.message}`));
+await page.goto(url, { waitUntil: "networkidle0" });
+const esp = (ms) => new Promise((r) => setTimeout(r, ms));
+await page.select("#model", "talud_gwt");
+let prev = "";
+const fs = async () => { await page.waitForFunction((p) => { const t = document.getElementById("fs").textContent; return /\d\.\d{2}/.test(t) && !/calculando/.test(t) && t !== p; }, { timeout: 120000 }, prev); await esp(800); prev = (await page.$eval("#fs", (e) => e.textContent)).replace(/\s+/g, " ").trim(); return prev; };
+console.log("con agua:", await fs());
+const foto = async (n) => { const el = await page.$("#plot"); await el.screenshot({ path: `${out}/${n}.png` }); };
+await page.select("#stage", "0").catch(() => {}); await page.select("#field", "dx").catch(() => {});
+await foto("1_con_agua");
+console.log("fila agua visible:", await page.$eval("#aguaRow", (e) => !e.hidden));
+await page.click("#agua"); await esp(500);
+console.log("sin agua:", await fs());
+await foto("2_sin_agua");
+writeFileSync(`${out}/consola.txt`, consola.join("\n"));
+console.log("errores de consola:", consola.filter((c) => /error/i.test(c)).length);
+await browser.close();

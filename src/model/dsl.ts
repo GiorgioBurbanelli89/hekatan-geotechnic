@@ -10,6 +10,8 @@
 //       ancho `berma` [m] (talud escalonado, el habitual en desmontes y presas de tierra)
 //   suelo NOMBRE E=130347 nu=0.3 phi=22.7 c=9 gamma=18 [psi=0] [modelo=mc]   modelo: dp (Drucker-Prager de GEO5, por
 //       defecto) o mc (Mohr-Coulomb, retorno de Clausen en tensiones principales, el de GeoFEM)
+//   suelo … gsat=20.5                        peso unitario SATURADO (bajo el freático); por defecto = gamma
+//   agua gwt x,y x,y …                       línea freática (GEO5 Water → GWT): γsat bajo ella + presión de poros hidrostática
 //   asignar NOMBRE en x,y                    la región que contiene el punto es de ese suelo
 //   muro NOMBRE x=20 [z=-9] H=4 [fuste=0.4 zapata=0.4 talon=1.5 dedo=0.6 emp=0.9 dentp=0.3 dentb=0.5]   MURO CANTILEVER = RIGID BODY:
 //       región de hormigón que NO se reduce en la SRM (elástica). El terreno pasa por su cara vista y
@@ -30,7 +32,7 @@
 //
 // Compatibilidad: también se aceptan `contorno x,y …` + `capa NOMBRE bajo|sobre x,y …` (forma vieja).
 export type Pt = [number, number];
-export type Soil = { name: string; E: number; nu: number; phi: number; c: number; gamma: number; psi: number; rigido?: boolean; vs?: number; modelo?: "mc" | "dp" };   // vs [m/s]: onda de corte para el DINÁMICO (E_din = 2(1+ν)·(γ/g)·Vs²); sin vs, el dinámico usa E
+export type Soil = { name: string; E: number; nu: number; phi: number; c: number; gamma: number; gsat?: number; psi: number; rigido?: boolean; vs?: number; modelo?: "mc" | "dp" };   // vs [m/s]: onda de corte para el DINÁMICO (E_din = 2(1+ν)·(γ/g)·Vs²); sin vs, el dinámico usa E
 /** Muro cantilever (GEO5 «Rigid body»): x = cara delantera del fuste, H = altura vista sobre el terreno de delante,
  *  fuste/zapata = espesores, talon/dedo = voladizos de la zapata, emp = profundidad de la BASE bajo el terreno. */
 export type WallParam = {
@@ -58,6 +60,7 @@ export type SlopeDef = {
   interfaces: Pt[][];                       // GEO5: de margen a margen, la primera = terreno
   lines: Pt[][];                            // GEO5 "Free line": polilínea cualquiera que toca el borde/otra línea en sus dos extremos y CIERRA una región
   assign: { soil: string; p: Pt }[];        // GEO5: punto dentro de la región
+  gwt?: Pt[];                               // GEO5 «Water → GWT»: línea freática (`agua gwt x,y x,y …`); γsat = `gsat=` del suelo (por defecto γ)
   walls: Wall[];                            // GEO5 «Rigid body»: muros de hormigón (región elástica, la SRM no los reduce)
   comments: string[];
   param?: TaludParam;                       // terreno paramétrico (sliders); si se dibuja a mano, se pierde
@@ -216,11 +219,12 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
       if (cmd === "contorno") def.outline = pts(toks.slice(1));
       else if (cmd === "margenes" || cmd === "márgenes") { const o = kv(toks.slice(1)); def.margins = { xmin: num(o.xmin ?? "0"), xmax: num(o.xmax ?? "40"), bottom: num(o.fondo ?? o.bottom ?? "-20") }; }
       else if (cmd === "interfaz" || cmd === "interface") def.interfaces.push(pts(toks.slice(1)));
+      else if (cmd === "agua" || cmd === "water") { if (/^gwt$/i.test(toks[1] ?? "")) def.gwt = pts(toks.slice(2)); }
       else if (cmd === "linea" || cmd === "línea" || cmd === "line" || cmd === "libre") def.lines.push(pts(toks.slice(1)));
       else if (cmd === "talud") { const o = kv(toks.slice(1)); def.param = { xpie: num(o.xpie ?? "10"), zpie: num(o.zpie ?? "-10"), H: num(o.h ?? "6"), beta: num(o.beta ?? "33"), corona: num(o.corona ?? "8"), zfin: num(o.zfin ?? String(num(o.zpie ?? "-10") + num(o.h ?? "6"))), beta2: num(o.beta2 ?? "28.6"), ...(o.bermas ? { bermas: num(o.bermas), berma: num(o.berma ?? "2") } : {}) }; def.interfaces.unshift([]); }
       else if (cmd === "suelo") {
         const o = kv(toks.slice(2));
-        def.soils.push({ name: toks[1], E: num(o.e ?? "0"), nu: num(o.nu ?? "0.3"), phi: num(o.phi ?? "0"), c: num(o.c ?? "0"), gamma: num(o.gamma ?? "0"), psi: num(o.psi ?? "0"), rigido: /^(1|si|sí|true|yes)$/i.test(o.rigido ?? o.rigid ?? "") || undefined, ...(o.vs ? { vs: num(o.vs) } : {}), ...(/^(mc|mohr)/i.test(o.modelo ?? "") ? { modelo: "mc" as const } : {}) });
+        def.soils.push({ name: toks[1], E: num(o.e ?? "0"), nu: num(o.nu ?? "0.3"), phi: num(o.phi ?? "0"), c: num(o.c ?? "0"), gamma: num(o.gamma ?? "0"), ...(o.gsat ? { gsat: num(o.gsat) } : {}), psi: num(o.psi ?? "0"), rigido: /^(1|si|sí|true|yes)$/i.test(o.rigido ?? o.rigid ?? "") || undefined, ...(o.vs ? { vs: num(o.vs) } : {}), ...(/^(mc|mohr)/i.test(o.modelo ?? "") ? { modelo: "mc" as const } : {}) });
       } else if (cmd === "asignar") { const en = toks.indexOf("en"); def.assign.push({ soil: toks[1], p: pts([toks[en + 1]])[0] }); }
       else if (cmd === "capa") {
         const side = toks[2].toLowerCase();
@@ -294,8 +298,9 @@ export function serializeHgeo(def: SlopeDef): string {
   if (def.margins) L.push(`margenes xmin=${r(def.margins.xmin)} xmax=${r(def.margins.xmax)} fondo=${r(def.margins.bottom)}`);
   def.interfaces.forEach((it, k) => { if (k === 0 && def.param) { const q = def.param; L.push(`talud xpie=${r(q.xpie)} zpie=${r(q.zpie)} H=${r(q.H)} beta=${r(q.beta)} corona=${r(q.corona)} zfin=${r(q.zfin)} beta2=${r(q.beta2)}${q.bermas ? ` bermas=${r(q.bermas)} berma=${r(q.berma ?? 0)}` : ""}`); } else L.push(`interfaz ${it.map(p).join(" ")}`); });
   if (!def.interfaces.length && def.outline.length) L.push(`contorno ${def.outline.map(p).join(" ")}`);
-  for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.vs ? ` vs=${r(s.vs)}` : ""}${s.modelo === "mc" ? " modelo=mc" : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}`);
+  for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.gsat ? ` gsat=${r(s.gsat)}` : ""}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.vs ? ` vs=${r(s.vs)}` : ""}${s.modelo === "mc" ? " modelo=mc" : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}`);
   for (const w of def.walls ?? []) L.push(`muro ${w.soil} x=${r(w.pm.x)}${Number.isFinite(w.pm.z as number) ? ` z=${r(w.pm.z as number)}` : ""} H=${r(w.pm.H)} fuste=${r(w.pm.fuste)} zapata=${r(w.pm.zapata)} talon=${r(w.pm.talon)} dedo=${r(w.pm.dedo)} emp=${r(w.pm.emp)}${w.pm.dentp && w.pm.dentb ? ` dentp=${r(w.pm.dentp)} dentb=${r(w.pm.dentb)}` : ""}`);
+  if (def.gwt?.length) L.push(`agua gwt ${def.gwt.map(p).join(" ")}`);
   for (const ln of def.lines ?? []) L.push(`linea ${ln.map(p).join(" ")}`);   // GEO5 Free line
   for (const a of def.assign) L.push(`asignar ${a.soil} en ${p(a.p)}`);
   for (const c of def.layers) L.push(`capa ${c.soil} ${c.side} ${c.poly.map(p).join(" ")}`);
