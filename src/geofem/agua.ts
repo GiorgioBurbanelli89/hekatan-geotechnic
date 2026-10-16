@@ -11,6 +11,9 @@ import { GP, GW, t6, type GeoModel } from "./solver";
 export type AguaGWT = {
   /** línea freática: polilínea [x, y] ordenada por x (fuera de su rango se extiende horizontal) */
   gwt: [number, number][];
+  /** GEO5 «Coefficient Ru»: u = Ru·γ·(profundidad bajo `terreno`), peso γsat en todo el suelo (medido en GEO5 2024: u_máx = 94.35 =
+   *  0.3·18.5·17 m; σz,tot sube respecto al seco). Con `ru` no hay línea freática (gwt = []) */
+  ru?: number; terreno?: [number, number][];
   /** peso unitario saturado por material (mismo orden que MAT); positivo, kN/m³ */
   gammaSat: number[];
   /** peso unitario del agua (GEO5: 9.81) */
@@ -64,6 +67,36 @@ export function conAgua(m: GeoModel, a: AguaGWT): GeoModel {
 
 /** Fg + Fp listo para el solver (lo que usan run() de TS y WASM cuando el modelo trae `agua`). */
 export function fgConAgua(m: GeoModel): number[] {
-  const { Fg, Fp } = cargaAgua(m, m.agua!);
+  const a = m.agua!;
+  if (a.ru !== undefined && a.terreno) {   // Ru: peso γsat, presión = Ru·γ·h (γ seco)
+    const { Fg, Fp } = cargaRu(m, a.ru, a.terreno, "gauss", (k) => a.gammaSat[k]);
+    return Array.from(Fg, (v, i) => v + Fp[i]);
+  }
+  const { Fg, Fp } = cargaAgua(m, a);
   return Array.from(Fg, (v, i) => v + Fp[i]);
+}
+
+/** Coeficiente Ru (GEO5 Water → Coefficient Ru): u = Ru·σv, con σv = ∫γ dz desde el terreno (una sola capa: γ·profundidad).
+ *  `en`: dónde se evalúa σv — "gauss" (en cada punto de Gauss) o "nudos" (u nodal y luego Σ Nᵢ uᵢ, como PorePressureLoading). */
+export function cargaRu(m: GeoModel, ru: number, terreno: [number, number][], en: "gauss" | "nudos", gPeso = (mm: number) => m.MAT[mm][4], gSv = (mm: number) => m.MAT[mm][4], pGauss?: ArrayLike<number>): { Fg: Float64Array; Fp: Float64Array } {
+  const ndof = 2 * m.X.length, Fg = new Float64Array(ndof), Fp = new Float64Array(ndof);
+  const sv = (x: number, y: number, mm: number) => Math.max(0, (yGWT(terreno, x) - y) * gSv(mm));
+  const pn = new Float64Array(m.X.length);
+  if (en === "nudos") for (let i = 0; i < pn.length; i++) pn[i] = ru * sv(m.X[i], m.Y[i], 0);
+  for (let e = 0; e < m.ELE.length; e++) {
+    const nd = m.ELE[e], xs = nd.map((i) => m.X[i]), ys = nd.map((i) => m.Y[i]), mm = m.EMAT[e] - 1;
+    for (let q = 0; q < GP.length; q++) {
+      const [N, dL1, dL2] = t6(GP[q][0], GP[q][1]);
+      let j11 = 0, j12 = 0, j21 = 0, j22 = 0, xg = 0, yg = 0, pg = 0;
+      for (let k = 0; k < 6; k++) { j11 += dL1[k] * xs[k]; j12 += dL1[k] * ys[k]; j21 += dL2[k] * xs[k]; j22 += dL2[k] * ys[k]; xg += N[k] * xs[k]; yg += N[k] * ys[k]; pg += N[k] * pn[nd[k]]; }
+      if (pGauss) pg = pGauss[e * GP.length + q]; else if (en === "gauss") pg = ru * sv(xg, yg, mm);
+      const dJ = j11 * j22 - j12 * j21, w = dJ * GW[q];
+      for (let k = 0; k < 6; k++) {
+        Fg[2 * nd[k] + 1] += -N[k] * gPeso(mm) * w;
+        const dNx = (j22 * dL1[k] - j12 * dL2[k]) / dJ, dNy = (-j21 * dL1[k] + j11 * dL2[k]) / dJ;
+        Fp[2 * nd[k]] += dNx * pg * w; Fp[2 * nd[k] + 1] += dNy * pg * w;
+      }
+    }
+  }
+  return { Fg, Fp };
 }

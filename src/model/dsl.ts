@@ -12,6 +12,7 @@
 //       defecto) o mc (Mohr-Coulomb, retorno de Clausen en tensiones principales, el de GeoFEM)
 //   suelo … gsat=20.5                        peso unitario SATURADO (bajo el freático); por defecto = gamma
 //   agua gwt x,y x,y …                       línea freática (GEO5 Water → GWT): γsat bajo ella + presión de poros hidrostática
+//   agua ru=0.3                              GEO5 Water → Coefficient Ru: u = Ru·γ·h bajo el terreno (σv con γ seco), peso γsat
 //   asignar NOMBRE en x,y                    la región que contiene el punto es de ese suelo
 //   muro NOMBRE x=20 [z=-9] H=4 [fuste=0.4 zapata=0.4 talon=1.5 dedo=0.6 emp=0.9 dentp=0.3 dentb=0.5]   MURO CANTILEVER = RIGID BODY:
 //       región de hormigón que NO se reduce en la SRM (elástica). El terreno pasa por su cara vista y
@@ -60,6 +61,7 @@ export type SlopeDef = {
   interfaces: Pt[][];                       // GEO5: de margen a margen, la primera = terreno
   lines: Pt[][];                            // GEO5 "Free line": polilínea cualquiera que toca el borde/otra línea en sus dos extremos y CIERRA una región
   assign: { soil: string; p: Pt }[];        // GEO5: punto dentro de la región
+  ru?: number;                              // GEO5 «Water → Coefficient Ru» (`agua ru=0.3`): u = Ru·γ·h bajo el terreno, peso γsat
   gwt?: Pt[];                               // GEO5 «Water → GWT»: línea freática (`agua gwt x,y x,y …`); γsat = `gsat=` del suelo (por defecto γ)
   walls: Wall[];                            // GEO5 «Rigid body»: muros de hormigón (región elástica, la SRM no los reduce)
   comments: string[];
@@ -219,7 +221,7 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
       if (cmd === "contorno") def.outline = pts(toks.slice(1));
       else if (cmd === "margenes" || cmd === "márgenes") { const o = kv(toks.slice(1)); def.margins = { xmin: num(o.xmin ?? "0"), xmax: num(o.xmax ?? "40"), bottom: num(o.fondo ?? o.bottom ?? "-20") }; }
       else if (cmd === "interfaz" || cmd === "interface") def.interfaces.push(pts(toks.slice(1)));
-      else if (cmd === "agua" || cmd === "water") { if (/^gwt$/i.test(toks[1] ?? "")) def.gwt = pts(toks.slice(2)); }
+      else if (cmd === "agua" || cmd === "water") { if (/^gwt$/i.test(toks[1] ?? "")) def.gwt = pts(toks.slice(2)); else { const o = kv(toks.slice(1)); if (o.ru !== undefined) def.ru = num(o.ru); } }
       else if (cmd === "linea" || cmd === "línea" || cmd === "line" || cmd === "libre") def.lines.push(pts(toks.slice(1)));
       else if (cmd === "talud") { const o = kv(toks.slice(1)); def.param = { xpie: num(o.xpie ?? "10"), zpie: num(o.zpie ?? "-10"), H: num(o.h ?? "6"), beta: num(o.beta ?? "33"), corona: num(o.corona ?? "8"), zfin: num(o.zfin ?? String(num(o.zpie ?? "-10") + num(o.h ?? "6"))), beta2: num(o.beta2 ?? "28.6"), ...(o.bermas ? { bermas: num(o.bermas), berma: num(o.berma ?? "2") } : {}) }; def.interfaces.unshift([]); }
       else if (cmd === "suelo") {
@@ -300,6 +302,7 @@ export function serializeHgeo(def: SlopeDef): string {
   if (!def.interfaces.length && def.outline.length) L.push(`contorno ${def.outline.map(p).join(" ")}`);
   for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.gsat ? ` gsat=${r(s.gsat)}` : ""}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.vs ? ` vs=${r(s.vs)}` : ""}${s.modelo === "mc" ? " modelo=mc" : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}`);
   for (const w of def.walls ?? []) L.push(`muro ${w.soil} x=${r(w.pm.x)}${Number.isFinite(w.pm.z as number) ? ` z=${r(w.pm.z as number)}` : ""} H=${r(w.pm.H)} fuste=${r(w.pm.fuste)} zapata=${r(w.pm.zapata)} talon=${r(w.pm.talon)} dedo=${r(w.pm.dedo)} emp=${r(w.pm.emp)}${w.pm.dentp && w.pm.dentb ? ` dentp=${r(w.pm.dentp)} dentb=${r(w.pm.dentb)}` : ""}`);
+  if (def.ru !== undefined) L.push(`agua ru=${r(def.ru)}`);
   if (def.gwt?.length) L.push(`agua gwt ${def.gwt.map(p).join(" ")}`);
   for (const ln of def.lines ?? []) L.push(`linea ${ln.map(p).join(" ")}`);   // GEO5 Free line
   for (const a of def.assign) L.push(`asignar ${a.soil} en ${p(a.p)}`);

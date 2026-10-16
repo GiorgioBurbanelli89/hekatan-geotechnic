@@ -11,7 +11,7 @@ const consola = [];
 page.on("console", (m) => consola.push(`[${m.type()}] ${m.text()}`)); page.on("pageerror", (e) => consola.push(`[pageerror] ${e.message}`));
 await page.goto(url, { waitUntil: "networkidle0" });
 const esp = (ms) => new Promise((r) => setTimeout(r, ms));
-await page.select("#model", "talud_gwt");
+await page.select("#model", process.env.MODELO || "talud_gwt");
 let prev = "";
 const fs = async () => { await page.waitForFunction((p) => { const t = document.getElementById("fs").textContent; return /\d\.\d{2}/.test(t) && !/calculando/.test(t) && t !== p; }, { timeout: 120000 }, prev); await esp(800); prev = (await page.$eval("#fs", (e) => e.textContent)).replace(/\s+/g, " ").trim(); return prev; };
 console.log("con agua:", await fs());
