@@ -100,7 +100,7 @@
         <input type="file" id="fFile" accept=".hgeo,.txt" hidden>
       </div>
       <label>Ejemplo</label>
-      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option><option value="manabi">Muro de Manabí · con Vs para el dinámico</option><option value="talud_gwt">Talud con agua (freático GWT o coeficiente Ru) · GEO5 FS 1.98 → 1.76</option><option value="talud_ru">Talud con coeficiente Ru=0.3 · GEO5 FS 1.98 → 1.42</option><option value="manabi_muro">Muro de Manabí paramétrico · verificación GEO5 + abrir en Hekatan Struct</option><option value="manabi_etapas">Muro de Manabí por etapas · Mohr-Coulomb, 7 etapas (= GeoFEM)</option><option value="manabi_etapas_e">Muro de Manabí por etapas · E de las correlaciones del SPT (13 / 12.4 MPa)</option></select>
+      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option><option value="manabi">Muro de Manabí · con Vs para el dinámico</option><option value="talud_gwt">Talud con agua (freático GWT o coeficiente Ru) · GEO5 FS 1.98 → 1.76</option><option value="talud_poros">Talud con presión de poros dada (isolíneas) · = freático GWT: GEO5 FS 1.76 / 1.74</option><option value="talud_ru">Talud con coeficiente Ru=0.3 · GEO5 FS 1.98 → 1.42</option><option value="manabi_muro">Muro de Manabí paramétrico · verificación GEO5 + abrir en Hekatan Struct</option><option value="manabi_etapas">Muro de Manabí por etapas · Mohr-Coulomb, 7 etapas (= GeoFEM)</option><option value="manabi_etapas_e">Muro de Manabí por etapas · E de las correlaciones del SPT (13 / 12.4 MPa)</option></select>
       <div id="editor" hidden>
         <textarea id="hgeo" spellcheck="false" rows="11"></textarea>
         <div class="row"><button class="run" id="apply" style="margin-top:6px">✎ Aplicar (Ctrl+Enter)</button></div>
@@ -220,7 +220,8 @@
         <div><label>Deformada</label><select id="defmode" title="como GEO5: sin deformar · por magnitud (escala automática, aproximada: el factor exacto de GEO5 no está medido) · por coeficiente (el factor de la casilla)"><option value="none">sin deformar</option><option value="mag">por magnitud</option><option value="coef" selected>por coeficiente</option></select></div>
       </div>
       <div class="row" id="aguaRow" hidden>
-        <div><label>Agua</label><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="agua" checked /> nivel freático (GWT)</label></div>
+        <div><label>Agua</label><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="agua" checked /> <span id="aguaTxt">nivel freático (GWT)</span></label>
+          <label id="ruBox" hidden style="display:inline-flex;gap:6px;align-items:center;margin-left:10px">Ru <input type="number" id="aguaRu" min="0" max="0.9" step="0.05" value="0.3" style="width:64px" /></label></div>
       </div>
       <input type="checkbox" id="mesh" checked hidden />
     </aside>

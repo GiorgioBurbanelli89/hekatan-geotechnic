@@ -13,6 +13,7 @@ export type PlotOptions = {
   showMesh: boolean;
   surface?: "iso" | "line" | "none";   // GEO5 «Surface»: isosuperficie (relleno) · isolínea · no visualizar
   gwt?: [number, number][];   // línea freática (GEO5 Water → GWT): se dibuja azul a trazos
+  isolineas?: { pts: [number, number][]; label: string }[];   // GEO5 Water → Coefficient Ru / Pore pressure: una isolínea por interfaz, con su valor
   deformScale?: number;     // 0 = sin deformada
   u?: Float64Array; uel?: Float64Array;
   active?: ArrayLike<number>;   // construcción por etapas: 1/0 por elemento; los inactivos no se pintan (solo sus aristas)
@@ -175,6 +176,15 @@ export class SlopePlot {
       o.gwt.forEach((p, i) => { const [a, b] = tf(p[0], p[1]); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
       ctx.stroke(); ctx.setLineDash([]);
     }
+    if (o.isolineas) { ctx.save(); ctx.beginPath(); const [ra, rb] = tf(Math.min(...X), Math.max(...Y)), [rc, rd] = tf(Math.max(...X), Math.min(...Y)); ctx.rect(ra, rb, rc - ra, rd - rb); ctx.clip(); }   // las isolíneas pueden pasar del fondo del modelo: recortar al marco
+    if (o.isolineas) for (const q of o.isolineas) if (q.pts.length > 1) {   // isolíneas de Ru / presión de poros: azul a trazos con el valor al final
+      ctx.beginPath(); ctx.strokeStyle = this.dark ? "#6ab0ff" : "#1f3fff"; ctx.lineWidth = 1.4 * k; ctx.setLineDash([7 * k, 4 * k]);
+      q.pts.forEach((p, i) => { const [a, b] = tf(p[0], p[1]); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
+      ctx.stroke(); ctx.setLineDash([]);
+      const [la, lb] = tf(q.pts[q.pts.length - 1][0], q.pts[q.pts.length - 1][1]);
+      ctx.fillStyle = this.dark ? "#6ab0ff" : "#1f3fff"; ctx.font = `${11 * k}px sans-serif`; ctx.textAlign = "right"; ctx.fillText(q.label, la - 4 * k, lb - 4 * k); ctx.textAlign = "left";
+    }
+    if (o.isolineas) ctx.restore();
     // MURO (región rígida): su contorno se remarca en gris hormigón, para verlo dentro del mapa de color
     const rig = this.m.RIGID;
     if (rig?.some((r) => r)) {

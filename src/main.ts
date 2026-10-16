@@ -11,6 +11,7 @@ import MANABI_ETAPAS_HGEO from "../examples/muro_manabi_etapas_mc.hgeo?raw";
 import MANABI_ETAPAS_E_HGEO from "../examples/muro_manabi_etapas_mc_ebowles.hgeo?raw";
 import TALUD_GWT_HGEO from "../examples/talud_gwt.hgeo?raw";
 import TALUD_RU_HGEO from "../examples/talud_ru.hgeo?raw";
+import TALUD_POROS_HGEO from "../examples/talud_poros_paralelo_gwt.hgeo?raw";
 import MANABI_MURO_HGEO from "../examples/muro_manabi.hgeo?raw";
 import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, MURO_HGEO, MANABI_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims, effectiveTerrain } from "./model/dsl";
 import { meshSlope } from "./mesh/mesher";
@@ -26,7 +27,7 @@ type Stage = { name: string; fs: number; alcanzada?: number; geo5?: number; u: F
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const selModel = $<HTMLSelectElement>("model"), selN = $<HTMLSelectElement>("nstages"), btn = $<HTMLButtonElement>("run");
 const selStage = $<HTMLSelectElement>("stage"), selField = $<HTMLSelectElement>("field"), selStep = $<HTMLSelectElement>("step");
-const inpDef = $<HTMLInputElement>("defscale"), chkMesh = $<HTMLInputElement>("mesh"), selSurf = $<HTMLSelectElement>("surf"), selMeshMode = $<HTMLSelectElement>("meshmode"), selDefMode = $<HTMLSelectElement>("defmode"), chkAuto = $<HTMLInputElement>("auto"), chkAgua = $<HTMLInputElement>("agua");
+const inpRu = $<HTMLInputElement>("aguaRu"), inpDef = $<HTMLInputElement>("defscale"), chkMesh = $<HTMLInputElement>("mesh"), selSurf = $<HTMLSelectElement>("surf"), selMeshMode = $<HTMLSelectElement>("meshmode"), selDefMode = $<HTMLSelectElement>("defmode"), chkAuto = $<HTMLInputElement>("auto"), chkAgua = $<HTMLInputElement>("agua");
 const logEl = $<HTMLDivElement>("log"), fsEl = $<HTMLDivElement>("fs"), matsEl = $<HTMLDivElement>("mats"), hoverEl = $<HTMLDivElement>("hover");
 const slidersEl = $<HTMLDivElement>("sliders");
 const canvas = $<HTMLCanvasElement>("plot"), drawCanvas = $<HTMLCanvasElement>("draw");
@@ -304,7 +305,7 @@ function currentModel(): GeoModel {
   const gammaChanged = MAT.some((r, i) => r[4] !== b.MAT[i][4]);
   const isBase = sliders.every((s) => parseFloat(sliderEl[s.id].value) === s.value);
   const st = b.stages.map((x) => ({ ...x, geo5: isBase ? x.geo5 : undefined }));   // la referencia GEO5 solo vale con los valores del modelo
-  const out: GeoModel = { ...b, MAT, stages: st, recomputeGravity: b.recomputeGravity || gammaChanged, ...(b.agua && !chkAgua.checked ? { agua: undefined } : {}) };
+  const out: GeoModel = { ...b, MAT, stages: st, recomputeGravity: b.recomputeGravity || gammaChanged, ...(b.agua && !chkAgua.checked ? { agua: undefined } : b.agua?.ru !== undefined ? { agua: { ...b.agua, ru: parseFloat(inpRu.value) } } : {}) };
   if (!def) { const q = v("q") / Q0, A = v("A") / A0; out.Fs = b.Fs.map((x) => x * q); out.Fa = b.Fa.map((x) => x * A); }
   return out;
 }
@@ -317,7 +318,9 @@ function setBase(m: GeoModel, only?: number[]) {
     if (plot.dark) { plot.k = 3; draw.k = 3; for (const c of [canvas, drawCanvas]) { c.width = 2360; c.height = 1400; } }   // lienzo 2x y textos 3x (=1.5x relativos): en el vídeo la gráfica baja a ~700 px de ancho
   } else plot.setMesh(m);
   plot.hover = ({ x, z, v }) => { if (!draw.active) hoverEl.textContent = v === null ? "" : `x = ${x.toFixed(2)} m   z = ${z.toFixed(2)} m   ${FIELD_LABEL[selField.value as FieldKind]} = ${v.toFixed(2)} ${FIELD_UNIT[selField.value as FieldKind]}`; };
-  $("aguaRow").hidden = !m.agua; chkAgua.checked = true;   // casilla de agua solo si el modelo trae `agua gwt …`
+  $("aguaRow").hidden = !m.agua; chkAgua.checked = true;   // casilla de agua solo si el modelo trae `agua gwt …` / `agua ru=` / `agua poros …`
+  $("aguaTxt").textContent = !m.agua ? "" : m.agua.ru !== undefined ? "coeficiente Ru (u = Ru·σv)" : m.agua.poros?.length ? "presión de poros (isolíneas)" : "nivel freático (GWT)";
+  $("ruBox").hidden = m.agua?.ru === undefined; if (m.agua?.ru !== undefined) inpRu.value = String(m.agua.ru);
   buildSliders(m);
   stages = []; fsEl.innerHTML = "";
   selN.innerHTML = m.stages.map((_, i) => `<option value="${i + 1}">${i + 1}</option>`).reverse().join("");
@@ -418,12 +421,19 @@ function factorDeformada(u: Float64Array, uel: Float64Array | undefined): number
   return mx > 1e-12 ? 0.03 * ancho / mx : 0;
 }
 
+/** isolíneas de agua para dibujar: Ru (la interfaz del terreno con su valor) o presión de poros (una por interfaz con su u); el GWT va aparte */
+function aguaIsolineas(): { pts: [number, number][]; label: string }[] | undefined {
+  const a = model?.agua; if (!a || !chkAgua.checked) return undefined;
+  if (a.ru !== undefined && a.terreno) return [{ pts: a.terreno, label: `Ru = ${parseFloat(inpRu.value).toFixed(2)}` }];
+  if (a.poros?.length) return a.poros.map((q) => ({ pts: q.pts, label: `u = ${q.u.toFixed(1)} kPa` }));
+  return undefined;
+}
 function redraw() {
   if (!model || !plot) return;
   if (dinActivo()) { dibujarDinamico(); return; }   // resultados del dinámico sobre la gráfica (deslizador de tiempo)
   const si = visibleStage(), st = stages[si];
   if (!st) {   // aún sin resultado (remallado en curso): geometría + malla nueva ya, sin esperar al cálculo
-    plot.draw({ field: "dx", vals: new Float64Array(model.X.length), stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, title: `${model.name || "Talud"} · calculando…`, deformScale: 0, u: new Float64Array(model.X.length * 2), uel: new Float64Array(model.X.length * 2) });
+    plot.draw({ field: "dx", vals: new Float64Array(model.X.length), stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, isolineas: aguaIsolineas(), title: `${model.name || "Talud"} · calculando…`, deformScale: 0, u: new Float64Array(model.X.length * 2), uel: new Float64Array(model.X.length * 2) });
     draw.setMap(plot.mapping()); return;
   }
   const kind = selField.value as FieldKind;
@@ -435,7 +445,7 @@ function redraw() {
     : stress ? stressField(kind, model.ELE, model.X.length, st.ngp!, st.sig1!, st.eps1!, st.epl1!) : nodalField(u, st.uel, model.X.length, kind);
   const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress && !model.staged ? " · estado de tensión SRF=1" : "");
   const rango = plot.draw({
-    field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, surface: selSurf.value as "iso" | "line" | "none",
+    field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, isolineas: aguaIsolineas(), surface: selSurf.value as "iso" | "line" | "none",
     title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${model.staged ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
     deformScale: factorDeformada(u, st.uel), u, uel: st.uel, active: model.stages[si]?.active,
   });
@@ -594,7 +604,7 @@ draw.onChange = (d) => {
 
 btn.addEventListener("click", () => run(base!.stages.map((_, i) => i).slice(0, parseInt(selN.value))));
 selN.addEventListener("change", () => { const n = parseInt(selN.value); const falta = base!.stages.map((_, i) => i).slice(0, n).filter((i) => !stages[i] || stages[i]!.stale); if (falta.length) run(falta); });
-const EJEMPLOS_HGEO: Record<string, string> = { manabi_etapas: MANABI_ETAPAS_HGEO, manabi_etapas_e: MANABI_ETAPAS_E_HGEO, manabi_muro: MANABI_MURO_HGEO, talud_gwt: TALUD_GWT_HGEO, talud_ru: TALUD_RU_HGEO };
+const EJEMPLOS_HGEO: Record<string, string> = { manabi_etapas: MANABI_ETAPAS_HGEO, manabi_etapas_e: MANABI_ETAPAS_E_HGEO, manabi_muro: MANABI_MURO_HGEO, talud_gwt: TALUD_GWT_HGEO, talud_ru: TALUD_RU_HGEO, talud_poros: TALUD_POROS_HGEO };
 selModel.addEventListener("change", () => {
   if (selModel.value === "muro") { edWrap.hidden = false; edText.value = MURO_HGEO; applyHgeo(); return; }   // ejemplo del muro, de un clic
   if (selModel.value === "manabi") { edWrap.hidden = false; edText.value = MANABI_HGEO; applyHgeo(); return; }   // muro de Manabí con Vs (dinámico)
@@ -606,6 +616,7 @@ edApply.addEventListener("click", applyHgeo);
 edText.addEventListener("keydown", (ev) => { if (ev.ctrlKey && ev.key === "Enter") applyHgeo(); });
 selStage.addEventListener("change", () => { const i = visibleStage(); buildStageTabs(); actualizarMuro(def, i); if (!stages[i] || stages[i]!.stale) run([i]); else { fillStepSelect(); redraw(); } });
 selMeshMode.addEventListener("change", () => { chkMesh.checked = selMeshMode.value === "edges"; });
+inpRu.addEventListener("change", () => { for (const st of stages) if (st) st.stale = true; if (chkAuto.checked) run([visibleStage()]); else redraw(); });
 chkAgua.addEventListener("change", () => { for (const st of stages) if (st) st.stale = true; if (chkAuto.checked) run([visibleStage()]); else redraw(); });
 for (const el of [selField, selStep, chkMesh, inpDef, selSurf, selMeshMode, selDefMode]) el.addEventListener("change", redraw);
 inpDef.addEventListener("input", redraw);
