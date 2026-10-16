@@ -42,13 +42,13 @@ export function cargaAgua(m: GeoModel, a: AguaGWT): { Fg: Float64Array; Fp: Floa
   const ndof = 2 * m.X.length, Fg = new Float64Array(ndof), Fp = new Float64Array(ndof), p = presionNodal(m, a);
   for (let e = 0; e < m.ELE.length; e++) {
     const nd = m.ELE[e], xs = nd.map((i) => m.X[i]), ys = nd.map((i) => m.Y[i]), mm = m.EMAT[e] - 1;
+    const sat = nd.every((i) => p[i] > 1e-9);   // GEO5 (medido): γsat solo si TODOS los nudos del elemento tienen p > 0; los que tocan el GWT o la superficie van con γ seco
     for (let q = 0; q < GP.length; q++) {
       const [N, dL1, dL2] = t6(GP[q][0], GP[q][1]);
       let j11 = 0, j12 = 0, j21 = 0, j22 = 0, xg = 0, yg = 0, pg = 0;
       for (let k = 0; k < 6; k++) { j11 += dL1[k] * xs[k]; j12 += dL1[k] * ys[k]; j21 += dL2[k] * xs[k]; j22 += dL2[k] * ys[k]; xg += N[k] * xs[k]; yg += N[k] * ys[k]; pg += N[k] * p[nd[k]]; }
       const dJ = j11 * j22 - j12 * j21, w = dJ * GW[q];
-      const bajo = yg < yGWT(a.gwt, xg);
-      const rho = bajo ? -a.gammaSat[mm] : -m.MAT[mm][4];   // MAT[.,4] = γ positivo; el peso va hacia abajo (como solver.ts: rho = -γ)
+      const rho = sat ? -a.gammaSat[mm] : -m.MAT[mm][4];   // MAT[.,4] = γ positivo; el peso va hacia abajo (como solver.ts: rho = -γ)
       for (let k = 0; k < 6; k++) {
         Fg[2 * nd[k] + 1] += N[k] * rho * w;
         const dNx = (j22 * dL1[k] - j12 * dL2[k]) / dJ, dNy = (-j21 * dL1[k] + j11 * dL2[k]) / dJ;
@@ -78,13 +78,15 @@ export function fgConAgua(m: GeoModel): number[] {
 
 /** Coeficiente Ru (GEO5 Water → Coefficient Ru): u = Ru·σv, con σv = ∫γ dz desde el terreno (una sola capa: γ·profundidad).
  *  `en`: dónde se evalúa σv — "gauss" (en cada punto de Gauss) o "nudos" (u nodal y luego Σ Nᵢ uᵢ, como PorePressureLoading). */
-export function cargaRu(m: GeoModel, ru: number, terreno: [number, number][], en: "gauss" | "nudos", gPeso = (mm: number) => m.MAT[mm][4], gSv = (mm: number) => m.MAT[mm][4], pGauss?: ArrayLike<number>): { Fg: Float64Array; Fp: Float64Array } {
+export function cargaRu(m: GeoModel, ru: number, terreno: [number, number][], en: "gauss" | "nudos", gPeso: ((mm: number) => number) | undefined = undefined, gSv = (mm: number) => m.MAT[mm][4], pGauss?: ArrayLike<number>): { Fg: Float64Array; Fp: Float64Array } {
   const ndof = 2 * m.X.length, Fg = new Float64Array(ndof), Fp = new Float64Array(ndof);
   const sv = (x: number, y: number, mm: number) => Math.max(0, (yGWT(terreno, x) - y) * gSv(mm));
   const pn = new Float64Array(m.X.length);
-  if (en === "nudos") for (let i = 0; i < pn.length; i++) pn[i] = ru * sv(m.X[i], m.Y[i], 0);
+  for (let i = 0; i < pn.length; i++) pn[i] = ru * sv(m.X[i], m.Y[i], 0);   // p nodal = Ru·γ·h (también decide qué elementos son saturados)
+
   for (let e = 0; e < m.ELE.length; e++) {
     const nd = m.ELE[e], xs = nd.map((i) => m.X[i]), ys = nd.map((i) => m.Y[i]), mm = m.EMAT[e] - 1;
+    const gEl = gPeso && nd.every((i) => pn[i] > 1e-9) ? gPeso(mm) : m.MAT[mm][4];   // γsat solo en elementos con TODOS los nudos bajo presión (medido en GEO5)
     for (let q = 0; q < GP.length; q++) {
       const [N, dL1, dL2] = t6(GP[q][0], GP[q][1]);
       let j11 = 0, j12 = 0, j21 = 0, j22 = 0, xg = 0, yg = 0, pg = 0;
@@ -92,7 +94,7 @@ export function cargaRu(m: GeoModel, ru: number, terreno: [number, number][], en
       if (pGauss) pg = pGauss[e * GP.length + q]; else if (en === "gauss") pg = ru * sv(xg, yg, mm);
       const dJ = j11 * j22 - j12 * j21, w = dJ * GW[q];
       for (let k = 0; k < 6; k++) {
-        Fg[2 * nd[k] + 1] += -N[k] * gPeso(mm) * w;
+        Fg[2 * nd[k] + 1] += -N[k] * gEl * w;
         const dNx = (j22 * dL1[k] - j12 * dL2[k]) / dJ, dNy = (-j21 * dL1[k] + j11 * dL2[k]) / dJ;
         Fp[2 * nd[k]] += dNx * pg * w; Fp[2 * nd[k] + 1] += dNy * pg * w;
       }

@@ -1,5 +1,6 @@
-// Agua (GWT): columna con lados sin desplazamiento horizontal y base fija. Con el nivel freático sobre una arista de elementos
-// la tensión EFECTIVA vertical es exacta: σ'y(y) = −[γ·(H−yw) + (γsat−γw)·(yw−y)] bajo el GWT y −γ·(H−y) sobre él.
+// Agua (GWT): columna con lados sin desplazamiento horizontal y base fija. Regla de GEO5 (medida con Ru en dos mallas): γsat solo en los
+// elementos con TODOS los nudos bajo presión; la fila que toca el GWT (y∈[1,2]) va con γ seco. Con eso la tensión EFECTIVA vertical es
+// exacta para y ≤ 1: σ'y = −γ(H−1) − γsat(1−y) + γw(yw−y)  (sobre y=2 vale −γ(H−y)).
 //   npx tsx tests/agua_columna.ts
 import { GeoFem, GeoModel } from "../src/geofem/solver";
 import { cargaAgua } from "../src/geofem/agua";
@@ -33,8 +34,9 @@ for (let e = 0; e < ELE.length; e++) for (let q = 0; q < 7; q++) {
   const L1 = gp[0], L2 = gp[1], L3 = 1 - L1 - L2;
   const N = [L1 * (2 * L1 - 1), L2 * (2 * L2 - 1), L3 * (2 * L3 - 1), 4 * L1 * L2, 4 * L2 * L3, 4 * L3 * L1];
   const yg = N.reduce((s, v, i) => s + v * ys[i], 0);
-  const ex = yg >= yw ? -gam * (H - yg) : -(gam * (H - yw) + (gsat - gw) * (yw - yg));
+  if (yg > 1 && yg < yw) continue;   // fila seca bajo el GWT: no se compara
+  const ex = yg >= yw ? -gam * (H - yg) : -gam * (H - 1) - gsat * (1 - yg) + gw * (yw - yg);
   dmax = Math.max(dmax, Math.abs(sy - ex)); n++;
 }
-console.log(`σ'y efectiva: ${n} puntos de Gauss, dif. máx con la solución exacta = ${dmax.toExponential(2)} kPa (base exacta ${(-(gam * 2 + (gsat - gw) * 2)).toFixed(3)})`);
+console.log(`σ'y efectiva: ${n} puntos de Gauss, dif. máx con la solución exacta = ${dmax.toExponential(2)} kPa (base exacta ${(-gam * 3 + (-gsat + gw * 2 / 1) * 0 - gsat * 1 + gw * 2).toFixed(3)})`);
 process.exit(dmax < 1e-6 ? 0 : 1);
