@@ -367,7 +367,7 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     MAT: def.soils.map((s) => [s.rigido ? Math.max(s.E, E_RIGIDO_REL * Math.max(...def.soils.filter((q) => !q.rigido).map((q) => q.E), 0)) : s.E, s.nu, s.phi, s.c, s.gamma, s.psi]), recomputeGravity: true, loads, stages,
     MATNAMES: def.soils.map((s) => s.name),
     RIGID: def.soils.map((s) => !!s.rigido),
-    ...(def.gwt?.length ? { agua: { gwt: def.gwt, gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : def.ru !== undefined ? { agua: { gwt: [], ru: def.ru, terreno: spanInterface(def.interfaces[0], def.margins!.xmin, def.margins!.xmax).map((q) => [q[0], q[1]] as [number, number]), gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : {}),
+    ...(def.poros?.length ? { agua: { gwt: [], poros: def.poros.map((q) => ({ pts: q.pts as [number, number][], u: q.u })), gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : def.gwt?.length ? { agua: { gwt: def.gwt, gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : def.ru !== undefined ? { agua: { gwt: [], ru: def.ru, terreno: spanInterface(def.interfaces[0], def.margins!.xmin, def.margins!.xmax).map((q) => [q[0], q[1]] as [number, number]), gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : {}),
     ...(def.soils.some((s) => s.modelo === "mc") ? { MODEL: def.soils.map((s) => (s.modelo === "mc" ? 1 : 0)) } : {}),   // muro de hormigón: región elástica, la SRM no le reduce c ni φ
     ...(staged ? { staged: true, REGK } : {}),
   };

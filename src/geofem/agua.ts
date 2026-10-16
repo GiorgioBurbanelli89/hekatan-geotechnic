@@ -21,7 +21,23 @@ export type AguaGWT = {
   /** GEO5 «Pore pressure» (presión dada): u NODAL [kPa], un valor por nudo de la malla. El solver solo conoce `load.porepressures`
    *  (binario: PorePressureLoading), así que es el mismo camino que GWT con `p` ya calculada; manda sobre `gwt`. */
   pNodal?: ArrayLike<number>;
+  /** GEO5 «Pore pressure»: ISOLÍNEAS de presión (cada una una polilínea con un u [kPa]). Medido en GEO5 2024: se interpola LINEAL en z entre las
+   *  isolíneas que corta cada columna vertical x=cte; con UNA sola, u es constante en todo el modelo; sobre la isolínea más alta (si hay ≥2) no hay
+   *  presión (u = 0); bajo la más baja vale el u de esa isolínea. Peso γsat donde u > 0 (ayuda de GEO5, misma regla que Ru). */
+  poros?: { pts: [number, number][]; u: number }[];
 };
+
+/** u [kPa] en (x, y) a partir de las isolíneas de presión dadas (ver `AguaGWT.poros`) */
+export function uPoros(iso: { pts: [number, number][]; u: number }[], x: number, y: number): number {
+  if (iso.length === 1) return iso[0].u;
+  const c = iso.map((q) => ({ z: yGWT(q.pts, x), u: q.u })).sort((a, b) => b.z - a.z);   // de arriba abajo en esta columna
+  if (y > c[0].z) return 0;
+  for (let i = 1; i < c.length; i++) if (y > c[i].z || i === c.length - 1 && y >= c[i].z) {
+    const a = c[i - 1], b = c[i];
+    return b.z === a.z ? b.u : a.u + (b.u - a.u) * (a.z - y) / (a.z - b.z);
+  }
+  return c[c.length - 1].u;
+}
 
 /** y de la línea freática en x */
 export function yGWT(gwt: [number, number][], x: number): number {
@@ -36,6 +52,7 @@ export function yGWT(gwt: [number, number][], x: number): number {
 export function presionNodal(m: GeoModel, a: AguaGWT): Float64Array {
   const gw = a.gammaW ?? 9.81, p = new Float64Array(m.X.length);
   if (a.pNodal) { for (let i = 0; i < p.length; i++) p[i] = Math.max(0, a.pNodal[i]); return p; }
+  if (a.poros?.length) { for (let i = 0; i < p.length; i++) p[i] = Math.max(0, uPoros(a.poros, m.X[i], m.Y[i])); return p; }
   for (let i = 0; i < p.length; i++) p[i] = Math.max(0, gw * (yGWT(a.gwt, m.X[i]) - m.Y[i]));
   return p;
 }
