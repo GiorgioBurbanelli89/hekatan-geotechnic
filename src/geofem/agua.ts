@@ -18,6 +18,9 @@ export type AguaGWT = {
   gammaSat: number[];
   /** peso unitario del agua (GEO5: 9.81) */
   gammaW?: number;
+  /** GEO5 «Pore pressure» (presión dada): u NODAL [kPa], un valor por nudo de la malla. El solver solo conoce `load.porepressures`
+   *  (binario: PorePressureLoading), así que es el mismo camino que GWT con `p` ya calculada; manda sobre `gwt`. */
+  pNodal?: ArrayLike<number>;
 };
 
 /** y de la línea freática en x */
@@ -32,15 +35,17 @@ export function yGWT(gwt: [number, number][], x: number): number {
 /** presión de poros nodal hidrostática: p = γw·(yGWT − y) bajo el GWT, 0 sobre él */
 export function presionNodal(m: GeoModel, a: AguaGWT): Float64Array {
   const gw = a.gammaW ?? 9.81, p = new Float64Array(m.X.length);
+  if (a.pNodal) { for (let i = 0; i < p.length; i++) p[i] = Math.max(0, a.pNodal[i]); return p; }
   for (let i = 0; i < p.length; i++) p[i] = Math.max(0, gw * (yGWT(a.gwt, m.X[i]) - m.Y[i]));
   return p;
 }
 
 /** Vectores de carga con agua (gdl completos): `Fg` = peso (ρ_sat bajo el GWT por punto de Gauss) y `Fp` = ∫Bᵀ m p dV.
  *  La carga que debe aplicar el solver es Fg + Fp. Usa la MISMA cuadratura (7 puntos de Gauss) y t6() que el solver. */
-export function cargaAgua(m: GeoModel, a: AguaGWT): { Fg: Float64Array; Fp: Float64Array; p: Float64Array } {
+export function cargaAgua(m: GeoModel, a: AguaGWT, act?: ArrayLike<number>): { Fg: Float64Array; Fp: Float64Array; p: Float64Array } {
   const ndof = 2 * m.X.length, Fg = new Float64Array(ndof), Fp = new Float64Array(ndof), p = presionNodal(m, a);
   for (let e = 0; e < m.ELE.length; e++) {
+    if (act && !act[e]) continue;
     const nd = m.ELE[e], xs = nd.map((i) => m.X[i]), ys = nd.map((i) => m.Y[i]), mm = m.EMAT[e] - 1;
     const sat = nd.every((i) => p[i] > 1e-9);   // GEO5 (medido): γsat solo si TODOS los nudos del elemento tienen p > 0; los que tocan el GWT o la superficie van con γ seco
     for (let q = 0; q < GP.length; q++) {
@@ -78,13 +83,14 @@ export function fgConAgua(m: GeoModel): number[] {
 
 /** Coeficiente Ru (GEO5 Water → Coefficient Ru): u = Ru·σv, con σv = ∫γ dz desde el terreno (una sola capa: γ·profundidad).
  *  `en`: dónde se evalúa σv — "gauss" (en cada punto de Gauss) o "nudos" (u nodal y luego Σ Nᵢ uᵢ, como PorePressureLoading). */
-export function cargaRu(m: GeoModel, ru: number, terreno: [number, number][], en: "gauss" | "nudos", gPeso: ((mm: number) => number) | undefined = undefined, gSv = (mm: number) => m.MAT[mm][4], pGauss?: ArrayLike<number>): { Fg: Float64Array; Fp: Float64Array } {
+export function cargaRu(m: GeoModel, ru: number, terreno: [number, number][], en: "gauss" | "nudos", gPeso: ((mm: number) => number) | undefined = undefined, gSv = (mm: number) => m.MAT[mm][4], pGauss?: ArrayLike<number>, act?: ArrayLike<number>): { Fg: Float64Array; Fp: Float64Array } {
   const ndof = 2 * m.X.length, Fg = new Float64Array(ndof), Fp = new Float64Array(ndof);
   const sv = (x: number, y: number, mm: number) => Math.max(0, (yGWT(terreno, x) - y) * gSv(mm));
   const pn = new Float64Array(m.X.length);
   for (let i = 0; i < pn.length; i++) pn[i] = ru * sv(m.X[i], m.Y[i], 0);   // p nodal = Ru·γ·h (también decide qué elementos son saturados)
 
   for (let e = 0; e < m.ELE.length; e++) {
+    if (act && !act[e]) continue;
     const nd = m.ELE[e], xs = nd.map((i) => m.X[i]), ys = nd.map((i) => m.Y[i]), mm = m.EMAT[e] - 1;
     const gEl = gPeso && nd.every((i) => pn[i] > 1e-9) ? gPeso(mm) : m.MAT[mm][4];   // γsat solo en elementos con TODOS los nudos bajo presión (medido en GEO5)
     for (let q = 0; q < GP.length; q++) {
@@ -101,4 +107,19 @@ export function cargaRu(m: GeoModel, ru: number, terreno: [number, number][], en
     }
   }
   return { Fg, Fp };
+}
+
+/** Carga EXTRA del agua para una etapa de construcción: el motor ya pone el peso SECO de los elementos activos, así que aquí va
+ *  (peso con γsat − peso seco) + ∫Bᵀ m p dV, solo de los elementos activos `act`. Misma regla de saturación que `fgConAgua`. */
+export function extraAguaEtapa(m: GeoModel, act: ArrayLike<number>): Float64Array {
+  const a = m.agua!;
+  let mojado: { Fg: Float64Array; Fp: Float64Array }, seco: { Fg: Float64Array };
+  if (a.ru !== undefined && a.terreno) {
+    mojado = cargaRu(m, a.ru, a.terreno, "gauss", (k) => a.gammaSat[k], undefined, undefined, act);
+    seco = cargaRu(m, a.ru, a.terreno, "gauss", undefined, undefined, undefined, act);
+  } else {
+    mojado = cargaAgua(m, a, act);
+    seco = cargaAgua(m, { ...a, gammaSat: m.MAT.map((r) => r[4]) }, act);
+  }
+  return Float64Array.from(mojado.Fg, (v, i) => v - seco.Fg[i] + mojado.Fp[i]);
 }
