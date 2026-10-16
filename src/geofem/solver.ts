@@ -13,7 +13,7 @@
 //   - escalera SRM: paso 0.90, relajación /2 (máx 3), tope 0.99, SRF EXACTO (sin round).
 import { BandMatrix, bandAdd, bandClear, bandCreate, bandFactor, bandMul, bandSolve, reverseCuthillMcKee } from "./band";
 
-import { fgConAgua } from "./agua";
+import { fgConAgua, extraAguaEtapa } from "./agua";
 export type GeoModel = {
   agua?: import("./agua").AguaGWT;   // freático GWT: el peso usa γsat bajo la línea y se suma la presión de poros (ver agua.ts)
   name?: string;
@@ -613,6 +613,7 @@ export class GeoFem {
     return m.stages.map((st, si) => {
       const F = new Float64Array(ndof);
       for (const nm of st.loads) { if (nm === "Fg") continue; const v = LOADS[nm]; if (!v) throw new Error(`carga desconocida ${nm}`); for (let d = 0; d < ndof; d++) F[d] += v[d]; }
+      if (m.agua) { const ex = extraAguaEtapa(m, st.active ?? new Array(ne).fill(1)); for (let d = 0; d < ndof; d++) F[d] += ex[d]; }
       const t0 = performance.now();
       this.log(""); this.log(`### ${st.name} ###`);
       const r = this.stagedStep(st.active ?? new Array(ne).fill(1), F, si === 0);

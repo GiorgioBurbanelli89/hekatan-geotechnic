@@ -1,6 +1,6 @@
 // Motor WASM (C++ compilado con emscripten, src/geofem/cpp/geofem.cpp). Misma interfaz de resultados
 // que GeoFem (solver.ts); el log llega línea a línea por Module.geoLog.
-import { fgConAgua } from "./agua";
+import { fgConAgua, extraAguaEtapa } from "./agua";
 import type { GeoModel, StageResult, Log } from "./solver";
 import { GEO5_SRM } from "./solver";
 // @ts-ignore — módulo generado por emcc (build_wasm.sh)
@@ -77,6 +77,7 @@ export class GeoFemWasm {
     m.stages.forEach((st, si) => {
       const F = new Float64Array(ndof);
       for (const nm of st.loads) { if (nm === "Fg") continue; const v = LOADS[nm]; if (!v) throw new Error(`carga desconocida ${nm}`); for (let d = 0; d < ndof; d++) F[d] += v[d]; }
+      if (m.agua) { const ex = extraAguaEtapa(m, st.active ?? new Array(ne).fill(1)); for (let d = 0; d < ndof; d++) F[d] += ex[d]; }
       mod.HEAPF64.set(F, pF >> 3); mod.HEAP32.set(st.active ?? new Array(ne).fill(1), pA >> 2);
       const ts = performance.now();
       this.log(""); this.log(`### ${st.name} ###`);
