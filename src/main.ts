@@ -27,7 +27,7 @@ type Stage = { name: string; fs: number; alcanzada?: number; geo5?: number; u: F
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const selModel = $<HTMLSelectElement>("model"), selN = $<HTMLSelectElement>("nstages"), btn = $<HTMLButtonElement>("run");
 const selStage = $<HTMLSelectElement>("stage"), selField = $<HTMLSelectElement>("field"), selStep = $<HTMLSelectElement>("step");
-const inpRu = $<HTMLInputElement>("aguaRu"), inpDef = $<HTMLInputElement>("defscale"), chkMesh = $<HTMLInputElement>("mesh"), selSurf = $<HTMLSelectElement>("surf"), selMeshMode = $<HTMLSelectElement>("meshmode"), selDefMode = $<HTMLSelectElement>("defmode"), chkAuto = $<HTMLInputElement>("auto"), chkAgua = $<HTMLInputElement>("agua");
+const inpRu = $<HTMLInputElement>("aguaRu"), txtAguaEd = $<HTMLTextAreaElement>("aguaTxtEd"), msgAgua = $("aguaMsg"), inpDef = $<HTMLInputElement>("defscale"), chkMesh = $<HTMLInputElement>("mesh"), selSurf = $<HTMLSelectElement>("surf"), selMeshMode = $<HTMLSelectElement>("meshmode"), selDefMode = $<HTMLSelectElement>("defmode"), chkAuto = $<HTMLInputElement>("auto"), chkAgua = $<HTMLInputElement>("agua");
 const logEl = $<HTMLDivElement>("log"), fsEl = $<HTMLDivElement>("fs"), matsEl = $<HTMLDivElement>("mats"), hoverEl = $<HTMLDivElement>("hover");
 const slidersEl = $<HTMLDivElement>("sliders");
 const canvas = $<HTMLCanvasElement>("plot"), drawCanvas = $<HTMLCanvasElement>("draw");
@@ -320,6 +320,7 @@ function setBase(m: GeoModel, only?: number[]) {
   plot.hover = ({ x, z, v }) => { if (!draw.active) hoverEl.textContent = v === null ? "" : `x = ${x.toFixed(2)} m   z = ${z.toFixed(2)} m   ${FIELD_LABEL[selField.value as FieldKind]} = ${v.toFixed(2)} ${FIELD_UNIT[selField.value as FieldKind]}`; };
   $("aguaRow").hidden = !m.agua; chkAgua.checked = true;   // casilla de agua solo si el modelo trae `agua gwt …` / `agua ru=` / `agua poros …`
   $("aguaTxt").textContent = !m.agua ? "" : m.agua.ru !== undefined ? "coeficiente Ru (u = Ru·σv)" : m.agua.poros?.length ? "presión de poros (isolíneas)" : "nivel freático (GWT)";
+  $("aguaEd").hidden = !m.agua || m.agua.ru !== undefined; msgAgua.textContent = ""; if (m.agua && m.agua.ru === undefined) txtAguaEd.value = aguaATexto(m.agua);   // Ru se edita con su campo
   $("ruBox").hidden = m.agua?.ru === undefined; if (m.agua?.ru !== undefined) inpRu.value = String(m.agua.ru);
   buildSliders(m);
   stages = []; fsEl.innerHTML = "";
@@ -419,6 +420,22 @@ function factorDeformada(u: Float64Array, uel: Float64Array | undefined): number
   let mx = 0; for (let i = 0; i < model!.X.length; i++) { const a = u[2 * i] - (uel?.[2 * i] ?? 0), b = u[2 * i + 1] - (uel?.[2 * i + 1] ?? 0); mx = Math.max(mx, Math.hypot(a, b)); }
   const ancho = Math.max(...model!.X) - Math.min(...model!.X);
   return mx > 1e-12 ? 0.03 * ancho / mx : 0;
+}
+
+/** puntos del agua como texto editable: freático «x,z x,z …»; presión de poros: una línea «u x,z x,z …» por isolínea (la misma sintaxis del .hgeo) */
+function aguaATexto(a: NonNullable<GeoModel["agua"]>): string {
+  const pts = (l: [number, number][]) => l.map((p) => `${+p[0].toFixed(4)},${+p[1].toFixed(4)}`).join(" ");
+  return a.poros?.length ? a.poros.map((q) => `${+q.u.toFixed(4)} ${pts(q.pts)}`).join("\n") : pts(a.gwt);
+}
+function textoAAgua(a: NonNullable<GeoModel["agua"]>, txt: string): NonNullable<GeoModel["agua"]> {
+  const pts = (toks: string[]) => toks.map((t) => { const [x, z] = t.split(",").map(Number); if (!Number.isFinite(x) || !Number.isFinite(z)) throw new Error(`punto no válido: «${t}»`); return [x, z] as [number, number]; });
+  if (a.poros?.length) {
+    const poros = txt.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const t = l.split(/\s+/), u = Number(t[0]); if (!Number.isFinite(u)) throw new Error(`falta el valor u en «${l}»`); const p = pts(t.slice(1)); if (p.length < 2) throw new Error("cada isolínea necesita 2 puntos o más"); return { u, pts: p }; });
+    if (!poros.length) throw new Error("falta al menos una isolínea");
+    return { ...a, poros };
+  }
+  const gwt = pts(txt.trim().split(/\s+/).filter(Boolean)); if (gwt.length < 2) throw new Error("el freático necesita 2 puntos o más");
+  return { ...a, gwt: gwt.sort((p, q) => p[0] - q[0]) };
 }
 
 /** isolíneas de agua para dibujar: Ru (la interfaz del terreno con su valor) o presión de poros (una por interfaz con su u); el GWT va aparte */
@@ -616,6 +633,12 @@ edApply.addEventListener("click", applyHgeo);
 edText.addEventListener("keydown", (ev) => { if (ev.ctrlKey && ev.key === "Enter") applyHgeo(); });
 selStage.addEventListener("change", () => { const i = visibleStage(); buildStageTabs(); actualizarMuro(def, i); if (!stages[i] || stages[i]!.stale) run([i]); else { fillStepSelect(); redraw(); } });
 selMeshMode.addEventListener("change", () => { chkMesh.checked = selMeshMode.value === "edges"; });
+$("aguaAplicar").addEventListener("click", () => {
+  if (!base?.agua) return;
+  try { base = { ...base, agua: textoAAgua(base.agua, txtAguaEd.value) }; model = base; msgAgua.textContent = "✓ aplicado"; msgAgua.style.color = "#2a7a2a"; }
+  catch (e) { msgAgua.textContent = String((e as Error).message); msgAgua.style.color = "#c0392b"; return; }
+  for (const st of stages) if (st) st.stale = true; if (chkAuto.checked) run([visibleStage()]); else redraw();
+});
 inpRu.addEventListener("change", () => { for (const st of stages) if (st) st.stale = true; if (chkAuto.checked) run([visibleStage()]); else redraw(); });
 chkAgua.addEventListener("change", () => { for (const st of stages) if (st) st.stale = true; if (chkAuto.checked) run([visibleStage()]); else redraw(); });
 for (const el of [selField, selStep, chkMesh, inpDef, selSurf, selMeshMode, selDefMode]) el.addEventListener("change", redraw);

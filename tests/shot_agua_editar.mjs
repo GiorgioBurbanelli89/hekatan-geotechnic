@@ -1,0 +1,25 @@
+// Edición de los puntos del agua desde la interfaz (freático y isolíneas de poros): cambia el texto, «aplicar» recalcula.  node tests/shot_agua_editar.mjs [url]
+import { createRequire } from "node:module";
+import { mkdirSync } from "node:fs";
+const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const puppeteer = require("puppeteer");
+mkdirSync("tests/shots/agua_editar", { recursive: true });
+const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
+const page = await browser.newPage(); await page.setViewport({ width: 1500, height: 1000 });
+const err = []; page.on("pageerror", (e) => err.push(e.message)); page.on("console", (m) => m.type() === "error" && err.push(m.text()));
+await page.goto(process.argv[2] || "http://127.0.0.1:4702/", { waitUntil: "networkidle0" });
+const esp = (ms) => new Promise((r) => setTimeout(r, ms));
+let prev = "";
+const fs = async () => { await page.waitForFunction((p) => { const t = document.getElementById("fs").textContent; return /\d\.\d{2}/.test(t) && !/calculando/.test(t) && t !== p; }, { timeout: 120000 }, prev); await esp(600); prev = (await page.$eval("#fs", (e) => e.textContent)).replace(/\s+/g, " ").trim(); return prev; };
+const editar = async (txt) => { await page.$eval("#aguaEd", (e) => { e.open = true; }); await page.$eval("#aguaTxtEd", (e, v) => { e.value = v; }, txt); await page.click("#aguaAplicar"); await esp(400); return page.$eval("#aguaMsg", (e) => e.textContent); };
+const foto = async (n) => { const el = await page.$("#plot"); await el.screenshot({ path: `tests/shots/agua_editar/${n}.png` }); };
+await page.select("#model", "talud_poros");
+console.log("poros original:", await fs());
+const orig = await page.$eval("#aguaTxtEd", (e) => e.value); console.log("texto:\n" + orig);
+console.log("aplicar u 137.34 → 80:", await editar(orig.replace("137.34", "80")), "|", await fs()); await foto("poros_editado");
+console.log("texto inválido:", await editar("abc 0,0 10,0"));
+await page.select("#model", "talud_gwt");
+console.log("GWT original:", await fs(), "| texto:", await page.$eval("#aguaTxtEd", (e) => e.value));
+console.log("GWT más bajo (z −6 → −8 a la derecha):", await editar("0,-10 12,-10 22,-8 40,-8"), "|", await fs()); await foto("gwt_editado");
+console.log("errores de consola:", err.length, err.slice(0, 3));
+await browser.close();
