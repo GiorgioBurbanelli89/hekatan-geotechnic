@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 import { GeoFemWasm } from "../src/geofem/geofemWasm";
 import { GeoFem } from "../src/geofem/solver";
 import { presionNodal } from "../src/geofem/agua";
-const D = "tests/data/muro_agua_geo5/", base = JSON.parse(readFileSync(D + "modelo.json", "utf-8")), motor = process.argv[2] || "wasm", TOTAL = process.argv[3] !== "ef";
+const D = (process.env.DIR ?? "tests/data/muro_agua_geo5") + "/", base = JSON.parse(readFileSync(D + "modelo.json", "utf-8")), motor = process.argv[2] || "wasm", TOTAL = process.argv[3] !== "ef";
 const SIN = process.env.SIN === "1";   // sin agua (control)
-const agua = SIN ? undefined : { gwt: [[0, -6], [30, -6]] as [number, number][], gammaSat: base.MAT.map((m: number[]) => m[4]) };   // GEO5: γsat = γ (el .gmk no define otro)
+const agua = SIN ? undefined : { gwt: [[0, -6], [30, -6]] as [number, number][], gammaSat: process.env.GSAT ? process.env.GSAT.split(",").map(Number) : base.MAT.map((m: number[]) => m[4]) };   // GSAT=20,19,23 si el .gmk trae γsat; sin GSAT: γsat = γ (la 1.ª pasada de GEO5)
 const mod = { ...base, agua };
 const fem: any = motor === "ts" ? new GeoFem(mod, () => {}) : await GeoFemWasm.create(mod, () => {});
 const rs: any[] = fem.runStaged(mod), ne = mod.ELE.length, nn = mod.X.length;
@@ -15,7 +15,7 @@ const leer = (f: string) => { const b = readFileSync(D + f), g5 = new Map<string
   for (let k = 0; k < b.readInt32LE(12); k++) { const m = b.indexOf(MARC, o), x = b.readDoubleLE(o + 4), y = b.readDoubleLE(o + 12);
     g5.set(`${x.toFixed(4)},${y.toFixed(4)}`, [0, 8, 16, 24].map((d) => b.readDoubleLE(m + 8 + d))); o = m + 40; } return g5; };
 const pn = agua ? presionNodal(mod as any, agua as any) : new Float64Array(nn);
-for (let fase = 2; fase <= 7; fase++) {
+for (let fase = 2; fase <= (+(process.env.FASES ?? 7)); fase++) {
   const g5 = leer(`fase${fase}_Restart_In.bin`), r = rs[fase - 2], ng = r.ngp / ne;
   const acc = new Float64Array(nn * 4), cnt = new Float64Array(nn);
   for (let e = 0; e < ne; e++) { const m = [0, 0, 0, 0]; for (let q = 0; q < ng; q++) for (let i = 0; i < 4; i++) m[i] += r.sig1[(e * ng + q) * 4 + i] / ng;
