@@ -100,3 +100,7 @@ Dinámico LINEAL (`GeoFem.modes()`, `GeoFem.dynamic()`: masa consistente, subesp
 `npm test` corre también `tests/dinamico_columna.ts` (columna de suelo a cortante, 48 T6) contra Abaqus/Standard CPE6
 con la misma malla (`tests/datos/columna_abaqus.json`) y la referencia `tools/dinamico/columna_ref.py`: masa, 3 frecuencias,
 masa efectiva y u_x(t) de la coronación a 4 decimales. El espejo C++/WASM aún no tiene el dinámico.
+
+## Licencia
+
+MIT — ver [LICENSE](LICENSE). Puedes usar, copiar y modificar el código; solo conserva el aviso de copyright.
