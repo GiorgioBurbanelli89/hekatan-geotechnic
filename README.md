@@ -95,3 +95,7 @@ node tests/check_muro.mjs                                  # el muro dibujado co
 node tests/check_muro_panel.mjs                            # el panel de verificacion + los solidos, en el navegador
 ```
 Verificación: `cmp_iterlogs_key.py matlab_exact_3et.log tests/out/demo04_ts.log` → 142/142 iteraciones a 0.0e+00.
+
+## Licencia
+
+MIT — ver [LICENSE](LICENSE). Puedes usar, copiar y modificar el código; solo conserva el aviso de copyright.
