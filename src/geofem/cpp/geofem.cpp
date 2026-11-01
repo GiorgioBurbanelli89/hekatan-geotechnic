@@ -473,6 +473,19 @@ struct GeoFem {
     }
   }
 
+  // fuerzas internas con la σ GUARDADA tal cual (Σ Bᵀ·σ·w), sin retorno
+  void fintSig(double* Fi) {
+    std::fill(Fi, Fi + ndof, 0.0);
+    for (int e = 0; e < ne; e++) {
+      if (!act[e]) continue;
+      for (int q = 0; q < NG; q++) {
+        size_t kk = (size_t)e * NG + q; const double* B = &Bc[kk * 36]; double w = dJw[kk];
+        double t0 = SIG[kk * 4] * w, t1 = SIG[kk * 4 + 1] * w, t3 = SIG[kk * 4 + 3] * w;
+        for (int c = 0; c < 12; c++) Fi[edof[e * 12 + c]] += B[c] * t0 + B[12 + c] * t1 + B[24 + c] * t3;
+      }
+    }
+  }
+
   bool nrstep(double SRF, const double* Fext, int rstep, vector<double>& u, int& itOut, bool keep = false, const double* Fref = nullptr) {
     const int maxit = 100;
     std::vector<std::array<double, 2>> ab(nmat + 1, {0.0, 0.0});   // un par (alpha,k) por suelo, TODOS (antes ab[3] fijo: con 3+ suelos leía basura)
@@ -505,7 +518,9 @@ struct GeoFem {
     // peldaño CONTINUADO de la SRM: la primera tangente sale del retorno con la resistencia YA reducida (GEO5 da en la
     // iteración 1 un paso ~2 veces mayor que con la tangente del peldaño anterior, y lo recorta con η)
     if (keep && Fref && tangIni) { soloTangente = true; evalInc(du.data(), false, Fi.data()); soloTangente = false; }
-    evalInc(du.data(), false, Fi.data());
+    // modo GEO5 (bit 32), paso SIN porPaso (pasos de carga de SRF 1): R de arranque = Fext − Σ Bᵀ·σ GUARDADA, sin pasar por el
+    // retorno con Δε = 0 (que re-endereza los PG que la cara dejó con las principales invertidas). Tanda 14: así los 10 pasos = GEO5 a 1e-11.
+    if (modoG5 && !porPaso) fintSig(Fi.data()); else evalInc(du.data(), false, Fi.data());
     for (int k = 0; k < nf; k++) Rf[k] = Fext[fr[k]] - Fi[fr[k]];
     DForce = Rf;
     // Fref: referencia de las normas de fuerza y de energía. GEO5, en los peldaños de la SRM, normaliza con la carga TOTAL

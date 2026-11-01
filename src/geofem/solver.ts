@@ -472,6 +472,19 @@ export class GeoFem {
     }
   }
 
+  /** Fuerzas internas con la σ GUARDADA tal cual (Σ Bᵀ·σ·w), sin retorno (como geofem.cpp fintSig). */
+  private fintSig(Fi: Float64Array): void {
+    Fi.fill(0);
+    for (let e = 0; e < this.ne; e++) {
+      if (!this.act[e]) continue;
+      for (let q = 0; q < NG; q++) {
+        const kk = e * NG + q, B = this.Bc.subarray(kk * 36, kk * 36 + 36), w = this.dJw[kk];
+        const t0 = this.SIG[kk * 4] * w, t1 = this.SIG[kk * 4 + 1] * w, t3 = this.SIG[kk * 4 + 3] * w;
+        for (let c = 0; c < 12; c++) Fi[this.edof[e * 12 + c]] += B[c] * t0 + B[12 + c] * t1 + B[24 + c] * t3;
+      }
+    }
+  }
+
   /** Un peldaño de la escalera (Newton completo con line-search). Devuelve [conv, u, it]. */
   private nrstep(SRF: number, Fext: Float64Array, rstep: number, trace?: { u: Float64Array }[], keep = false, Fref?: Float64Array): [boolean, Float64Array, number] {
     const maxit = 100;
@@ -503,7 +516,9 @@ export class GeoFem {
     };
     if (this.soloFint) { this.assembleInc(du, ab, false, Fi); this.ALoadV = Float64Array.from(Fi); return [true, u, 0]; }   // ALoad = F_int (modo GEO5)
     if (keep && Fref && this.tangIni) { this.soloTangente = true; evalInc(du, false, Fi); this.soloTangente = false; }
-    evalInc(du, false, Fi);
+    // modo GEO5 (bit 32), paso SIN porPaso (pasos de carga de SRF 1): R de arranque = Fext − Σ Bᵀ·σ GUARDADA, sin el retorno
+    // con Δε = 0 (re-endereza los PG que la cara dejó con las principales invertidas). Tanda 14: los 10 pasos = GEO5 a 1e-11
+    if (this.modoG5 && !this.porPaso) this.fintSig(Fi); else evalInc(du, false, Fi);
     this.gather(Fext, Fi, Rf);                                   // con TIES el esclavo suma en la fila del maestro
     DForce.set(Rf);
     if (Fref) this.gather(Fref, null, DForce);                   // SRM de GEO5: normas respecto a la carga total (como geofem.cpp)
