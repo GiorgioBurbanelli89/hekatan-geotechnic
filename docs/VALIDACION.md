@@ -90,7 +90,7 @@ Para usarlos hay que conseguir el artículo (biblioteca) y copiar los datos con 
 |---|---|
 | **GEO5 FEM** (solver real sin GUI, `geo5_solver.py`) | Demo04 y muro 🟢; simple y berma = GEO5 a 4 decimales (§5.2) 🟢; falta varias capas, agua, kh |
 | **GEO5 Slope Stability** (Bishop/Spencer, equilibrio límite) | `tools/geo5_talud.py` (GUI) existe; falta tabla FEM-vs-LEM por tipo de talud |
-| **Abaqus/Standard** | lineal y dinámico 🟢; SRM no (Abaqus no tiene SRM nativa: se hace con campo de c, φ por *FIELD) |
+| **Abaqus/Standard** | lineal y dinámico 🟢; SRM por *FIELD con la malla de GEO5 (§5.2b): DP +2-3 % 🟡, MC no concluyente 🔴 |
 | **OpenSees** | 2.º validador parcial (sin T6 ni MC de hexágono) |
 | **PLAXIS** | sin datos (instalador en estudio, `project_plaxis_re_desde_instalador`) |
 | **Bishop/Spencer de Hekatan LISP** | hojas GEO5 112-139: falta cruzarlas con el FEM de cada tipo |
@@ -160,6 +160,31 @@ el solver 2024 exige y el generador no escribía (`debug_section`, **caras `face
 Los dos tipos de talud pedidos (simple y berma) dan **el mismo FS que el solver real de GEO5 a 4 decimales con la misma malla**.
 Con la malla propia, simple +2.6 % (fuera de ±2 %) y berma 0.0 %.
 
+### 5.2b Tercer juez: Abaqus/Standard 2017 con la MISMA malla (GEO5 | Geotechnic | Abaqus)
+`python tests/validacion_abaqus/abaqus_srm.py simple berma g1_slope64_ex1` y `… a1_acads_1a --s0 0.5 --s1 2` →
+`tests/validacion_abaqus/resultados/<caso>.json`, `<caso>_mecanismo.png` (|Δu| de la SRM + |u| cresta vs SRF), `tabla.md`.
+Lee los nudos/T6/apoyos/peso/material del `Input.txt` de GEO5 (§5.2): CPE6 (el T6 de GEO5 ya va en el orden del CPE6, área > 0).
+DP «extensión» de GEO5 → DP lineal de Abaqus K = 1, tanβ = 3√3·α, d = √3·k, dilatación 0. MC → `*MOHR COULOMB` (Abaqus **no
+admite ψ = 0: lo sube a 0.1°**). SRF = variable de campo 1 (tanφ/SRF, c/SRF tabulados cada 0.005): paso GRAVEDAD a SRF s0 y paso
+SRM en rampa s0 → 3 (ΔSRF ≤ 0.005, mínimo 2e-4). **FS Abaqus = último SRF convergido.**
+
+| caso | material | malla común | GEO5 | Geotechnic | Abaqus | Abaqus − GEO5 | juicio |
+|---|---|---|---|---|---|---|---|
+| simple | DP | 3003 nudos, 1440 T6 | 2.1172 | 2.1172 | **2.1864** | +3.27 % | 🟡 |
+| berma | DP | 3003 / 1440 | 2.4453 | 2.4453 | **2.4949** | +2.03 % | 🟡 |
+| slope64 Ex1 (publ. 1.56) | MC | 4961 / 2400 | 1.1111 | 1.1111 | 1.5518 * | +39.7 % | 🔴 * |
+| ACADS EX1(a) (publ. 1.000) | MC | 4961 / 2400 | 0.6561 | «1.0» | 0.7766 * | +18.4 % | 🔴 * |
+
+- **DP (simple, berma): mismo mecanismo**, Abaqus 2-3 % por encima. No es el material (eco del .dat = cuenta a mano). Es el
+  **criterio de falla**: GEO5 salta de 2.1172 a 2.1440 en un peldaño y declara «diverging»; Abaqus en 2.1440 sí converge
+  (cresta 68 mm) y se rompe en 2.14-2.19 (cresta 68 → 517 → 1980 mm). Berma igual: GEO5 falla el peldaño 2.4763, Abaqus llega a 2.4949.
+  El FS de la escalera de GEO5 queda por DEBAJO del de una rampa fina: ≈ el paso final (1.25 %) + la detección por |gi| creciente.
+- **\* MC (slope64, ACADS): NO CONCLUYENTE.** Abaqus para por «solution appears to be diverging» con autovalores negativos y
+  Δu de solo 8 mm / 1.5 mm: no hay mecanismo desarrollado (la curva de la cresta no se dispara). La banda sigue las columnas y
+  diagonales de la malla estructurada (PNG). Que slope64 dé 1.5518 ≈ 1.56 publicado es coincidencia hasta probar lo contrario.
+  Abaqus y GEO5 se paran ANTES de tiempo con MC en esta malla: indicio de que el problema es la **malla estructurada + MC
+  no asociado**, no Geotechnic (que calca a GEO5). ⏳ Repetir con incremento mínimo 1e-7 (se cortó: disco lleno) y con malla no estructurada.
+
 ### 5.3 Resumen verde / amarillo / rojo
 
 | área | juez | estado |
@@ -168,6 +193,8 @@ Con la malla propia, simple +2.6 % (fuera de ±2 %) y berma 0.0 %.
 | Solver SRM (MC), misma malla: slope64 Ex1 | GEO5 real | 🟢 |
 | Muro de Manabí FS 1.362360 | GEO5 real | 🟡 (depende de un empate de redondeo) |
 | Lineal, dinámico lineal, carga sísmica | Abaqus, 4 decimales | 🟢 |
+| SRM DP (simple, berma), misma malla, 3.er juez | Abaqus *FIELD | 🟡 (+3.3 %, +2.0 %: criterio de falla) |
+| SRM MC (slope64 Ex1, ACADS EX1(a)), misma malla | Abaqus *FIELD | 🔴 no concluyente (para sin mecanismo) |
 | Material DP punto a punto | GEO5 nativo / OpenSees | 🟢 |
 | FS con malla propia, un suelo φ > 0 | GEO5 / slope64 / G&L | 🟡 (−3.6 … +2.6 %) |
 | FS < 1 | GEO5 (busca hacia abajo) | 🔴 falta la rama |

@@ -1,0 +1,29 @@
+{
+ "caso": "simple",
+ "malla": "3003 nudos, 1440 CPE6",
+ "material": {
+  "modelo": "dp",
+  "E": 60000.0,
+  "nu": 0.3,
+  "phi": 28.0,
+  "c": 12.0,
+  "psi": 0.0,
+  "gamma": 18.0
+ },
+ "cresta": 1416,
+ "cresta_xy": [
+  21.0,
+  -2.505924
+ ],
+ "s0": 1.0,
+ "s1": 3.0,
+ "gravedad_t": 1.0,
+ "srm_t": 0.5932238698005676,
+ "FS_abaqus": 2.1864,
+ "fin": "NOT BEEN COMPLETED",
+ "segundos": 247,
+ "cresta_u_mm": -1282.99,
+ "FS_GEO5": 2.117217,
+ "FS_geotechnic": 2.1172,
+ "fijos": []
+}

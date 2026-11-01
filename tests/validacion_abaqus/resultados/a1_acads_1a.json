@@ -1,0 +1,29 @@
+{
+ "caso": "a1_acads_1a",
+ "malla": "4961 nudos, 2400 CPE6",
+ "material": {
+  "modelo": "mc",
+  "E": 100000.0,
+  "nu": 0.3,
+  "phi": 19.6,
+  "c": 3.0,
+  "psi": 0.0,
+  "gamma": 20.0
+ },
+ "cresta": 2990,
+ "cresta_xy": [
+  50.0,
+  35.0
+ ],
+ "s0": 0.5,
+ "s1": 2.0,
+ "gravedad_t": 1.0,
+ "srm_t": 0.18437500298023224,
+ "FS_abaqus": 0.7766,
+ "fin": "NOT BEEN COMPLETED",
+ "segundos": 139,
+ "cresta_u_mm": 0.11,
+ "FS_GEO5": 0.6561,
+ "FS_geotechnic": 1.0,
+ "fijos": []
+}

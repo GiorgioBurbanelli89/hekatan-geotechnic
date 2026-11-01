@@ -1,0 +1,50 @@
+[
+ {
+  "caso": "a1_acads_1a",
+  "modelo": "mc",
+  "malla": "4961 nudos, 2400 CPE6",
+  "FS_GEO5": 0.6561,
+  "FS_geotechnic": 1.0,
+  "FS_abaqus": 0.7766,
+  "dif_abaqus_geo5_pct": 18.37,
+  "juicio": "🔴",
+  "s0": 0.5,
+  "fin": "NOT BEEN COMPLETED"
+ },
+ {
+  "caso": "berma",
+  "modelo": "dp",
+  "malla": "3003 nudos, 1440 CPE6",
+  "FS_GEO5": 2.445323,
+  "FS_geotechnic": 2.4453,
+  "FS_abaqus": 2.4949,
+  "dif_abaqus_geo5_pct": 2.03,
+  "juicio": "🟡",
+  "s0": 1.0,
+  "fin": "NOT BEEN COMPLETED"
+ },
+ {
+  "caso": "g1_slope64_ex1",
+  "modelo": "mc",
+  "malla": "4961 nudos, 2400 CPE6",
+  "FS_GEO5": 1.111111,
+  "FS_geotechnic": 1.1111,
+  "FS_abaqus": 1.5518,
+  "dif_abaqus_geo5_pct": 39.66,
+  "juicio": "🔴",
+  "s0": 1.0,
+  "fin": "NOT BEEN COMPLETED"
+ },
+ {
+  "caso": "simple",
+  "modelo": "dp",
+  "malla": "3003 nudos, 1440 CPE6",
+  "FS_GEO5": 2.117217,
+  "FS_geotechnic": 2.1172,
+  "FS_abaqus": 2.1864,
+  "dif_abaqus_geo5_pct": 3.27,
+  "juicio": "🟡",
+  "s0": 1.0,
+  "fin": "NOT BEEN COMPLETED"
+ }
+]

@@ -1,0 +1,29 @@
+{
+ "caso": "g1_slope64_ex1",
+ "malla": "4961 nudos, 2400 CPE6",
+ "material": {
+  "modelo": "mc",
+  "E": 100000.0,
+  "nu": 0.3,
+  "phi": 30.0,
+  "c": 5.0,
+  "psi": 0.0,
+  "gamma": 20.0
+ },
+ "cresta": 3649,
+ "cresta_xy": [
+  31.9,
+  9.883333
+ ],
+ "s0": 1.0,
+ "s1": 3.0,
+ "gravedad_t": 1.0,
+ "srm_t": 0.27591150999069214,
+ "FS_abaqus": 1.5518,
+ "fin": "NOT BEEN COMPLETED",
+ "segundos": 311,
+ "cresta_u_mm": -1.66,
+ "FS_GEO5": 1.111111,
+ "FS_geotechnic": 1.1111,
+ "fijos": []
+}
