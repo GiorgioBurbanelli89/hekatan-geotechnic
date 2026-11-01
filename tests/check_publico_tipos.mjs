@@ -1,0 +1,28 @@
+// Verifica el sitio PÚBLICO: carga, selector de tipo de talud, cambio de tipo redibuja, importar DXF.  node tests/check_publico_tipos.mjs [url] [outdir]
+import { createRequire } from "node:module";
+import { mkdirSync } from "node:fs";
+const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const puppeteer = require("puppeteer");
+const url = (process.argv[2] || "https://giorgioburbanelli89.github.io/hekatan-geotechnic/") + "?v=" + Date.now(), out = process.argv[3] || "tests/shots/publico_tipos"; mkdirSync(out, { recursive: true });
+const browser = await puppeteer.launch({ headless: true, executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", args: ["--no-sandbox"] });
+const page = await browser.newPage(); await page.setViewport({ width: 1998, height: 1139 });
+const wait = (ms) => new Promise((r) => setTimeout(r, ms)); const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+const idle = async () => { await wait(600); await page.waitForFunction(() => !document.getElementById("fs").textContent.includes("calculando"), { timeout: 240000 }); await wait(300); };
+let bad = 0; const ok = (c, t) => { console.log((c ? "  ✓ " : "  ✗ ") + t); if (!c) bad++; };
+await page.goto(url, { waitUntil: "networkidle0" }); await page.waitForFunction(() => document.getElementById("log").textContent.includes("TOTAL "), { timeout: 240000 });
+ok(await page.$eval("#log", (e) => e.textContent.includes("TOTAL ")), "el sitio público carga y calcula Demo04 al abrir");
+ok(!!(await page.$("#fImpDxf")), "botón «Importar DXF» presente");
+await page.select("#model", "hgeo"); await wait(500);
+await page.$eval("#hgeo", (e, v) => { e.value = v; }, "margenes xmin=0 xmax=45 fondo=-24\ntalud tipo=simple\nsuelo ARENA E=60000 nu=0.3 phi=28 c=12 gamma=18\nasignar ARENA en 3,-12\nmalla 1.6\netapa peso propio\n");
+await page.click("#apply"); await idle();
+ok(!!(await page.$("#tipoTalud")), "selector «tipo de talud» presente"); await page.screenshot({ path: `${out}/01_simple.png` });
+const fs1 = await page.$eval("#fs", (e) => e.innerText.replace(/\n/g, " | ")); const t1 = await page.$eval("#hgeo", (e) => e.value);
+await page.select("#tipoTalud", "berma"); await idle();
+const fs2 = await page.$eval("#fs", (e) => e.innerText.replace(/\n/g, " | ")), t2 = await page.$eval("#hgeo", (e) => e.value);
+ok(/tipo=berma/.test(t2) && t1 !== t2 && fs1 !== fs2, `cambiar a «berma» redibuja y recalcula: ${fs1.match(/[\d.]{5,6}/)?.[0]} → ${fs2.match(/[\d.]{5,6}/)?.[0]}`);
+await page.screenshot({ path: `${out}/02_berma.png` });
+const n = await page.$$eval("#tipoTalud option", (o) => o.length); ok(n === 7, `${n} opciones de tipo (clásico + 6)`);
+const d = await page.evaluate(() => window.__dxf()); ok(/POLYLINE/.test(d) && /TERRENO/.test(d), "exporta DXF con TERRENO");
+await page.evaluate((x) => window.__abrirDxf(x, "publico"), d); await idle(); ok(/malla:/.test(await page.$eval("#edmsg", (e) => e.innerText)), "importa el DXF y malla");
+await page.screenshot({ path: `${out}/03_dxf_vuelta.png`});
+console.log("errores JS:", errs.length, errs.slice(0, 2)); console.log(bad ? `✗ ${bad} fallos` : "✓ sitio público OK"); await browser.close(); process.exit(bad ? 1 : 0);

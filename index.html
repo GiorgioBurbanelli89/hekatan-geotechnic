@@ -92,12 +92,12 @@
   <main>
     <aside class="panel">
       <h2>Modelo</h2>
-      <div class="row" id="archivo" style="gap:6px;margin-bottom:6px">
+      <div class="row" id="archivo" style="gap:6px;margin-bottom:6px;flex-wrap:wrap">
         <button id="fNuevo" class="tb" title="hoja en blanco: margenes + dibujar el terreno" style="width:100%">▢ Nuevo</button>
         <button id="fAbrir" class="tb" title="abrir un fichero .hgeo" style="width:100%">📂 Abrir</button>
         <button id="fGuardar" class="tb" title="guardar el modelo como .hgeo" style="width:100%">💾 Guardar</button>
         <button id="fDxf" class="tb" title="exportar la geometría a DXF para GEO5 (Interfaces → Import DXF) + un .txt con los pasos: suelos, asignación, malla, cargas" style="width:100%">📐 DXF GEO5</button>
-        <button id="fImpDxf" class="tb" title="importar un DXF (R12 o posterior): POLYLINE, LWPOLYLINE, LINE, ARC, SPLINE; también se puede arrastrar y soltar el archivo sobre la página. Con nuestras capas (TERRENO, INTERFAZ_k…) entra directo; con un DXF cualquiera eliges la capa del terreno y las de las interfaces" style="width:100%">⬇ Importar DXF</button>
+        <button id="fImpDxf" class="tb" title="importar un DXF (R12 o posterior): POLYLINE, LWPOLYLINE, LINE, ARC, SPLINE; también se puede arrastrar y soltar el archivo sobre la página. Con nuestras capas (TERRENO, INTERFAZ_k…) entra directo; con un DXF cualquiera eliges la capa del terreno y las de las interfaces" style="width:100%;flex:1 1 100%">⬇ Importar DXF</button>
         <input type="file" id="fFileDxf" accept=".dxf" hidden>
         <input type="file" id="fFile" accept=".hgeo,.txt" hidden>
       </div>
