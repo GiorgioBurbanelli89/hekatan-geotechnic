@@ -1,0 +1,7 @@
+# Diagnostico phi = 0: geometria de slope64 Ex3 con UN suelo no drenado cu = 50 (Tresca = MC con phi 0). ¿GEO5 da lo mismo que Geotechnic?
+margenes xmin=0 xmax=60 fondo=-10
+interfaz 0,0 20,0 40,10 60,10
+suelo S1 E=100000 nu=0.3 phi=0 c=50 gamma=20 psi=0 modelo=mc
+asignar S1 en 50,5
+malla 1.0
+etapa peso propio

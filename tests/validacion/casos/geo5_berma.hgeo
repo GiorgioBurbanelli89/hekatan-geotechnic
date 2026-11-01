@@ -1,0 +1,7 @@
+# GEO5 real contra Geotechnic · talud «berma» (el talud_tipo_berma.hgeo por defecto de 1-nov: beta 33, 2 bermas de 3 m, 3 caras de 3 m)
+margenes xmin=0 xmax=45 fondo=-24
+interfaz 0,-9 11,-9 15.619595,-6 18.619595,-6 23.23919,-3 26.23919,-3 30.858785,0 45,0
+suelo ARENA E=60000 nu=0.3 phi=28 c=12 gamma=18
+asignar ARENA en 3,-12
+malla 1.6
+etapa peso propio

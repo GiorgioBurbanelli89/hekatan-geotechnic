@@ -1,0 +1,68 @@
+[
+ {
+  "caso": "simple",
+  "malla_comun": "3003 nudos, 1440 T6 (nx 45, nz 16)",
+  "FS_GEO5": 2.117217,
+  "rc_geo5": 0,
+  "s_geo5": 13,
+  "FS_geotechnic_misma_malla": 2.1172,
+  "FS_geotechnic_malla_propia": 2.1715,
+  "malla_propia": "1776 nudos, 847 T6",
+  "dif_misma_malla": -0.0,
+  "dif_malla_propia_pct": 2.56
+ },
+ {
+  "caso": "berma",
+  "malla_comun": "3003 nudos, 1440 T6 (nx 45, nz 16)",
+  "FS_GEO5": 2.445323,
+  "rc_geo5": 0,
+  "s_geo5": 15,
+  "FS_geotechnic_misma_malla": 2.4453,
+  "FS_geotechnic_malla_propia": 2.4453,
+  "malla_propia": "1837 nudos, 876 T6",
+  "dif_misma_malla": -0.0,
+  "dif_malla_propia_pct": -0.0
+ },
+ {
+  "caso": "geo5_g3hom_cu50",
+  "hgeo": "tests/validacion/casos/geo5_g3hom_cu50.hgeo",
+  "modelo": "mc",
+  "malla_comun": "4961 nudos, 2400 T6 (nx 60, nz 20)",
+  "FS_GEO5": null,
+  "rc_geo5": 0,
+  "s_geo5": 7,
+  "FS_geotechnic_misma_malla": 1.0,
+  "FS_geotechnic_malla_propia": 1.0386,
+  "malla_propia": "4605 nudos, 2226 T6",
+  "nota": "GEO5 aborta: «Error in function R_mob_MohrCoulomb(). Element #1» (Error_File.txt) tras fallar SRF 1; sin OutputFile"
+ },
+ {
+  "caso": "g1_slope64_ex1",
+  "hgeo": "tests/validacion/casos/g1_slope64_ex1.hgeo",
+  "modelo": "mc",
+  "malla_comun": "4961 nudos, 2400 T6 (nx 60, nz 20)",
+  "FS_GEO5": 1.111111,
+  "rc_geo5": 0,
+  "s_geo5": 9,
+  "FS_geotechnic_misma_malla": 1.1111,
+  "FS_geotechnic_malla_propia": 1.5242,
+  "malla_propia": "5338 nudos, 2593 T6",
+  "dif_misma_malla": -0.0,
+  "dif_malla_propia_pct": 37.18
+ },
+ {
+  "caso": "a1_acads_1a",
+  "hgeo": "tests/validacion/casos/a1_acads_1a.hgeo",
+  "modelo": "mc",
+  "malla_comun": "4961 nudos, 2400 T6 (nx 60, nz 20)",
+  "FS_GEO5": 0.6561,
+  "rc_geo5": 0,
+  "s_geo5": 7,
+  "FS_geotechnic_misma_malla": 1.0,
+  "FS_geotechnic_malla_propia": 1.0,
+  "malla_propia": "4415 nudos, 2130 T6",
+  "dif_misma_malla": 0.3439,
+  "dif_malla_propia_pct": 52.42,
+  "nota": "GEO5: SRF 1 no converge -> busca hacia abajo (÷0.9) -> FS 0.6561 «LESS THAN 1» (Error 7). Geotechnic no tiene esa rama: informa 1.0"
+ }
+]

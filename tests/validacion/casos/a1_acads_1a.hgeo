@@ -1,0 +1,7 @@
+# ACADS EX1(a) (Giam & Donald 1989), geometria de OptumG2 Verification fig.1. Referencia 1.000; FELA 0.981 +-0.003
+margenes xmin=20 xmax=70 fondo=20
+interfaz 20,25 30,25 50,35 70,35   # = talud tipo=simple xpie=30 zpie=25 H=10 beta=26.565051
+suelo S3 E=100000 nu=0.3 phi=19.6 c=3 gamma=20 psi=0 modelo=mc
+asignar S3 en 60,25
+malla 0.8
+etapa peso propio

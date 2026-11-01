@@ -1,0 +1,8 @@
+# slope64 Ex1 (Griffiths, manual slope64; malla 32x10+12x10 Q8): talud homogeneo 2:1, H=10, base 10 m. Publicado FS = 1.56
+# Espejado: pie a la izquierda (x=12), corona a la derecha (12 m). MC, psi=0 como slope64.
+margenes xmin=0 xmax=44 fondo=-10
+interfaz 0,0 12,0 32,10 44,10   # = talud tipo=simple xpie=12 zpie=0 H=10 beta=26.565051
+suelo S1 E=100000 nu=0.3 phi=30 c=5 gamma=20 psi=0 modelo=mc
+asignar S1 en 22,-5
+malla 0.8
+etapa peso propio

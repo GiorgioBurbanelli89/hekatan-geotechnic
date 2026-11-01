@@ -1,0 +1,7 @@
+# GEO5 real contra Geotechnic · talud «simple» (el talud_tipo_simple.hgeo por defecto de 1-nov: xpie 11, zpie -9, H 6.5, beta 33)
+margenes xmin=0 xmax=45 fondo=-24
+interfaz 0,-9 11,-9 21.009122,-2.5 45,-2.5
+suelo ARENA E=60000 nu=0.3 phi=28 c=12 gamma=18
+asignar ARENA en 3,-12
+malla 1.6
+etapa peso propio

@@ -1,0 +1,12 @@
+# slope64 Ex2: talud de 1 m con capa debil en la cimentacion (0.6 m bajo el pie). Publicado FS = 1.22
+margenes xmin=0 xmax=4.4 fondo=-1
+interfaz 0,0 1.2,0 3.2,1 4.4,1   # = talud tipo=simple xpie=1.2 zpie=0 H=1 beta=26.565051
+interfaz 0,0 4.4,0
+interfaz 0,-0.6 4.4,-0.6
+suelo S1 E=100000 nu=0.3 phi=25 c=1 gamma=20 psi=0 modelo=mc
+suelo S2 E=100000 nu=0.3 phi=15 c=0.5 gamma=20 psi=0 modelo=mc
+asignar S1 en 3,0.5
+asignar S2 en 2,-0.3
+asignar S1 en 2,-0.8
+malla 0.08
+etapa peso propio

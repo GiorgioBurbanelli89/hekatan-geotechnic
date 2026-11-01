@@ -1,0 +1,8 @@
+# slope64 Ex7: talud homogeneo con aceleracion horizontal seudoestatica 0.25 g hacia el pie. Publicado FS = 1.41
+margenes xmin=0 xmax=80 fondo=-10
+interfaz 0,0 30,0 50,10 80,10   # = talud tipo=simple xpie=30 zpie=0 H=10 beta=26.565051
+suelo S1 E=100000 nu=0.3 phi=30 c=20 gamma=20 psi=0 modelo=mc
+asignar S1 en 60,-5
+malla 1.0
+etapa peso propio
+sismo kh=-0.25 kv=0 borde=0

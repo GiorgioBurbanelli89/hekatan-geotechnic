@@ -1,0 +1,8 @@
+# Griffiths & Lane (1999) ej. 1 citado por Rocscience (Phase2): talud homogeneo SIN cimentacion, 2H horizontal, corona 1.2H.
+# E=1e5 nu=0.3 gamma=20 phi=20 c=10. Publicado: Griffiths FE 1.4 · Bishop 1.38. H = 10 m SUPUESTO (H no impreso en la figura).
+margenes xmin=0 xmax=32 fondo=0
+interfaz 0,0 20,10 32,10   # = talud tipo=simple xpie=0 zpie=0 H=10 beta=26.565051
+suelo S1 E=100000 nu=0.3 phi=20 c=10 gamma=20 psi=0 modelo=mc
+asignar S1 en 25,5
+malla 0.6
+etapa peso propio

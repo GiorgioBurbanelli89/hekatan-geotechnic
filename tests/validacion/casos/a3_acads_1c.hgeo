@@ -1,0 +1,14 @@
+# ACADS EX1(c) = EX1(b) + kh 0.15 g (hacia el pie). FELA 1.039 +-0.004
+margenes xmin=20 xmax=70 fondo=20
+interfaz 20,25 30,25 50,35 70,35   # = talud tipo=simple xpie=30 zpie=25 H=10 beta=26.565051
+linea 40,27 50,29 54,31 70,31
+linea 30,25 40,27 52,24 70,24
+suelo S1 E=100000 nu=0.3 phi=38 c=0 gamma=19.5 psi=0 modelo=mc
+suelo S2 E=100000 nu=0.3 phi=23 c=5.3 gamma=19.5 psi=0 modelo=mc
+suelo S3 E=100000 nu=0.3 phi=19.6 c=3 gamma=20 psi=0 modelo=mc
+asignar S1 en 60,33
+asignar S2 en 60,28
+asignar S3 en 40,22
+malla 0.8
+etapa peso propio
+sismo kh=-0.15 kv=0 borde=0

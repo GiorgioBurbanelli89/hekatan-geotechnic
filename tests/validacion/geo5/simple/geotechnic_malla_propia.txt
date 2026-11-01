@@ -1,0 +1,17 @@
+SRM desde cero · malla 1776 nudos, 847 T6, ángulo mín 29.0° 
+SRM rs00 paso=1.0000 SRF=1.0000 CONVERGE it=3
+SRM rs01 paso=0.9000 SRF=1.1111 CONVERGE it=3
+SRM rs02 paso=0.9000 SRF=1.2346 CONVERGE it=3
+SRM rs03 paso=0.9000 SRF=1.3717 CONVERGE it=4
+SRM rs04 paso=0.9000 SRF=1.5242 CONVERGE it=5
+SRM rs05 paso=0.9000 SRF=1.6935 CONVERGE it=5
+SRM rs06 paso=0.9000 SRF=1.8817 CONVERGE it=6
+SRM rs07 paso=0.9000 SRF=2.0908 CONVERGE it=7
+SRM rs08 paso=0.9000 SRF=2.3231 DIVERGE relax=1
+SRM rs09 paso=0.9500 SRF=2.2008 DIVERGE relax=2
+SRM rs10 paso=0.9750 SRF=2.1444 CONVERGE it=7
+SRM rs11 paso=0.9750 SRF=2.1993 DIVERGE relax=3
+SRM rs12 paso=0.9875 SRF=2.1715 CONVERGE it=11
+SRM rs13 paso=0.9875 SRF=2.1990 DIVERGE relax=4
+peso propio            >>> FS=2.1715  (sin referencia GEO5)  [2.6 s]
+FS = 2.1715  (3 s)

@@ -1,0 +1,10 @@
+# slope64 Ex3: talud no drenado de dos capas (phi=0): terraplen cu=50, cimentacion cu=73.1. Publicado FS = 2.00
+margenes xmin=0 xmax=60 fondo=-10
+interfaz 0,0 20,0 40,10 60,10   # = talud tipo=simple xpie=20 zpie=0 H=10 beta=26.565051
+interfaz 0,0 60,0
+suelo S1 E=100000 nu=0.3 phi=0 c=50 gamma=20 psi=0 modelo=mc
+suelo S2 E=100000 nu=0.3 phi=0 c=73.1 gamma=20 psi=0 modelo=mc
+asignar S1 en 50,5
+asignar S2 en 30,-5
+malla 1.0
+etapa peso propio
