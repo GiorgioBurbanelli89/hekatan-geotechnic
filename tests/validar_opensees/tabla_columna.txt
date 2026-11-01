@@ -1,0 +1,12 @@
+Caso 1 · columna elástica 2x10 m, E 20000 kPa, nu 0.3, gamma 18 kN/m3 (deformación plana, lados sin ux, base fija)
+Exacto: uy(cima) = -gamma H^2/(2M) = -0.033429 m ;  sy(base) = -180.0 kPa
+
+motor / elemento          uy cima (m) dif. exacto (m)            dif. sy (kPa)
+Geotechnic T6 (7 pt)        -0.033429       2.91e-16 2.30e-11 (en cada pto Gauss)
+OpenSees quad               -0.033429      -6.94e-18 1.14e-13 (media/elemento)
+OpenSees bbarQuad           -0.033429       0.00e+00 1.21e-13 (media/elemento)
+OpenSees SSPquad            -0.033429       0.00e+00 1.28e-13 (media/elemento)
+OpenSees tri31              -0.033429       0.00e+00 3.00e+00 (media/elemento)
+
+Lectura: el desplazamiento de la cima sale exacto en todos (el campo es cuadrático y lo reproducen los nudos);
+las tensiones son exactas en el T6 (campo cuadrático) y por elemento en quad/SSPquad/bbarQuad; tri31 (deformación constante) falla ±gamma*dy/6 = 3 kPa, como debe.
