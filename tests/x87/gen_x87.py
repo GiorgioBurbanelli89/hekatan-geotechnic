@@ -21,6 +21,20 @@ template <class A, class B> static inline typename std::common_type<A, B>::type 
 template <class A, class B> static inline typename std::common_type<A, B>::type rmin(A a, B b) { return a < b ? a : b; }
 """
 src = src.replace("typedef REAL_T REAL;\n", "typedef REAL_T REAL;\n" + MM, 1)
+# --- SEMILLA (solo en la copia): estado inicial = sigma nodales de GEO5 (Restart_In.bin) interpolados a cada punto de Gauss con las N del T6
+src = src.replace("struct GeoFem {", "static std::vector<REAL> g_seed;   // 4 por nudo: sx sy sz txy (orden de SIG)\nstruct GeoFem {", 1)
+VIEJA = "bool c0 = srmContinua ? nrstepPasos(1.0, Ftot, u, n0) : nrstepInc(1.0, Ftot, 0, u, n0);"
+assert VIEJA in src
+NUEVA = """bool c0;
+    if (!g_seed.empty()) {
+      resetState();
+      for (int e = 0; e < ne; e++) for (int q = 0; q < NG; q++) {
+        REAL N[6], d1[6], d2[6]; t6(GP[q][0], GP[q][1], N, d1, d2);
+        for (int k = 0; k < 4; k++) { REAL v = 0; for (int i = 0; i < 6; i++) v += N[i] * g_seed[(size_t)ELE[e * 6 + i] * 4 + k]; SIG[((size_t)e * NG + q) * 4 + k] = v; }
+      }
+      vector<double> duS; c0 = nrstep(1.0, Ftot, 0, duS, n0, true, Ftot); u = duS;       // SRF = 1 con el estado de GEO5: ¿converge en 1 iteración como el Log_File de GEO5?
+    } else c0 = srmContinua ? nrstepPasos(1.0, Ftot, u, n0) : nrstepInc(1.0, Ftot, 0, u, n0);"""
+src = src.replace(VIEJA, NUEVA.replace("vector<double>", "vector<REAL>"), 1)
 open(os.path.join(AQUI, "geofem_x87.cpp"), "w", encoding="utf-8").write(src)
 m = json.load(open(os.path.join(AQUI, "..", "..", "examples", "geofem_muro_manabi_malla.json"), encoding="utf-8"))
 nn, ne, nm = len(m["X"]), len(m["ELE"]), len(m["MAT"])
