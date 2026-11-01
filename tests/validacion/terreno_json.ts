@@ -3,4 +3,4 @@
 import { readFileSync } from "node:fs";
 import { parseHgeo } from "../../src/model/dsl";
 const d = parseHgeo(readFileSync(process.argv[2], "utf-8")) as unknown as Record<string, unknown>;
-console.log(JSON.stringify({ margins: d.margins ?? null, interfaces: d.interfaces, soils: d.soils, assign: d.assign, h: d.h }));
+console.log(JSON.stringify({ margins: d.margins ?? null, interfaces: d.interfaces, soils: d.soils, assign: d.assign, h: d.h, stages: d.stages }));

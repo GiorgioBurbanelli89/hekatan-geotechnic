@@ -1,0 +1,62 @@
+[
+ {
+  "caso": "a1_acads_1a",
+  "h": 1.6,
+  "nudos": 1169,
+  "t6": 546,
+  "FS": 1,
+  "cota_sup": 1.0127,
+  "srf1_converge": true,
+  "s": 2
+ },
+ {
+  "caso": "a1_acads_1a",
+  "h": 0.8,
+  "nudos": 4415,
+  "t6": 2130,
+  "FS": 0.729,
+  "cota_sup": 0.81,
+  "srf1_converge": false,
+  "s": 41
+ },
+ {
+  "caso": "a1_acads_1a",
+  "h": 0.4,
+  "nudos": 17462,
+  "t6": 8577,
+  "FS": 0.81,
+  "cota_sup": 0.9,
+  "srf1_converge": false,
+  "s": 786
+ },
+ {
+  "caso": "a2_acads_1b",
+  "h": 1.6,
+  "nudos": 1306,
+  "t6": 609,
+  "FS": 1.1996,
+  "cota_sup": 1.2148,
+  "srf1_converge": true,
+  "s": 3
+ },
+ {
+  "caso": "a2_acads_1b",
+  "h": 0.8,
+  "nudos": 4581,
+  "t6": 2208,
+  "FS": 1.0256,
+  "cota_sup": 1.0386,
+  "srf1_converge": true,
+  "s": 15
+ },
+ {
+  "caso": "a2_acads_1b",
+  "h": 0.4,
+  "nudos": 17525,
+  "t6": 8604,
+  "FS": 0.6561,
+  "cota_sup": 0.729,
+  "srf1_converge": false,
+  "s": 670
+ }
+]

@@ -1,0 +1,6 @@
+SRM desde cero · wasm · 4961 nudos, 2400 T6
+SRM rs00 paso=1.0000 SRF=1.0000 DIVERGE it=116
+SRM rs01 paso=0.9000 SRF=0.9000 DIVERGE it=4 (FS < 1)
+SRM rs02 paso=0.9000 SRF=0.8100 CONVERGE it=6 (FS < 1)
+peso propio            >>> FS=0.8100  (sin referencia GEO5)  [47.7 s]
+FS = 0.8100  (48 s)

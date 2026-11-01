@@ -64,5 +64,57 @@
   "dif_misma_malla": 0.3439,
   "dif_malla_propia_pct": 52.42,
   "nota": "GEO5: SRF 1 no converge -> busca hacia abajo (÷0.9) -> FS 0.6561 «LESS THAN 1» (Error 7). Geotechnic no tiene esa rama: informa 1.0"
+ },
+ {
+  "caso": "a2_acads_1b",
+  "hgeo": "tests/validacion/casos/a2_acads_1b.hgeo",
+  "modelo": "mc",
+  "malla_comun": "4961 nudos, 2400 T6 (nx 60, nz 20)",
+  "FS_GEO5": 0.9,
+  "rc_geo5": 0,
+  "s_geo5": 9,
+  "FS_geotechnic_misma_malla": 1.0,
+  "FS_geotechnic_malla_propia": null,
+  "malla_propia": null,
+  "dif_misma_malla": 0.1
+ },
+ {
+  "caso": "g2_slope64_ex2",
+  "hgeo": "tests/validacion/casos/g2_slope64_ex2.hgeo",
+  "modelo": "mc",
+  "malla_comun": "4961 nudos, 2400 T6 (nx 60, nz 20)",
+  "FS_GEO5": 0.81,
+  "rc_geo5": 0,
+  "s_geo5": 11,
+  "FS_geotechnic_misma_malla": 0.81,
+  "FS_geotechnic_malla_propia": null,
+  "malla_propia": null,
+  "dif_misma_malla": 0.0
+ },
+ {
+  "caso": "g4_slope64_ex7_rho-",
+  "hgeo": "tests/validacion/casos/g4_slope64_ex7.hgeo",
+  "modelo": "mc",
+  "malla_comun": "4961 nudos, 2400 T6 (nx 60, nz 20)",
+  "FS_GEO5": 1.139601,
+  "rc_geo5": 0,
+  "s_geo5": 27,
+  "FS_geotechnic_misma_malla": 0.4305,
+  "FS_geotechnic_malla_propia": null,
+  "malla_propia": null,
+  "dif_misma_malla": -0.7091
+ },
+ {
+  "caso": "g4_slope64_ex7_rho",
+  "hgeo": "tests/validacion/casos/g4_slope64_ex7.hgeo",
+  "modelo": "mc",
+  "malla_comun": "4961 nudos, 2400 T6 (nx 60, nz 20)",
+  "FS_GEO5": 0.3486784,
+  "rc_geo5": 0,
+  "s_geo5": 65,
+  "FS_geotechnic_misma_malla": 0.4305,
+  "FS_geotechnic_malla_propia": null,
+  "malla_propia": null,
+  "dif_misma_malla": 0.0818
  }
 ]

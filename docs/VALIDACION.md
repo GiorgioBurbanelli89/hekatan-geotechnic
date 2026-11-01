@@ -33,17 +33,21 @@ como prueba de que el FS del muro sea físicamente 1.36 (registros/2026-11-01_ge
 - **Los tipos de talud contra GEO5**: solo dos geometrías (simple y berma, un suelo DP) con el solver real (§5.2, 🟢). Los
   demás tipos (dos_pendientes, curvo, terraplen, cuneta y los nuevos angulo/tramos/puntos que otro agente está escribiendo
   ahora mismo en `src/model/taludes.ts`, sin commit) **nada**. Son geometría (la física es la misma), pero no hay número.
-- **FS < 1**: GEO5, si el peldaño SRF 1 no converge, **busca hacia abajo** (÷0.9) y da p. ej. 0.6561 «SAFETY FACTOR IS LESS THAN 1»
-  (§5.2, ACADS EX1(a)). **Geotechnic no tiene esa rama: informa FS = 1.0000**, que no es un FS sino «≤ 1 o no converge». 🔴
+- **FS < 1** (resuelto 2-nov): como GEO5, si SRF 1 no converge la resistencia se aumenta ×1/0.9 por intento hasta el primero que
+  converge. ACADS EX1(a) con la malla de GEO5: **0.6561 = GEO5 0.656100** (TS y WASM, mismos 4 intentos). La app dice «FS < 1: inestable (0.6561)». 🟢
 - **Mohr-Coulomb con φ = 0 (no drenado)**: slope64 Ex3 −28 %; homogéneo cu 50: 1.04 (MC) contra 1.58 (DP). **GEO5 tampoco lo
-  resuelve**: con la misma malla aborta en `R_mob_MohrCoulomb()` (§5.2). Fuera del alcance de los dos. 🔴
+  resuelve**: con la misma malla aborta en `R_mob_MohrCoulomb()` (§5.2). **FUERA DE ALCANCE** (de los dos); la app avisa si φ < 1°. 🔴
 - **Mohr-Coulomb y la malla**: con la malla estructurada del generador (columnas, T6 alargados en la cara) slope64 Ex1 da
   1.1111 en GEO5 **y** en Geotechnic (iguales), y 1.5242 con la malla propia (publicado 1.56). El FS de la escalera de GEO5 con MC
   depende mucho de la malla: GEO5 declara «diverging» en 3 iteraciones cuando |gi| crece (η = 0.1). 🟡
-- **Taludes de varias capas**: ACADS EX1(b) −24.5 % (FS 1.0256 contra 1.359); slope64 Ex2 −6.6 %. Medido que NO es la asignación
-  de suelos ni la c = 0 de la capa 1 (con c 0.5/2/5/10: 1.00/1.03/1.08/1.11). Sin GEO5 de varias capas aún (el generador es de un suelo). 🔴
-- **Sismo seudoestático en taludes** (FS con kh): slope64 Ex7 y ACADS EX1(c): SRF 1 no converge (73 y 10 iteraciones) → «1.0»;
-  publicados 1.41 y 1.039. La CARGA kh·γ sí está verificada contra Abaqus (#8); lo que falla es la SRM con kh. 🔴
+- **Taludes de varias capas**: ACADS EX1(b) −24.5 % (FS 1.0256 contra 1.359); slope64 Ex2 −6.6 %. **El solver no es la causa**: con la
+  MISMA malla GEO5 real y Geotechnic dan lo mismo (EX1(b) 0.9000 = 0.900000, iteración a iteración; Ex2 0.8100 = 0.810000, §5.2). La causa es
+  del MÉTODO (escalera de GEO5 + MC con ψ = 0, no asociado) y de la MALLA (§5.4): con ψ = φ (flujo asociado, lo que supone FELA) EX1(b)
+  sube de 1.0256 a 1.2148. 🟡 (= GEO5; lejos del publicado)
+- **Sismo seudoestático en taludes** (FS con kh): slope64 Ex7 y ACADS EX1(c): SRF 1 no converge; publicados 1.41 y 1.039. **GEO5 hace
+  lo mismo** con la misma malla y su `pseudo_earthquake` (§5.2): hacia el pie GEO5 0.3487 y Geotechnic 0.4305 (los dos FS < 1); hacia la
+  corona GEO5 1.139601 = Geotechnic 1.1396. No es la carga (ni «por etapas»: GEO5 la aplica de golpe y coincide). Es la SRM de GEO5 con kh
+  en todo el dominio. La app avisa. 🔴 (= GEO5; lejos del publicado)
 - **Agua / presión de poros**: solo el talud de #10 (GEO5 leído en la interfaz, malla distinta). slope64 Ex4-Ex6 (freático,
   sumergido, desembalse: 1.27 / 1.83 / 1.03) **sin correr**; Ru y poros sin benchmark.
 - **Interfaces / contactos suelo-estructura**: no existen (GEO5 *Contacts*): el muro va pegado.
@@ -133,10 +137,10 @@ slope64 usa Q8 de integración reducida y otro criterio de FS; la geometría est
 | slope64 Ex1 (φ 30, c 5) | 1.56 | 1.5242 [1.5435] | −2.3 % | 5338 / 2593 | 🟢 |
 | slope64 Ex2 (capa débil, 2 suelos) | 1.22 | 1.1396 [1.1540] | −6.6 % | 5500 / 2673 | 🔴 |
 | slope64 Ex3 (no drenado φ 0) | 2.00 | 1.4439 [1.4622] | −27.8 % | 4660 / 2253 | 🔴 |
-| slope64 Ex7 (kh 0.25) | 1.41 | SRF 1 no converge (73 it) → «1.0» | — | 6129 / 2968 | 🔴 |
-| ACADS EX1(a) (c 3, φ 19.6) | 1.000 (FELA 0.981 ± 0.003) | SRF 1 no converge (166 it) → «1.0» | coherente con FS < 1 | 4415 / 2130 | 🟡 |
+| slope64 Ex7 (kh 0.25) | 1.41 | SRF 1 no converge (73 it); hacia abajo tampoco hasta 0.9^20 → «< 1 ✖ falla» | — | 6129 / 2968 | 🔴 |
+| ACADS EX1(a) (c 3, φ 19.6) | 1.000 (FELA 0.981 ± 0.003) | SRF 1 no converge (166 it) → **0.7290** [0.81] (rama FS < 1) | −25.7 % | 4415 / 2130 | 🔴 |
 | ACADS EX1(b) (3 suelos) | 1.359 (Spencer 1.375) | 1.0256 [1.0386] | −24.5 % | 4581 / 2208 | 🔴 |
-| ACADS EX1(c) (EX1(b) + 0.15 g) | 1.039 | SRF 1 no converge (10 it) → «1.0» | — | 4581 / 2208 | 🔴 |
+| ACADS EX1(c) (EX1(b) + 0.15 g) | 1.039 | SRF 1 no converge (10 it); hacia abajo tampoco → «< 1 ✖ falla» | — | 4581 / 2208 | 🔴 |
 
 Comparación de control (no es benchmark, misma geometría): con **Drucker-Prager** en vez de MC, slope64 Ex1 da 1.6044 (+2.8 %) y
 Ex3 2.1715 (+8.6 %); homogéneo cu 50 (geometría de Ex3): DP 1.5830, MC 1.0386 (TS = WASM).
@@ -154,11 +158,21 @@ el solver 2024 exige y el generador no escribía (`debug_section`, **caras `face
 | **simple** (H 6.5, β 33°, φ 28, c 12) | DP | 3003 nudos, 1440 T6 | **2.117217** | **2.1172** | 0.0000 | 2.1715 (847 T6) | +2.6 % | 🟢 / 🟡 |
 | **berma** (3 caras de 3 m a 33°, 2 bermas de 3 m) | DP | 3003 / 1440 | **2.445323** | **2.4453** | 0.0000 | 2.4453 (876 T6) | 0.0 % | 🟢 |
 | slope64 Ex1 | MC | 4961 / 2400 | 1.111111 | 1.1111 | 0.0000 | 1.5242 | (malla) | 🟢 solver / 🟡 malla |
-| ACADS EX1(a) | MC | 4961 / 2400 | **0.6561** («LESS THAN 1», Error 7) | «1.0» (SRF 1 no converge) | falta la rama FS < 1 | «1.0» | — | 🔴 |
+| ACADS EX1(a) | MC | 4961 / 2400 | **0.656100** («LESS THAN 1», Error 7) | **0.6561** (rama FS < 1, 2-nov) | 0.0000 | 0.7290 | — | 🟢 solver / 🔴 publicado |
+| **ACADS EX1(b), 3 suelos** | MC | 4961 / 2400 | **0.900000** («LESS THAN 1») | **0.9000**; peldaño 0.9 iteración a iteración igual (η, \|gi\|, 10 it) | 0.0000 | 1.0256 | — | 🟢 solver / 🔴 publicado |
+| **slope64 Ex2, 2 suelos** | MC | 4961 / 2400 | **0.810000** | **0.8100** | 0.0000 | 1.1396 | — | 🟢 solver / 🟡 publicado |
+| slope64 Ex7, fuerza kh·γ hacia la corona (+x) | MC | 4961 / 2400 | **1.139601** | **1.1396** | 0.0000 | — | — | 🟢 solver |
+| slope64 Ex7, kh 0.25 hacia el pie (−x) | MC | 4961 / 2400 | 0.3487 (SRF 1 no converge) | 0.4305 (SRF 1 no converge) | otro peldaño de la búsqueda hacia abajo | 0.5314 (h 1.6) | — | 🟡 solver / 🔴 publicado |
 | homogéneo cu 50 (geometría Ex3) | MC φ 0 | 4961 / 2400 | **aborta**: `Error in function R_mob_MohrCoulomb(). Element #1` | «1.0» | — | 1.0386 | — | 🔴 (los dos) |
 
 Los dos tipos de talud pedidos (simple y berma) dan **el mismo FS que el solver real de GEO5 a 4 decimales con la misma malla**.
 Con la malla propia, simple +2.6 % (fuera de ±2 %) y berma 0.0 %.
+
+**Varios suelos** (2-nov): el generador asigna a cada T6 el suelo que Geotechnic pone en su centroide (`material_en_puntos.ts`) y escribe
+`material_types` / `materials` / `gravity` por suelo con la sintaxis de un InputFile real de dos suelos. **Sismo**: la línea que escribe la GUI
+(GeoFEM_5.dll 2024) `pseudo_earthquake rho=%s kh=%s kv=%s elements=[…]`; medido que la fuerza en x es rho·kh (rho = −γ como en `gravity`,
+kh = −0.25 → empuja a +x: por eso la fila «hacia la corona»). Comandos:
+`python tests/validacion/geo5_vs_geotechnic.py tests/validacion/casos/a2_acads_1b.hgeo --nx 60 --nz 20 --sin-propia` (ídem g2; g4 con `KH_RHO=` / `KH_RHO=-`).
 
 ### 5.2b Tercer juez: Abaqus/Standard 2017 con la MISMA malla (GEO5 | Geotechnic | Abaqus)
 `python tests/validacion_abaqus/abaqus_srm.py simple berma g1_slope64_ex1` y `… a1_acads_1a --s0 0.5 --s1 2` →
@@ -197,17 +211,44 @@ SRM en rampa s0 → 3 (ΔSRF ≤ 0.005, mínimo 2e-4). **FS Abaqus = último SRF
 | SRM MC (slope64 Ex1, ACADS EX1(a)), misma malla | Abaqus *FIELD | 🔴 no concluyente (para sin mecanismo) |
 | Material DP punto a punto | GEO5 nativo / OpenSees | 🟢 |
 | FS con malla propia, un suelo φ > 0 | GEO5 / slope64 / G&L | 🟡 (−3.6 … +2.6 %) |
-| FS < 1 | GEO5 (busca hacia abajo) | 🔴 falta la rama |
-| Varias capas | slope64 Ex2, ACADS EX1(b) | 🔴 (−6.6 %, −24.5 %) |
-| φ = 0 no drenado | slope64 Ex3; GEO5 aborta | 🔴 |
-| SRM con sismo kh | slope64 Ex7, ACADS EX1(c) | 🔴 |
+| FS < 1 (búsqueda hacia abajo) | GEO5 real, ACADS EX1(a) 0.6561 | 🟢 (2-nov) |
+| Varias capas: el SOLVER | GEO5 real misma malla: EX1(b) 0.9 = 0.9, Ex2 0.81 = 0.81 | 🟢 |
+| Varias capas: contra el PUBLICADO | slope64 Ex2, ACADS EX1(b) | 🔴 (−6.6 %, −24.5 %; GEO5 igual o peor: es el método + malla, §5.4) |
+| φ = 0 no drenado | slope64 Ex3; GEO5 aborta | 🔴 fuera de alcance (aviso en la app) |
+| SRM con sismo kh: el SOLVER | GEO5 real misma malla (Ex7): +x 1.1396 = 1.1396; −x los dos < 1 | 🟡 |
+| SRM con sismo kh: contra el PUBLICADO | slope64 Ex7, ACADS EX1(c) | 🔴 (criterio de 100 it de GEO5, §5.4; aviso en la app) |
 | Agua en SRM | GEO5 (interfaz, 1 caso) | 🟡 / sin benchmark |
 | Tipos dos_pendientes, curvo, terraplen, cuneta (y los nuevos) | — | 🔴 sin probar |
 | Interfaces, 3D, no lineal dinámico | — | 🔴 no existen / sin probar |
 
-**Siguiente paso de mayor rendimiento**: (1) rama FS < 1 como GEO5 (`Searching for stable parameters`); (2) generador de InputFile de
-varias capas (asignar `materials` por región) para correr ACADS EX1(b) y slope64 Ex2 en GEO5 y saber si el −24 % es de Geotechnic o
-del algoritmo de GEO5; (3) sismo en SRM: aplicar kh por pasos; (4) estudio de malla.
+**Hecho el 2-nov**: (1) rama FS < 1; (2) GEO5 de varias capas → el −24 % es del algoritmo (GEO5 da lo mismo); (3) sismo: GEO5 da lo
+mismo, no hace falta «por pasos»; (4) estudio de malla (§5.4). **Siguiente**: ψ y criterio de iteraciones como OPCIÓN visible («modo GEO5» /
+«modo convergido»), y un estudio de malla automático en la app (FS con h y h/2).
+
+### 5.4 Efecto de la malla y del método (2-nov-2026)
+
+`npx tsx tests/validacion/estudio_malla.ts tests/validacion/casos/a1_acads_1a.hgeo 1.6,0.8,0.4 tests/validacion/casos/a2_acads_1b.hgeo 1.6,0.8,0.4`
+→ `tests/validacion/estudio_malla.json` (malla propia uniforme, WASM, MC ψ = 0, escalera de GEO5).
+
+| caso (exacto FELA) | h = 1.6 m | h = 0.8 m | h = 0.4 m | ψ = φ (asociado) h 1.6 / 0.8 / 0.4 |
+|---|---|---|---|---|
+| ACADS EX1(a) (0.981; OptumG2 1.000) | 1.0000 (546 T6) | 0.7290 (2130) | 0.8100 (8577) | 1.0127 / 0.9000 / — |
+| ACADS EX1(b) (1.359) | 1.1996 (609) | 1.0256 (2208) | 0.6561 (8604) | 1.2303 / 1.2148 / 1.1996 |
+
+Lo medido:
+1. **No hay convergencia de malla**: al afinar, el FS de la escalera de GEO5 con MC y ψ = 0 BAJA (EX1(b) 1.20 → 1.03 → 0.66) en vez de
+   estabilizarse. Al afinar, la banda de corte se localiza y el criterio de GEO5 (máx. 100 iteraciones; «diverge» si |gi| crece 2 veces
+   seguidas) corta antes. GEO5 con su solver real hace lo mismo con la misma malla (§5.2), así que **es el método, no Geotechnic**.
+2. **ψ = 0 (no asociado) explica gran parte**: con ψ = φ (la hipótesis de FELA/límite) EX1(b) pasa de 1.0256 a 1.2148 (h 0.8) y la
+   dependencia de la malla casi desaparece (1.2303 / 1.2148 / 1.1996, −12 % del exacto: el resto es el criterio de la escalera).
+3. **El criterio de iteraciones explica el sismo**: slope64 Ex7 (kh 0.25, h 1.6) con 500 iteraciones y sin corte por divergencia (copia
+   del solver, no publicada) SRF 1 converge en 352 it y FS = 1.2090 (publicado 1.41); con el criterio de GEO5, SRF 1 no converge (0.5314).
+   En EX1(b) h 1.6 relajar el criterio no cambia nada (1.1996 = 1.1996).
+
+**Criterio de aceptación honesto** (sustituye al ±3 % para estos casos): el FS de la escalera de GEO5 con MC no asociado solo vale si
+(a) un refinamiento h → h/2 lo cambia < 2 % (un peldaño de la escalera ≈ 1.3 %) y (b) con ψ = φ no sube más de un 5 %. Si no se cumple
+(EX1(a), EX1(b), Ex7 con kh), el FS es una cota inferior dependiente de la malla y hay que compararlo con equilibrio límite.
+Con un suelo y c > 0 (slope64 Ex1, G&L) el FS queda a −2.3 % / −3.6 % del publicado, pero su estudio h → h/2 no está hecho aún.
 
 ## 6. Fuentes (abiertas y leídas)
 
@@ -220,4 +261,6 @@ del algoritmo de GEO5; (3) sismo en SRM: aplicar kh por pasos; (4) estudio de ma
   «LE (Spencer) 1.375»; EX1(c) «horizontal seismically induced acceleration of 0.15g» «Exact 1.039 ± 0.004». Geometría leída de sus figuras 1 y 3.
 - Rocscience/Phase2, *Application of the Finite Element Method to Slope Stability*, `http://dvgriffiths.mines.edu/Proprietary_Codes/Rocscience.pdf`:
   «The benchmark example considers a homogenous slope without foundation» · «100000 0.3 20 20 10» (E ν γ φ c) · Tabla 2 «Bishop Griffiths … 1.38 1.4».
+- **Discrepancia de datos en ACADS EX1(b)/(c)**: la tabla 3 de OptumG2 da Soil #3 = c 3.0, φ 19.6, γ 20 (igual que la tabla 1); numgeo (y Slide)
+  dan c 7.2, φ 20, γ 19.5. Medido en Geotechnic (h 0.8): 1.0256 con la de OptumG2, 1.0653 con la de numgeo: no explica el −24 %.
 - numgeo, ACADS 1 (1989) `https://j-machacek.github.io/numgeo/2026-09/benchmark/strength-reduction/acads-1-1989.html` (EX1(b): RS2 1.34, Spencer 1.375; consultado, no usado).

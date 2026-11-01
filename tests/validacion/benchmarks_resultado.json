@@ -5,14 +5,14 @@
   "t6": 2130,
   "srf1_converge": false,
   "it_srf1": 166,
-  "FS": 1,
-  "cota_sup": 1.0127,
-  "FS_medio": 1.0063,
+  "FS": 0.729,
+  "cota_sup": 0.81,
+  "FS_medio": 0.7695,
   "publicado": 1,
   "fuente": "ACADS EX1(a) Giam & Donald (FELA exacto 0.981)",
-  "dif_pct": 0,
-  "dif_medio_pct": 0.63,
-  "s": 22
+  "dif_pct": -27.1,
+  "dif_medio_pct": -23.05,
+  "s": 42
  },
  {
   "caso": "a2_acads_1b",
@@ -27,7 +27,7 @@
   "fuente": "ACADS EX1(b) FELA OptumG2 (Spencer 1.375)",
   "dif_pct": -24.53,
   "dif_medio_pct": -24.05,
-  "s": 7
+  "s": 14
  },
  {
   "caso": "a3_acads_1c",
@@ -35,14 +35,14 @@
   "t6": 2208,
   "srf1_converge": false,
   "it_srf1": 10,
-  "FS": 1,
-  "cota_sup": 1.0127,
-  "FS_medio": 1.0063,
+  "FS": 0.1216,
+  "cota_sup": 0.1216,
+  "FS_medio": 0.1216,
   "publicado": 1.039,
   "fuente": "ACADS EX1(c) FELA OptumG2 (kh 0.15)",
-  "dif_pct": -3.75,
-  "dif_medio_pct": -3.14,
-  "s": 9
+  "dif_pct": -88.3,
+  "dif_medio_pct": -88.3,
+  "s": 28
  },
  {
   "caso": "g0_griffiths_lane_ex1",
@@ -57,7 +57,7 @@
   "fuente": "Griffiths & Lane 1999 ej.1 via Rocscience (Bishop 1.38); H=10 supuesto",
   "dif_pct": -3.59,
   "dif_medio_pct": -2.98,
-  "s": 7
+  "s": 14
  },
  {
   "caso": "g1_slope64_ex1",
@@ -72,7 +72,7 @@
   "fuente": "slope64 manual, Example 1",
   "dif_pct": -2.3,
   "dif_medio_pct": -1.68,
-  "s": 24
+  "s": 52
  },
  {
   "caso": "g2_slope64_ex2",
@@ -87,7 +87,7 @@
   "fuente": "slope64 manual, Example 2",
   "dif_pct": -6.59,
   "dif_medio_pct": -6,
-  "s": 20
+  "s": 41
  },
  {
   "caso": "g3_slope64_ex3",
@@ -102,7 +102,7 @@
   "fuente": "slope64 manual, Example 3",
   "dif_pct": -27.8,
   "dif_medio_pct": -27.35,
-  "s": 10
+  "s": 22
  },
  {
   "caso": "g4_slope64_ex7",
@@ -110,13 +110,13 @@
   "t6": 2968,
   "srf1_converge": false,
   "it_srf1": 73,
-  "FS": 1,
-  "cota_sup": 1.0127,
-  "FS_medio": 1.0063,
+  "FS": 0.1216,
+  "cota_sup": 0.1216,
+  "FS_medio": 0.1216,
   "publicado": 1.41,
   "fuente": "slope64 manual, Example 7 (kh 0.25)",
-  "dif_pct": -29.08,
-  "dif_medio_pct": -28.63,
-  "s": 25
+  "dif_pct": -91.38,
+  "dif_medio_pct": -91.38,
+  "s": 64
  }
 ]
