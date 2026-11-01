@@ -13,8 +13,8 @@ import TALUD_GWT_HGEO from "../examples/talud_gwt.hgeo?raw";
 import TALUD_RU_HGEO from "../examples/talud_ru.hgeo?raw";
 import TALUD_POROS_HGEO from "../examples/talud_poros_paralelo_gwt.hgeo?raw";
 import MANABI_MURO_HGEO from "../examples/muro_manabi.hgeo?raw";
-import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, MURO_HGEO, MANABI_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims, effectiveTerrain } from "./model/dsl";
-import { TIPOS, ORDEN_TIPOS, generarTalud, paramsPorDefecto, paramsVisibles } from "./model/taludes";
+import { parseHgeo, serializeHgeo, terrainFromParam, remapearAlTerreno, DEMO04_HGEO, MURO_HGEO, MANABI_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims, effectiveTerrain } from "./model/dsl";
+import { VARIANTES, ORDEN_VARIANTES, terrenoTalud, baseGeom, paramsVariante, paramsVisibles, tramosDeTexto, tramosATexto, varianteATexto } from "./model/taludes";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
 import { criticalCircle, LemMethod } from "./lem/slices";
@@ -104,61 +104,123 @@ function buildGeomSliders() {
     const nota = document.createElement("div"); nota.className = "mats"; nota.textContent = "malla exacta de GEO5: al mover un slider de geometría se pasa al mismo talud con malla propia (.hgeo)"; g.appendChild(nota);
     return;
   }
-  if (def.taludTipo) { buildTipoSelector(g); buildTipoSliders(g, def); buildLayerSliders(g); buildWallSliders(g); buildLoadSliders(g); return; }
   if (!def.param) { buildDrawnSliders(g); buildLayerSliders(g); buildWallSliders(g); buildLoadSliders(g); return; }
   buildTipoSelector(g);
+  buildVarianteSliders(g, def);
+  cabecera(g, "talud base (por ángulo y altura)");
   buildParamSliders(g, def.param, () => def);
   buildLayerSliders(g);
   buildWallSliders(g);
   buildLoadSliders(g);
 }
-/** TIPOS DE TALUD (src/model/taludes.ts): GEO5 solo tiene una forma de definir el talud; aquí cada tipo trae SU parametrización y cambiar de tipo
- *  cambia solo la forma del terreno (el resto del modelo —suelos, etapas, muros, cargas— queda como está). */
+const cabecera = (g: HTMLElement, t: string) => { const h = document.createElement("div"); h.className = "sl"; h.style.display = "block"; h.style.color = "var(--oro)"; h.style.fontWeight = "600"; h.style.marginTop = "6px"; h.textContent = t; g.appendChild(h); };
+/** terreno = talud base (`param`) + variante; se redibuja en vivo (fantasma del base en gris) y se remalla al soltar */
+function rehacerTerreno(d: SlopeDef) { d.interfaces[0] = terrenoTalud(d.param!, d.variante, d.margins!.xmin, d.margins!.xmax); }
+function fantasma(d: SlopeDef | null) { draw.ghost = d?.param && d.variante && d.variante.id !== "clasico" && d.margins ? terrainFromParam(d.param, d.margins.xmin, d.margins.xmax) : null; }
+// FS por talud: firma de la línea `talud …` (+ estratos y suelos) → FS por etapa. La tabla compara la variante con SU talud base.
+const fsMemo = new Map<string, number[]>();
+const firmaBase = (d: SlopeDef) => { const q = d.param!; return [q.xpie, q.zpie, q.H, q.beta, q.corona, q.zfin, q.beta2, q.bermas ?? 0, q.berma ?? 0].map((v) => +v.toFixed(3)).join(",") + "|" + d.interfaces.slice(1).map((it) => it.map((p) => p.join(",")).join(" ")).join("|") + "|" + d.soils.map((s) => [s.phi, s.c, s.gamma].join(",")).join(";") + "|" + d.stages.map((st) => st.surcharges.map((q) => q.q).join(",") + "/" + st.anchors.map((a) => a.F).join(",")).join(";"); };
+const firma = (d: SlopeDef) => firmaBase(d) + "#" + varianteATexto(d.variante);
+/** TIPOS = VARIANTES DEL MISMO TALUD (src/model/taludes.ts): el talud base no cambia; cada tipo lo modifica (berma insertada, dos
+ *  pendientes, cara curva, relleno, cuneta, por tramos, por puntos). Pie, cresta, H, estratos, agua y cargas se conservan. */
 function buildTipoSelector(g: HTMLDivElement) {
-  const d = def; if (!d) return;
-  const actual = d.taludTipo?.id ?? "clasico";
+  const d = def; if (!d?.param) return;
+  const actual = d.variante?.id ?? "clasico";
   const row = document.createElement("div"); row.className = "sl";
-  row.innerHTML = `<span class="n">tipo de talud</span><select id="tipoTalud" style="flex:1;min-width:0">` +
-    `<option value="clasico">Clásico GEO5 (corona, contratalud, bermas)</option>` + ORDEN_TIPOS.map((id) => `<option value="${id}" title="${TIPOS[id].descripcion}">${TIPOS[id].nombre}</option>`).join("") + `</select>`;
+  row.innerHTML = `<span class="n">tipo (variante del talud)</span><select id="tipoTalud" style="flex:1;min-width:0">` +
+    ORDEN_VARIANTES.map((id) => `<option value="${id}" title="${VARIANTES[id].descripcion}">${VARIANTES[id].nombre}</option>`).join("") + `</select>`;
   g.appendChild(row);
   const sel = row.querySelector("select") as HTMLSelectElement; sel.value = actual;
   sel.addEventListener("change", () => cambiarTipoTalud(sel.value));
   const nota = document.createElement("div"); nota.className = "mats"; nota.id = "tipoNota";
-  nota.textContent = d.taludTipo ? TIPOS[d.taludTipo.id].descripcion : "talud de GEO5: pie plano → cara a β → corona → contratalud β₂ → plano";
+  nota.textContent = `${VARIANTES[actual].descripcion} · conserva: ${VARIANTES[actual].conserva}`;
   g.appendChild(nota);
+  const tab = document.createElement("div"); tab.id = "varTabla"; tab.className = "mats"; g.appendChild(tab); tablaVariante();
+  const fila = document.createElement("div"); fila.className = "sl";
+  fila.innerHTML = `<button id="varDxf" class="tb" style="width:100%" title="toma SOLO la capa del terreno del DXF; estratos, suelos, agua y cargas quedan">perfil desde DXF…</button><input type="file" id="varDxfFile" accept=".dxf" hidden>`;
+  g.appendChild(fila);
+  const fi = fila.querySelector<HTMLInputElement>("#varDxfFile")!;
+  fila.querySelector<HTMLButtonElement>("#varDxf")!.onclick = () => fi.click();
+  fi.onchange = async () => { const f = fi.files?.[0]; if (f) perfilDesdeDxf(await f.text(), f.name); fi.value = ""; };
+}
+/** IMPORTAR DXF como REEMPLAZO DEL PERFIL: solo la capa del terreno (rol «terreno» propuesto por capasDeDxf) pasa a la variante «por
+ *  puntos»; estratos, suelos, asignación, agua, cargas y márgenes del modelo se quedan (las asignaciones se re-mapean). */
+function perfilDesdeDxf(texto: string, nombre: string) {
+  const d = def; if (!d?.param || !d.margins) { dStatus.textContent = "el perfil DXF se aplica sobre un talud paramétrico (`talud …`)"; return; }
+  try {
+    const ents = parseDxf(texto), capas = capasDeDxf(ents); if (!capas.some((c) => c.rol === "terreno")) throw new Error("el DXF no tiene una capa de terreno reconocible");
+    const terr = dxfADef(ents, capas, nombre).def.interfaces[0];
+    const antes = d.interfaces[0].map((p) => [p[0], p[1]] as [number, number]);
+    d.variante = { id: "puntos", p: {}, pts: spanInterface(terr, d.margins.xmin, d.margins.xmax), origen: "DXF " + nombre };
+    rehacerTerreno(d); const av = remapearAlTerreno(d, antes);
+    for (const st of d.stages) delete st.geo5;
+    dStatus.textContent = `perfil del DXF «${nombre}» (${terr.length} puntos) sobre el mismo modelo` + (av.length ? " · " + av.join(" · ") : "");
+    applyDef(d, false, [visibleStage()]);
+  } catch (e) { dStatus.textContent = "✖ " + (e as Error).message; }
+}
+(window as unknown as { __perfilDxf: (t: string, n?: string) => void }).__perfilDxf = (t, n = "perfil") => perfilDesdeDxf(t, n);
+(window as unknown as { __talud: () => unknown }).__talud = () => (def?.param ? { param: { ...def.param }, variante: def.variante ? JSON.parse(JSON.stringify(def.variante)) : null, terreno: def.interfaces[0].map((p) => [p[0], p[1]]), interfaces: def.interfaces.slice(1), assign: def.assign.map((a) => ({ soil: a.soil, p: [...a.p] })), base: def.margins ? terrainFromParam(def.param, def.margins.xmin, def.margins.xmax) : null, ghost: draw.ghost } : null);
+/** tabla: lo que se conserva del base (H, x pie, x cresta) + parámetros de la variante + FS base vs variante (etapa visible) */
+function tablaVariante() {
+  const el = document.getElementById("varTabla"), d = def; if (!el || !d?.param || !d.margins) return;
+  const b = baseGeom(d.param, d.margins.xmin, d.margins.xmax), v = d.variante, f = (x: number) => (Math.round(x * 100) / 100).toString();
+  const si = visibleStage(), fb = fsMemo.get(firmaBase(d) + "#")?.[si], hayVar = !!v && v.id !== "clasico", fv = hayVar ? fsMemo.get(firma(d))?.[si] : fb;
+  const pv = v && hayVar ? (v.id === "puntos" ? `${v.pts?.length ?? 0} puntos${v.origen ? " (" + v.origen + ")" : ""}` : v.id === "tramos" ? tramosATexto(v.tramos ?? []) : paramsVisibles(v.id, v.p).map((q) => `${q.key}=${f(v.p[q.key])}`).join(" · ")) : "—";
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;padding-right:6px">base</th><td>H=${f(b.H)} m · x pie=${f(b.pie[0])} · x cresta=${f(b.cresta[0])} · β=${f(d.param.beta)}°</td></tr>` +
+    `<tr><th style="text-align:left">variante</th><td>${VARIANTES[v?.id ?? "clasico"].nombre}: ${pv}</td></tr>` +
+    `<tr><th style="text-align:left">FS et. ${si + 1}</th><td id="varFs">base ${fb !== undefined ? fb.toFixed(4) : "—"} · variante ${fv !== undefined ? fv.toFixed(4) : "—"}${fb !== undefined && fv !== undefined && hayVar ? ` · Δ ${(100 * (fv / fb - 1)).toFixed(1)} %` : ""}</td></tr></table>`;
 }
 function cambiarTipoTalud(id: string) {
-  const d = def; if (!d || !d.margins) return;
-  const m = d.margins, ant = d.taludTipo ? d.taludTipo.p : d.param ? { xpie: d.param.xpie, zpie: d.param.zpie } : { xpie: 11, zpie: -9 };
-  if (id === "clasico") {
-    delete d.taludTipo; const zp = ant.zpie ?? -9;
-    d.param = { xpie: ant.xpie ?? 11, zpie: zp, H: 6.5, beta: 33, corona: 8.5, zfin: zp + 5, beta2: 28.6 };
-    d.interfaces[0] = terrainFromParam(d.param, m.xmin, m.xmax);
-  } else {
-    delete d.param; d.taludTipo = { id, p: paramsPorDefecto(id, { xpie: ant.xpie ?? 11, zpie: ant.zpie ?? -9 }) };
-    d.interfaces[0] = generarTalud(id, d.taludTipo.p, m.xmin, m.xmax);
-  }
-  for (const st of d.stages) delete st.geo5;   // geometría distinta de la escrita: la referencia GEO5 ya no vale
+  const d = def; if (!d?.margins || !d.param) return;
+  const m = d.margins, antes = d.interfaces[0].map((p) => [p[0], p[1]] as [number, number]), b = baseGeom(d.param, m.xmin, m.xmax);
+  if (id === "clasico") delete d.variante;
+  else if (id === "puntos") d.variante = { id, p: {}, pts: antes.map((p) => [p[0], p[1]] as [number, number]) };
+  else if (id === "tramos") d.variante = { id, p: {}, tramos: [{ ang: Math.min(d.param.beta + 12, 80), dz: Math.round(b.H * 50) / 100 }, { ang: Math.max(d.param.beta - 8, 10), dz: Math.round(b.H * 50) / 100 }] };
+  else d.variante = { id, p: paramsVariante(id, b) };
+  rehacerTerreno(d);
+  const av = remapearAlTerreno(d, antes); dStatus.textContent = av.join(" · ");
+  for (const st of d.stages) delete st.geo5;   // la referencia GEO5 es del talud escrito
   applyDef(d, false, [visibleStage()]);
 }
-/** Sliders del TIPO de talud elegido: solo los parámetros de ese tipo (los que dependen de otro, como la berma 3, aparecen según n). */
-function buildTipoSliders(g: HTMLDivElement, d: SlopeDef) {
-  const t = d.taludTipo!;
-  for (const r of paramsVisibles(t.id, t.p)) {
+/** Parámetros de la variante elegida (sliders con vista previa en vivo sobre el fantasma del base) o, en «puntos» y «tramos», su tabla */
+function buildVarianteSliders(g: HTMLDivElement, d: SlopeDef) {
+  const v = d.variante; if (!v || v.id === "clasico") return;
+  cabecera(g, `variante: ${VARIANTES[v.id].nombre}`);
+  const vivo = () => {
+    const antes = d.interfaces[0].map((p) => [p[0], p[1]] as [number, number]);
+    rehacerTerreno(d); remapearAlTerreno(d, antes);
+    for (const st of d.stages) delete st.geo5;
+    fantasma(d); draw.showGeom = true; draw.setDef(d); draw.render(); tablaVariante();
+    clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
+  };
+  const texto = (idTa: string, val: string, ayuda: string, leer: (t: string) => void) => {
+    const row = document.createElement("div"); row.className = "sl"; row.style.display = "block";
+    row.innerHTML = `<textarea id="${idTa}" rows="6" spellcheck="false" style="width:100%;font:12px Consolas,monospace;background:#151517;color:#e8e8e8;border:1px solid #444;border-radius:4px">${val}</textarea><div class="mats">${ayuda}</div><button id="${idTa}Ok" class="tb">aplicar</button> <span id="${idTa}Msg" class="mats"></span>`;
+    g.appendChild(row);
+    row.querySelector<HTMLButtonElement>(`#${idTa}Ok`)!.onclick = () => {
+      const msg = row.querySelector<HTMLSpanElement>(`#${idTa}Msg`)!;
+      try { leer(row.querySelector<HTMLTextAreaElement>("textarea")!.value); vivo(); draw.showGeom = false; msg.textContent = "✓"; } catch (e) { msg.textContent = "✖ " + (e as Error).message; }
+    };
+  };
+  if (v.id === "puntos") {
+    texto("varPts", (v.pts ?? []).map((p) => `${+p[0].toFixed(3)},${+p[1].toFixed(3)}`).join("\n"), "un punto x,z por línea (de margen a margen). También: herramienta «mover» y arrastrar los vértices del terreno.", (t) => {
+      const pts = t.split(/[\n;]/).map((l) => l.trim()).filter(Boolean).map((l) => { const [x, z] = l.split(/[,\s]+/).map(Number); if (!Number.isFinite(x) || !Number.isFinite(z)) throw new Error(`punto inválido «${l}»`); return [x, z] as [number, number]; });
+      if (pts.length < 2) throw new Error("hacen falta 2 puntos o más"); v.pts = pts; delete v.origen;
+    });
+  } else if (v.id === "tramos") {
+    texto("varTr", (v.tramos ?? []).map((t) => (t.hv !== undefined ? `${t.hv}h/${t.dz}` : `${t.ang}/${t.dz}`)).join("\n"), "un tramo por línea desde el pie: ángulo°/Δz (40/2) o pendiente H:V como nh/Δz (1.5h/2). Lo que falte hasta H cierra recto a la cresta.", (t) => { v.tramos = tramosDeTexto(t); });
+  }
+  const b = baseGeom(d.param!, d.margins!.xmin, d.margins!.xmax);
+  for (const r of paramsVisibles(v.id, v.p)) {
     const row = document.createElement("div"); row.className = "sl";
-    const v0 = t.p[r.key];
-    row.innerHTML = `<span class="n">${r.label}${r.unit ? ` [${r.unit}]` : ""}</span><input type="range" id="gs_${r.key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${v0}"><span class="v" id="gv_${r.key}">${v0}</span>`;
+    const v0 = v.p[r.key], mx = r.maxBase ? Math.min(r.max, r.maxBase(b)) : r.max;
+    row.innerHTML = `<span class="n">${r.label}${r.unit ? ` [${r.unit}]` : ""}</span><input type="range" id="gs_${r.key}" min="${r.min}" max="${mx}" step="${r.step}" value="${v0}"><span class="v" id="gv_${r.key}">${v0}</span>`;
     g.appendChild(row);
     const inp = row.querySelector("input") as HTMLInputElement;
     inp.addEventListener("input", () => {
-      $<HTMLSpanElement>("gv_" + r.key).textContent = inp.value;
-      if (!d.taludTipo) return;
-      geomSliding = true;
-      d.taludTipo.p[r.key] = parseFloat(inp.value);
-      d.interfaces[0] = generarTalud(t.id, d.taludTipo.p, d.margins!.xmin, d.margins!.xmax);
-      for (const st of d.stages) delete st.geo5;
-      draw.showGeom = true; draw.setDef(d); draw.render();
-      clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
+      $<HTMLSpanElement>("gv_" + r.key).textContent = inp.value; geomSliding = true;
+      v.p[r.key] = parseFloat(inp.value); VARIANTES[v.id].ajustar?.(b, v.p, r.key);
+      vivo();
     });
     inp.addEventListener("change", () => { geomSliding = false; draw.showGeom = false; draw.render(); window.setTimeout(buildGeomSliders, 350); });
   }
@@ -187,7 +249,7 @@ function buildParamSliders(g: HTMLDivElement, pm: NonNullable<SlopeDef["param"]>
       const d = ensure(); if (!d?.param) return;
       geomSliding = true;
       d.param[r.key] = parseFloat(inp.value);
-      d.interfaces[0] = terrainFromParam(d.param, d.margins!.xmin, d.margins!.xmax);
+      rehacerTerreno(d); fantasma(d); tablaVariante();
       for (const st of d.stages) delete st.geo5;   // geometría distinta de la escrita: la referencia GEO5 ya no vale
       draw.showGeom = true; draw.setDef(d); draw.render();
       clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
@@ -430,7 +492,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
     dSoil.innerHTML = def.soils.map((s) => `<option value="${s.name}">${s.name}</option>`).join("");
     if (!draw.state.soil || !def.soils.some((s) => s.name === draw.state.soil)) draw.state.soil = def.soils[0]?.name ?? "";
     dSoil.value = draw.state.soil;
-    draw.setDef(def);
+    fantasma(def); draw.setDef(def);
     setBase(m, only);
     pasos.actualizar(def); actualizarMuro(def, visibleStage()); if (selMetodo.value !== "fem") runLem();
   } catch (e) { edMsg.textContent = "✖ " + (e as Error).message; edMsg.style.color = "#e5382b"; }
@@ -563,6 +625,7 @@ function run(idx: number[]) {
     else if (m.type === "engine") appendLog(`(motor: ${m.engine === "wasm" ? "WASM · C++ compilado con emscripten" : "TypeScript"})`);
     else if (m.type === "stage") {
       stages[m.index] = { ...(m.result as Stage), stale: false };
+      if (def?.param && !model?.staged) { const k = firma(def); const a = fsMemo.get(k) ?? []; a[m.index] = (m.result as Stage).fs; fsMemo.set(k, a); tablaVariante(); }
       calcStage();
       fsTable(); buildStageTabs(); if (m.index === visibleStage()) { fillStepSelect(); redraw(); }
     } else if (m.type === "done") { busy = false; calcDone(false); fsTable(); appendLog(`(navegador: ${m.seconds.toFixed(1)} s · ${((performance.now() - t0) / 1000).toFixed(1)} s con el render)`); }

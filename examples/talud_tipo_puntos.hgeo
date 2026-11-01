@@ -1,0 +1,12 @@
+# Talud Demo04 · variante puntos: perfil por puntos (también se arrastran los vértices) (mismo talud base, mismos estratos y cargas)
+margenes xmin=0 xmax=40 fondo=-21.5
+talud xpie=11 zpie=-9 H=6.5 beta=33.024 corona=8.5 zfin=-4 beta2=28.61 tipo=puntos pts=0,-9;11,-9;14,-7.5;17,-6.5;21,-2.5;29.5,-2.5;32.25,-4;40,-4
+interfaz 0,-11.5 14,-11 21,-9.25 40,-9
+suelo SOIL_1 E=130347 nu=0.3 phi=22.7 c=9   gamma=18
+suelo SOIL_2 E=130347 nu=0.2 phi=38   c=120 gamma=20
+asignar SOIL_1 en 20,-6
+asignar SOIL_2 en 20,-16
+malla 2.3
+etapa peso propio
+etapa +sobrecarga  q=35 en 22,-2.5 -> 29,-2.5    # 7 m: medido en la fixture (ΣFy = 245 kN)
+etapa +ancla  F=72 en 16,-5.75 ang=-17   # cabeza del ancla en la cara (medido en la fixture: N del T6)

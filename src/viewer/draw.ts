@@ -25,6 +25,8 @@ export class DrawTools {
   k = 1;
   /** true mientras se arrastra un slider de geometría: render() pinta las interfaces aunque no haya herramienta */
   showGeom = false;
+  /** talud BASE (fantasma gris a trazos) cuando hay una variante: se ve qué cambió respecto del mismo talud */
+  ghost: Pt[] | null = null;
   /** superficie de falla del método ANALÍTICO (equilibrio límite) a dibujar sobre el talud, o null */
   lem: { circle: { cx: number; cy: number; R: number }; slices: { xm: number; b: number; yb: number; yt: number }[]; fs: number; method: string; x0: number; x1: number } | null = null;
   private snapKind: SnapKind = null;         // qué snap atrapó el cursor (para el marcador y el estado)
@@ -218,10 +220,10 @@ export class DrawTools {
         break;
       }
       case "ancla": { this.push(); const st = this.stageForLoad("+ancla"); st.anchors.push({ F: this.state.F, p: [p[0], p[1]], ang: this.state.ang }); this.commit(`ancla ${this.state.F} kN en ${p[0]},${p[1]} (etapa ${this.state.stage + 1})`); break; }
-      case "mover": { const hit = this.hitVertex(p); if (hit) { this.push(); this.drag = hit; if (hit.it === 0) { delete d.param; delete d.taludTipo; }; } break; }
+      case "mover": { const hit = this.hitVertex(p); if (hit) { this.push(); this.drag = hit; if (hit.it === 0) this.aPuntos(d); } break; }
       case "borrar": {
         const hit = this.hitVertex(p);
-        if (hit) { this.push(); const it = d.interfaces[hit.it]; if (hit.it === 0) { delete d.param; delete d.taludTipo; }; if (it.length > 2) it.splice(hit.k, 1); else if (hit.it > 0) d.interfaces.splice(hit.it, 1); this.commit("vértice borrado"); break; }
+        if (hit) { this.push(); const it = d.interfaces[hit.it]; if (hit.it === 0) this.aPuntos(d); if (it.length > 2) it.splice(hit.k, 1); else if (hit.it > 0) d.interfaces.splice(hit.it, 1); this.commit("vértice borrado"); break; }
         const k = this.hitInterface(p); if (k > 0) { this.push(); d.interfaces.splice(k, 1); this.commit("interfaz borrada"); break; }
         const mu = this.hitWall(p); if (mu >= 0) { this.push(); const w = d.walls.splice(mu, 1)[0]; this.commit(`muro ${w.soil} borrado`); break; }
         const ln = this.hitLine(p); if (ln >= 0) { this.push(); d.lines.splice(ln, 1); this.commit("línea libre borrada"); }
@@ -293,6 +295,9 @@ export class DrawTools {
     for (let i = 0; i < this.def.interfaces.length; i++) if (Math.abs(interfaceY(this.def.interfaces[i], p[0]) - p[1]) < this.state.grid * 0.45) return i;
     return -1;
   }
+  /** tocar un vértice del terreno de un talud paramétrico NO borra el talud base: lo pasa a la variante «por puntos»
+   *  (el base sigue en `param` y se ve en gris; los puntos son el mismo array del terreno, así el arrastre los escribe) */
+  private aPuntos(d: SlopeDef) { if (d.param) d.variante = { id: "puntos", p: {}, pts: d.interfaces[0] }; }
   private push() { if (this.def) this.history.push(JSON.stringify(this.def)); if (this.history.length > 50) this.history.shift(); }
   undo() { if (!this.history.length || !this.def) { this.status("nada que deshacer"); return; } const s = this.history.pop()!; Object.assign(this.def, JSON.parse(s)); this.cur = []; this.commit("deshecho"); }
   private commit(msg: string) { this.status(msg); this.echo(`  → ${msg}`); this.render(); if (this.def) this.onChange?.(this.def); }
@@ -303,6 +308,11 @@ export class DrawTools {
     ctx.clearRect(0, 0, W, H);
     if (!this.map || !this.def) return;
     const tf = this.map.tf, d = this.def;
+    if (this.ghost && d.interfaces[0]?.length) {   // fantasma del talud base (gris) + variante (color) superpuestos
+      const linea = (P: Pt[]) => { ctx.beginPath(); P.forEach((v, j) => { const [px, py] = tf(v[0], v[1]); if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); };
+      ctx.save(); ctx.strokeStyle = "rgba(90,90,90,0.95)"; ctx.lineWidth = 2.6 * this.k; ctx.setLineDash([7 * this.k, 5 * this.k]); linea(this.ghost);
+      ctx.setLineDash([]); ctx.strokeStyle = "#e0561b"; ctx.lineWidth = 2.4 * this.k; linea(d.interfaces[0]); ctx.restore();
+    }
     if (this.lem) {   // superficie de falla del método analítico (dovelas): arco de rotura + dovelas + centro/radio + FS
       const L = this.lem, C = L.circle;
       ctx.save();
