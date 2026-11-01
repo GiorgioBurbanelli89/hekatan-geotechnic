@@ -23,6 +23,7 @@ import { hgeoToDxf, recetaGeo5 } from "./model/dxf";
 import { parseDxf, capasDeDxf, dxfADef, type Rol, type CapaInfo, type Ent } from "./model/dxfImport";
 import { actualizarMuro, engancharMuro } from "./wall/panel";
 import { engancharDinamico, actualizarDinamico, dinActivo, dibujar as dibujarDinamico } from "./dyn/panel";
+import { montarImportadorGeo5 } from "./import_geo5/visor";
 
 type Stage = { name: string; fs: number; alcanzada?: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean; u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number };
 
@@ -692,6 +693,7 @@ document.addEventListener("drop", async (e) => {
   else if (/\.(hgeo|txt)$/i.test(f.name)) { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = await f.text(); applyHgeo(); }
 });
 (window as unknown as { __abrirDxf: (t: string, n?: string) => void }).__abrirDxf = (t, n = "prueba") => abrirDxf(t, n);
+montarImportadorGeo5($<HTMLButtonElement>("fImpG5"), $<HTMLInputElement>("fFileG5"), dStatus);   // lo que exporta GEO5 (DXF de la malla, InputFile, Output_File_Geo.bin) → dibujo rápido con su paleta
 $<HTMLButtonElement>("fGuardar").addEventListener("click", () => {
   const txt = edText.value.trim() ? edText.value : (def ? serializeHgeo(def) : "");
   const nombre = (txt.match(/^#\s*([^\n]+)/)?.[1] ?? "talud").trim().replace(/[^\w\-]+/g, "_").slice(0, 40) || "talud";

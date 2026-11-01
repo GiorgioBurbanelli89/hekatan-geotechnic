@@ -99,6 +99,8 @@
         <button id="fDxf" class="tb" title="exportar la geometría a DXF para GEO5 (Interfaces → Import DXF) + un .txt con los pasos: suelos, asignación, malla, cargas" style="width:100%">📐 DXF GEO5</button>
         <button id="fImpDxf" class="tb" title="importar un DXF (R12 o posterior): POLYLINE, LWPOLYLINE, LINE, ARC, SPLINE; también se puede arrastrar y soltar el archivo sobre la página. Con nuestras capas (TERRENO, INTERFAZ_k…) entra directo; con un DXF cualquiera eliges la capa del terreno y las de las interfaces" style="width:100%;flex:1 1 100%">⬇ Importar DXF</button>
         <input type="file" id="fFileDxf" accept=".dxf" hidden>
+        <button id="fImpG5" class="tb" title="importar lo que exporta GEO5: el DXF de GeoFEM (File → Export → Data into CAD file: malla y regiones de la etapa), el InputFile.txt del solver y el Output_File_Geo.bin (campos nodales); se pueden elegir varios a la vez y se dibujan con la escala y la paleta de GEO5" style="width:100%;flex:1 1 100%">⬇ Importar resultados de GEO5</button>
+        <input type="file" id="fFileG5" accept=".dxf,.txt,.bin" multiple hidden>
         <input type="file" id="fFile" accept=".hgeo,.txt" hidden>
       </div>
       <label>Ejemplo</label>
