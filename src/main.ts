@@ -462,6 +462,7 @@ async function loadFixture(url: string) {
   setBase(m);
 }
 
+const AVISO_KH = "⚠ FS con sismo kh: no verificado contra benchmarks (docs/VALIDACION.md); la carga kh·γ sí";
 function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
   try {
     const t0 = performance.now();
@@ -483,7 +484,11 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
       draw.prompt(); pasos.actualizar(def); actualizarMuro(def, visibleStage()); return;
     }
     const { model: m, stats } = meshSlope(def, { topeMs: 20000 });   // 20 s: el muro de Manabí con malla 0.5 malla en 12–15 s en Chrome (8 s lo cortaba); una geometría degenerada (interfaces que se cruzan) se corta a los 20 s
-    if (stats.avisos.length) dStatus.textContent = stats.avisos.join(" · ");   // p. ej. "ARCILLA asignado a la región de la línea libre"
+    const avisosVal = [...stats.avisos];   // p. ej. "ARCILLA asignado a la región de la línea libre"
+    // fuera del alcance verificado (docs/VALIDACION.md §2): φ = 0 (GEO5 también aborta en R_mob_MohrCoulomb) y FS con sismo kh
+    if (def.soils.some((s) => s.phi < 1)) avisosVal.push("⚠ φ < 1° (no drenado): FS no verificado (GEO5 tampoco lo resuelve); compare con equilibrio límite");
+    if (def.stages.some((st) => st.sismo && (st.sismo.kh || st.sismo.kv))) avisosVal.push(AVISO_KH);
+    if (avisosVal.length) dStatus.textContent = avisosVal.join(" · ");
     m.MATNAMES = def.soils.map((s) => s.name);
     m.name = `Talud .hgeo`;
     edMsg.textContent = `malla: ${stats.elements} T6 · ${stats.nodes} nudos · ángulo mín ${stats.minAngle.toFixed(1)}° · arista media ${stats.meanEdge.toFixed(2)} m · área ${stats.area.toFixed(1)} m² · ${((performance.now() - t0) / 1000).toFixed(2)} s`;
@@ -512,13 +517,13 @@ function buildStageTabs() {
   if (!model) { etabs.innerHTML = ""; return; }
   const vis = visibleStage();
   etabs.innerHTML = model.stages.map((st, i) => {
-    const r = stages[i]; const fs = r && !r.stale ? (model?.staged ? ((r.alcanzada ?? 1) < 1 ? `<span class="fs" style="color:#e5382b">✖</span>` : `<span class="fs">✓</span>`) : r.steps.length ? `<span class="fs">FS ${r.fs.toFixed(2)}</span>` : `<span class="fs" style="color:#e5382b">✖</span>`) : "";
+    const r = stages[i]; const fs = r && !r.stale ? (model?.staged ? ((r.alcanzada ?? 1) < 1 ? `<span class="fs" style="color:#e5382b">✖</span>` : `<span class="fs">✓</span>`) : r.steps.length ? (r.fs < 1 ? `<span class="fs" style="color:#e5382b">FS &lt; 1 (${r.fs.toFixed(2)})</span>` : `<span class="fs">FS ${r.fs.toFixed(2)}</span>`) : `<span class="fs" style="color:#e5382b">✖</span>`) : "";
     return `<button data-st="${i}" class="${i === vis ? "on" : ""}">${i + 1}. ${st.name}${fs}</button>`;
   }).join("");
   etabs.querySelectorAll<HTMLButtonElement>("button").forEach((b) => { b.onclick = () => { selStage.value = b.dataset.st!; selStage.dispatchEvent(new Event("change")); }; });
 }
 function fsTable() {
-  const rows = stages.map((s) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok"${s.steps.length || model?.staged ? "" : ' style="color:#e5382b"'}>${model?.staged ? ((s.alcanzada ?? 1) < 1 ? `✖ no converge (${(100 * (s.alcanzada ?? 0)).toFixed(0)} % de la carga)` : "tensiones ✓") : s.steps.length ? s.fs.toFixed(4) : "< 1 ✖ falla"}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
+  const rows = stages.map((s) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok"${(s.steps.length && s.fs >= 1) || model?.staged ? "" : ' style="color:#e5382b"'}>${model?.staged ? ((s.alcanzada ?? 1) < 1 ? `✖ no converge (${(100 * (s.alcanzada ?? 0)).toFixed(0)} % de la carga)` : "tensiones ✓") : s.steps.length ? (s.fs < 1 ? `FS &lt; 1: inestable (${s.fs.toFixed(4)})` : s.fs.toFixed(4)) : "< 1 ✖ falla"}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
   fsEl.innerHTML = `<table><tr><th>etapa</th><th>FS</th><th>GEO5</th><th>t</th></tr>${rows}</table>` + (busy ? `<div style="color:var(--oro);margin-top:4px">calculando…</div>` : "");
 }
 
@@ -581,7 +586,7 @@ function redraw() {
   const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress && !model.staged ? " · estado de tensión SRF=1" : "");
   const rango = plot.draw({
     field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, isolineas: aguaIsolineas(), surface: selSurf.value as "iso" | "line" | "none",
-    title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${model.staged ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
+    title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${model.staged ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}${st.fs < 1 ? "  (FS < 1: inestable)" : ""}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
     deformScale: factorDeformada(u, st.uel), u, uel: st.uel, active: model.stages[si]?.active,
   });
   draw.setMap(plot.mapping());

@@ -744,6 +744,26 @@ struct GeoFem {
       LOG(fmt("    SRM modo GEO5: |ALoad| = %.4f (|F| = %.4f)", std::sqrt(a), std::sqrt(b)));
     }
     const double* FL = FLv.data();
+    if (!c0) {   // FS < 1 como GEO5: «Searching for stable parameters c and phi»: resistencia ×1/0.9 por intento (SRF 0.9, 0.81, …)
+      // desde el estado de partida, hasta el PRIMERO que converge (Log_File de GEO5 2024, ACADS EX1(a): 0.656100). Tope propio 0.9^20.
+      double f = 1; bool hallado = false;
+      for (int k = 1; k <= 20 && !hallado; k++) {
+        f *= RED0; rs++;
+        int nit = 0; bool cv = srmContinua ? nrstepPasos(f, Ftot, u, nit) : nrstep(f, Ftot, rs, u, nit);
+        bool ok = cv && std::isfinite(vnorm(u.data(), ndof));
+        LOG(fmt("    SRM rs%02d paso=%.4f SRF=%.4f %s it=%d (FS < 1)", rs, RED0, f, ok ? "CONVERGE" : "DIVERGE", nit));
+        if (ok) {
+          fs = f; ulo = u; hallado = true;
+          if (nstepsOut < maxSteps) { outSrf[nstepsOut] = f; std::memcpy(outStepsU + (size_t)nstepsOut * ndof, u.data(), sizeof(double) * ndof); nstepsOut++; }
+          double dxmax = 0; for (int i = 0; i < nn; i++) dxmax = std::max(dxmax, std::fabs(u[2 * i]));
+          prog += fmt(" %.3f:%.0f", f, dxmax * 1e3);
+        }
+      }
+      if (!hallado) fs = f;
+      LOG(fmt("    progresion dx(mm) por SRF:%s", prog.c_str()));
+      std::memcpy(outU, ulo.data(), sizeof(double) * ndof);
+      return fs;
+    }
     for (;;) {
       double s = 1 - (1 - RED0) / std::pow(RELAX, nrelax);
       if (s > MINSTEP) break;

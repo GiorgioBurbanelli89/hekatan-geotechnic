@@ -737,6 +737,25 @@ export class GeoFem {
       let a = 0, b = 0; for (let k = 0; k < this.nfree; k++) { const d = this.free[k]; a += FL[d] * FL[d]; b += Ftot[d] * Ftot[d]; }
       this.log(`    SRM modo GEO5: |ALoad| = ${Math.sqrt(a).toFixed(4)} (|F| = ${Math.sqrt(b).toFixed(4)})`);
     }
+    if (!c0) {   // FS < 1 como GEO5: SRF 1 no converge → «Searching for stable parameters c and phi»: la resistencia se AUMENTA
+      // ×1/0.9 en cada intento (SRF 0.9, 0.81, …), desde el estado de partida, hasta el PRIMERO que converge, y ahí termina
+      // (Log_File de GEO5 2024, ACADS EX1(a): 4 intentos, «Safety Factor = 0.656100», c = 3/0.6561). Tope propio 0.9^20 ≈ 0.12.
+      let f = 1;
+      for (let k = 1; k <= 20; k++) {
+        f *= RED0; rs++;
+        const [cv, ub, nit] = this.srmContinua ? this.nrstepPasos(f, Ftot) : this.nrstep(f, Ftot, rs);
+        const ok = cv && Number.isFinite(norm(ub));
+        this.log(`    SRM rs${pad02(rs)} paso=${f4(RED0)} SRF=${f4(f)} ${ok ? "CONVERGE" : "DIVERGE"} it=${nit} (FS < 1)`);
+        if (ok) {
+          fs = f; ulo = ub; steps.push({ srf: f, u: ub });
+          let dxmax = 0; for (let i = 0; i < this.nn; i++) dxmax = Math.max(dxmax, Math.abs(ub[2 * i]));
+          prog += ` ${f.toFixed(3)}:${(dxmax * 1e3).toFixed(0)}`;
+          break;
+        }
+      }
+      if (!steps.length) fs = f;
+      return { fs, prog, ulo, uel, steps, u1, sig1, epl1, eps1 };
+    }
     for (;;) {
       const s = 1 - (1 - RED0) / Math.pow(RELAX, nrelax);
       if (s > MINSTEP) break;
