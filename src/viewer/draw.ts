@@ -218,10 +218,10 @@ export class DrawTools {
         break;
       }
       case "ancla": { this.push(); const st = this.stageForLoad("+ancla"); st.anchors.push({ F: this.state.F, p: [p[0], p[1]], ang: this.state.ang }); this.commit(`ancla ${this.state.F} kN en ${p[0]},${p[1]} (etapa ${this.state.stage + 1})`); break; }
-      case "mover": { const hit = this.hitVertex(p); if (hit) { this.push(); this.drag = hit; if (hit.it === 0) delete d.param; } break; }
+      case "mover": { const hit = this.hitVertex(p); if (hit) { this.push(); this.drag = hit; if (hit.it === 0) { delete d.param; delete d.taludTipo; }; } break; }
       case "borrar": {
         const hit = this.hitVertex(p);
-        if (hit) { this.push(); const it = d.interfaces[hit.it]; if (hit.it === 0) delete d.param; if (it.length > 2) it.splice(hit.k, 1); else if (hit.it > 0) d.interfaces.splice(hit.it, 1); this.commit("vértice borrado"); break; }
+        if (hit) { this.push(); const it = d.interfaces[hit.it]; if (hit.it === 0) { delete d.param; delete d.taludTipo; }; if (it.length > 2) it.splice(hit.k, 1); else if (hit.it > 0) d.interfaces.splice(hit.it, 1); this.commit("vértice borrado"); break; }
         const k = this.hitInterface(p); if (k > 0) { this.push(); d.interfaces.splice(k, 1); this.commit("interfaz borrada"); break; }
         const mu = this.hitWall(p); if (mu >= 0) { this.push(); const w = d.walls.splice(mu, 1)[0]; this.commit(`muro ${w.soil} borrado`); break; }
         const ln = this.hitLine(p); if (ln >= 0) { this.push(); d.lines.splice(ln, 1); this.commit("línea libre borrada"); }

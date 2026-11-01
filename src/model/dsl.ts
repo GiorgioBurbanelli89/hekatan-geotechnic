@@ -8,6 +8,8 @@
 //       pie plano → cara a beta° hasta H → corona → bajada a beta2° hasta zfin → plano hasta el margen.
 //       Con `bermas=n` la altura H se reparte en n+1 caras iguales a beta°, separadas por n bermas horizontales de
 //       ancho `berma` [m] (talud escalonado, el habitual en desmontes y presas de tierra)
+//   talud tipo=berma|simple|dos_pendientes|curvo|terraplen|cuneta xpie=11 zpie=-9 …   TIPOS de talud: cada uno con SU parametrización (src/model/taludes.ts);
+//       p. ej. `talud tipo=berma beta=33 nb=2 h1=3 b1=3 h2=3 b2=3 h3=3`. Sin `tipo=` vale el talud clásico de arriba (no cambia)
 //   suelo NOMBRE E=130347 nu=0.3 phi=22.7 c=9 gamma=18 [psi=0] [modelo=mc]   modelo: dp (Drucker-Prager de GEO5, por
 //       defecto) o mc (Mohr-Coulomb, retorno de Clausen en tensiones principales, el de GeoFEM)
 //   suelo … gsat=20.5                        peso unitario SATURADO (bajo el freático); por defecto = gamma
@@ -33,6 +35,7 @@
 //   # comentario
 //
 // Compatibilidad: también se aceptan `contorno x,y …` + `capa NOMBRE bajo|sobre x,y …` (forma vieja).
+import { TIPOS, generarTalud, paramsPorDefecto, paramsVisibles } from "./taludes";
 export type Pt = [number, number];
 export type Soil = { name: string; E: number; nu: number; phi: number; c: number; gamma: number; gsat?: number; psi: number; rigido?: boolean; vs?: number; modelo?: "mc" | "dp" };   // vs [m/s]: onda de corte para el DINÁMICO (E_din = 2(1+ν)·(γ/g)·Vs²); sin vs, el dinámico usa E
 /** Muro cantilever (GEO5 «Rigid body»): x = cara delantera del fuste, H = altura vista sobre el terreno de delante,
@@ -67,7 +70,8 @@ export type SlopeDef = {
   gwt?: Pt[];                               // GEO5 «Water → GWT»: línea freática (`agua gwt x,y x,y …`); γsat = `gsat=` del suelo (por defecto γ)
   walls: Wall[];                            // GEO5 «Rigid body»: muros de hormigón (región elástica, la SRM no los reduce)
   comments: string[];
-  param?: TaludParam;                       // terreno paramétrico (sliders); si se dibuja a mano, se pierde
+  param?: TaludParam;                       // terreno paramétrico CLÁSICO (sliders); si se dibuja a mano, se pierde
+  taludTipo?: { id: string; p: Record<string, number> };   // terreno paramétrico de un TIPO de talud (src/model/taludes.ts): `talud tipo=berma …`; cada tipo trae su propia parametrización
 };
 export type TaludParam = { xpie: number; zpie: number; H: number; beta: number; corona: number; zfin: number; beta2: number; bermas?: number; berma?: number };
 
@@ -225,6 +229,12 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
       else if (cmd === "interfaz" || cmd === "interface") def.interfaces.push(pts(toks.slice(1)));
       else if (cmd === "agua" || cmd === "water") { if (/^gwt$/i.test(toks[1] ?? "")) def.gwt = pts(toks.slice(2)); else if (/^poros$/i.test(toks[1] ?? "")) (def.poros ??= []).push({ u: num(String(toks[2]).replace(/^u=/i, "")), pts: pts(toks.slice(3)) }); else { const o = kv(toks.slice(1)); if (o.ru !== undefined) def.ru = num(o.ru); } }
       else if (cmd === "linea" || cmd === "línea" || cmd === "line" || cmd === "libre") def.lines.push(pts(toks.slice(1)));
+      else if (cmd === "talud" && /(^|\s)tipo=(?!clasico)/i.test(line)) {   // TIPO de talud: parámetros propios del tipo (claves con dígitos: h1, b2, beta1…)
+        const o: Record<string, string> = {}; for (const t of toks.slice(1)) { const m = t.match(/^([A-Za-z_][A-Za-z_0-9]*)=(.+)$/); if (m) o[m[1].toLowerCase()] = m[2]; }
+        const id = o.tipo.toLowerCase(); if (!TIPOS[id]) throw new Error(`tipo de talud desconocido «${o.tipo}» (hay: ${Object.keys(TIPOS).join(", ")})`);
+        const base: Record<string, number> = {}; for (const q of TIPOS[id].params) if (o[q.key.toLowerCase()] !== undefined) base[q.key] = num(o[q.key.toLowerCase()]);
+        def.taludTipo = { id, p: paramsPorDefecto(id, base) }; def.interfaces.unshift([]);
+      }
       else if (cmd === "talud") { const o = kv(toks.slice(1)); def.param = { xpie: num(o.xpie ?? "10"), zpie: num(o.zpie ?? "-10"), H: num(o.h ?? "6"), beta: num(o.beta ?? "33"), corona: num(o.corona ?? "8"), zfin: num(o.zfin ?? String(num(o.zpie ?? "-10") + num(o.h ?? "6"))), beta2: num(o.beta2 ?? "28.6"), ...(o.bermas ? { bermas: num(o.bermas), berma: num(o.berma ?? "2") } : {}) }; def.interfaces.unshift([]); }
       else if (cmd === "suelo") {
         const o = kv(toks.slice(2));
@@ -258,6 +268,7 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
       } else throw new Error(`orden desconocida "${toks[0]}"`);
     } catch (e) { throw new Error(`${ln}: ${(e as Error).message}`); }
   });
+  if (def.taludTipo) { const t = def.taludTipo, m = def.margins ?? { xmin: 0, xmax: 40, bottom: t.p.zpie - 12 }; def.margins = m; def.interfaces[0] = generarTalud(t.id, t.p, m.xmin, m.xmax); }
   if (def.param) { const m = def.margins ?? { xmin: 0, xmax: 40, bottom: def.param.zpie - 12 }; def.margins = m; def.interfaces[0] = terrainFromParam(def.param, m.xmin, m.xmax); }
   for (const w of def.walls) { const s0 = def.soils.find((q) => q.name === w.soil); if (s0) s0.rigido = true; }   // Rigid body de GEO5 = región elástica: el hormigón del muro no se reduce en la SRM
   if (def.interfaces.length) {
@@ -300,7 +311,7 @@ export function serializeHgeo(def: SlopeDef): string {
   const p = (q: Pt) => `${r(q[0])},${r(q[1])}`;
   const L: string[] = [...def.comments];
   if (def.margins) L.push(`margenes xmin=${r(def.margins.xmin)} xmax=${r(def.margins.xmax)} fondo=${r(def.margins.bottom)}`);
-  def.interfaces.forEach((it, k) => { if (k === 0 && def.param) { const q = def.param; L.push(`talud xpie=${r(q.xpie)} zpie=${r(q.zpie)} H=${r(q.H)} beta=${r(q.beta)} corona=${r(q.corona)} zfin=${r(q.zfin)} beta2=${r(q.beta2)}${q.bermas ? ` bermas=${r(q.bermas)} berma=${r(q.berma ?? 0)}` : ""}`); } else L.push(`interfaz ${it.map(p).join(" ")}`); });
+  def.interfaces.forEach((it, k) => { if (k === 0 && def.taludTipo) { const t = def.taludTipo; L.push(`talud tipo=${t.id} ${paramsVisibles(t.id, t.p).map((q) => `${q.key}=${r(t.p[q.key])}`).join(" ")}`); } else if (k === 0 && def.param) { const q = def.param; L.push(`talud xpie=${r(q.xpie)} zpie=${r(q.zpie)} H=${r(q.H)} beta=${r(q.beta)} corona=${r(q.corona)} zfin=${r(q.zfin)} beta2=${r(q.beta2)}${q.bermas ? ` bermas=${r(q.bermas)} berma=${r(q.berma ?? 0)}` : ""}`); } else L.push(`interfaz ${it.map(p).join(" ")}`); });
   if (!def.interfaces.length && def.outline.length) L.push(`contorno ${def.outline.map(p).join(" ")}`);
   for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.gsat ? ` gsat=${r(s.gsat)}` : ""}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.vs ? ` vs=${r(s.vs)}` : ""}${s.modelo === "mc" ? " modelo=mc" : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}`);
   for (const w of def.walls ?? []) L.push(`muro ${w.soil} x=${r(w.pm.x)}${Number.isFinite(w.pm.z as number) ? ` z=${r(w.pm.z as number)}` : ""} H=${r(w.pm.H)} fuste=${r(w.pm.fuste)} zapata=${r(w.pm.zapata)} talon=${r(w.pm.talon)} dedo=${r(w.pm.dedo)} emp=${r(w.pm.emp)}${w.pm.dentp && w.pm.dentb ? ` dentp=${r(w.pm.dentp)} dentb=${r(w.pm.dentb)}` : ""}`);

@@ -104,3 +104,24 @@ masa efectiva y u_x(t) de la coronación a 4 decimales. El espejo C++/WASM aún 
 ## Licencia
 
 MIT — ver [LICENSE](LICENSE). Puedes usar, copiar y modificar el código; solo conserva el aviso de copyright.
+
+## Tipos de talud y DXF (1-nov-2026)
+
+GEO5 define el talud de UNA sola forma. Aquí cada **tipo de talud trae su propia parametrización** y cambiar de tipo cambia solo la forma del terreno
+(suelos, etapas, muros y cargas quedan como están). Agregar un tipo nuevo = agregar una entrada a `TIPOS` en `src/model/taludes.ts`; los demás no se tocan.
+
+| tipo | parámetros |
+|---|---|
+| `simple` | xpie, zpie, H, beta |
+| `berma` | xpie, zpie, beta, nb (1-3), h1…h4 (altura de cada cara), b1…b3 (ancho de cada berma) |
+| `dos_pendientes` | xpie, zpie, H, hq (altura del quiebre), beta1, beta2 |
+| `curvo` | xpie, zpie, H, beta (cuerda), f (flecha: + convexo, − cóncavo) |
+| `terraplen` | xpie, zpie, H, corona, beta_a, beta_b |
+| `cuneta` | xpie, zpie, H, beta, d (profundidad), fondo, bz (talud lateral) |
+
+En el `.hgeo`: `talud tipo=berma beta=33 nb=2 h1=3 b1=3 h2=3 b2=3 h3=3` (ver `examples/talud_tipo_*.hgeo`). Sin `tipo=` vale el talud clásico de siempre.
+En la interfaz: selector «tipo de talud» en Parámetros. Prueba: `node tests/check_tipos_talud.mjs`.
+
+**DXF.** Exporta (`📐 DXF GEO5`) e **importa** (`⬇ Importar DXF` o arrastrar y soltar): POLYLINE, LWPOLYLINE (con bulge), LINE (se encadenan), ARC, SPLINE y POINT.
+Con las capas de nuestro export (MARGENES, TERRENO, INTERFAZ_k, LINEA_LIBRE_k, ASIGNAR_<suelo>) entra directo y es de ida y vuelta; con un DXF cualquiera
+se abre un diálogo para elegir qué capa es el terreno, las interfaces, las líneas libres, los márgenes o los puntos de asignar. Los suelos del DXF se crean con valores por defecto (se editan en el .hgeo).

@@ -14,11 +14,13 @@ import TALUD_RU_HGEO from "../examples/talud_ru.hgeo?raw";
 import TALUD_POROS_HGEO from "../examples/talud_poros_paralelo_gwt.hgeo?raw";
 import MANABI_MURO_HGEO from "../examples/muro_manabi.hgeo?raw";
 import { parseHgeo, serializeHgeo, terrainFromParam, DEMO04_HGEO, MURO_HGEO, MANABI_HGEO, SlopeDef, interfaceY, spanInterface, clampLayersToTerrain, autoAssign, wallDims, effectiveTerrain } from "./model/dsl";
+import { TIPOS, ORDEN_TIPOS, generarTalud, paramsPorDefecto, paramsVisibles } from "./model/taludes";
 import { meshSlope } from "./mesh/mesher";
 import { DrawTools, Tool, regionOf } from "./viewer/draw";
 import { criticalCircle, LemMethod } from "./lem/slices";
 import { Pasos } from "./pasos";
 import { hgeoToDxf, recetaGeo5 } from "./model/dxf";
+import { parseDxf, capasDeDxf, dxfADef, type Rol, type CapaInfo, type Ent } from "./model/dxfImport";
 import { actualizarMuro, engancharMuro } from "./wall/panel";
 import { engancharDinamico, actualizarDinamico, dinActivo, dibujar as dibujarDinamico } from "./dyn/panel";
 
@@ -101,11 +103,64 @@ function buildGeomSliders() {
     const nota = document.createElement("div"); nota.className = "mats"; nota.textContent = "malla exacta de GEO5: al mover un slider de geometría se pasa al mismo talud con malla propia (.hgeo)"; g.appendChild(nota);
     return;
   }
+  if (def.taludTipo) { buildTipoSelector(g); buildTipoSliders(g, def); buildLayerSliders(g); buildWallSliders(g); buildLoadSliders(g); return; }
   if (!def.param) { buildDrawnSliders(g); buildLayerSliders(g); buildWallSliders(g); buildLoadSliders(g); return; }
+  buildTipoSelector(g);
   buildParamSliders(g, def.param, () => def);
   buildLayerSliders(g);
   buildWallSliders(g);
   buildLoadSliders(g);
+}
+/** TIPOS DE TALUD (src/model/taludes.ts): GEO5 solo tiene una forma de definir el talud; aquí cada tipo trae SU parametrización y cambiar de tipo
+ *  cambia solo la forma del terreno (el resto del modelo —suelos, etapas, muros, cargas— queda como está). */
+function buildTipoSelector(g: HTMLDivElement) {
+  const d = def; if (!d) return;
+  const actual = d.taludTipo?.id ?? "clasico";
+  const row = document.createElement("div"); row.className = "sl";
+  row.innerHTML = `<span class="n">tipo de talud</span><select id="tipoTalud" style="flex:1;min-width:0">` +
+    `<option value="clasico">Clásico GEO5 (corona, contratalud, bermas)</option>` + ORDEN_TIPOS.map((id) => `<option value="${id}" title="${TIPOS[id].descripcion}">${TIPOS[id].nombre}</option>`).join("") + `</select>`;
+  g.appendChild(row);
+  const sel = row.querySelector("select") as HTMLSelectElement; sel.value = actual;
+  sel.addEventListener("change", () => cambiarTipoTalud(sel.value));
+  const nota = document.createElement("div"); nota.className = "mats"; nota.id = "tipoNota";
+  nota.textContent = d.taludTipo ? TIPOS[d.taludTipo.id].descripcion : "talud de GEO5: pie plano → cara a β → corona → contratalud β₂ → plano";
+  g.appendChild(nota);
+}
+function cambiarTipoTalud(id: string) {
+  const d = def; if (!d || !d.margins) return;
+  const m = d.margins, ant = d.taludTipo ? d.taludTipo.p : d.param ? { xpie: d.param.xpie, zpie: d.param.zpie } : { xpie: 11, zpie: -9 };
+  if (id === "clasico") {
+    delete d.taludTipo; const zp = ant.zpie ?? -9;
+    d.param = { xpie: ant.xpie ?? 11, zpie: zp, H: 6.5, beta: 33, corona: 8.5, zfin: zp + 5, beta2: 28.6 };
+    d.interfaces[0] = terrainFromParam(d.param, m.xmin, m.xmax);
+  } else {
+    delete d.param; d.taludTipo = { id, p: paramsPorDefecto(id, { xpie: ant.xpie ?? 11, zpie: ant.zpie ?? -9 }) };
+    d.interfaces[0] = generarTalud(id, d.taludTipo.p, m.xmin, m.xmax);
+  }
+  for (const st of d.stages) delete st.geo5;   // geometría distinta de la escrita: la referencia GEO5 ya no vale
+  applyDef(d, false, [visibleStage()]);
+}
+/** Sliders del TIPO de talud elegido: solo los parámetros de ese tipo (los que dependen de otro, como la berma 3, aparecen según n). */
+function buildTipoSliders(g: HTMLDivElement, d: SlopeDef) {
+  const t = d.taludTipo!;
+  for (const r of paramsVisibles(t.id, t.p)) {
+    const row = document.createElement("div"); row.className = "sl";
+    const v0 = t.p[r.key];
+    row.innerHTML = `<span class="n">${r.label}${r.unit ? ` [${r.unit}]` : ""}</span><input type="range" id="gs_${r.key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${v0}"><span class="v" id="gv_${r.key}">${v0}</span>`;
+    g.appendChild(row);
+    const inp = row.querySelector("input") as HTMLInputElement;
+    inp.addEventListener("input", () => {
+      $<HTMLSpanElement>("gv_" + r.key).textContent = inp.value;
+      if (!d.taludTipo) return;
+      geomSliding = true;
+      d.taludTipo.p[r.key] = parseFloat(inp.value);
+      d.interfaces[0] = generarTalud(t.id, d.taludTipo.p, d.margins!.xmin, d.margins!.xmax);
+      for (const st of d.stages) delete st.geo5;
+      draw.showGeom = true; draw.setDef(d); draw.render();
+      clearTimeout(gtimer); gtimer = window.setTimeout(() => applyDef(d, false, [visibleStage()]), 300);
+    });
+    inp.addEventListener("change", () => { geomSliding = false; draw.showGeom = false; draw.render(); window.setTimeout(buildGeomSliders, 350); });
+  }
 }
 /** Sliders del talud PARAMÉTRICO (`talud H= beta= corona= xpie=`). `ensure()` devuelve el def a modificar (en la fixture Demo04
  *  primero cambia al gemelo .hgeo). Mientras se arrastra, las líneas se mueven en vivo (draw.showGeom); al soltar, remalla y recalcula. */
@@ -592,6 +647,51 @@ $<HTMLButtonElement>("fDxf").addEventListener("click", () => {
   dStatus.textContent = "DXF para GEO5 (Interfaces → Import DXF) + pasos_geo5.txt con suelos, asignación, malla y cargas para teclear";
 });
 (window as unknown as { __dxf: () => string }).__dxf = () => (def ? hgeoToDxf(def) : "");
+
+// ---- IMPORTAR DXF (GEO5 también lo permite): botón + arrastrar y soltar. Capas de nuestro export → entra directo (ida y vuelta);
+//      un DXF cualquiera → diálogo para elegir qué capa es el terreno, las interfaces, las líneas libres, los márgenes y los puntos de asignar.
+function importarDxfDef(ents: Ent[], capas: CapaInfo[], nombre: string) {
+  const { def: nd, avisos } = dxfADef(ents, capas, nombre);
+  selModel.value = "hgeo"; edWrap.hidden = false; edText.value = serializeHgeo(nd); applyHgeo();
+  dStatus.textContent = `DXF «${nombre}» importado: terreno + ${nd.interfaces.length - 1} interfaz(es) + ${nd.lines.length} línea(s) libre(s)` + (avisos.length ? " · " + avisos.join(" · ") : "");
+}
+function abrirDxf(texto: string, nombre: string) {
+  let ents: Ent[]; try { ents = parseDxf(texto); } catch (e) { dStatus.textContent = "✖ DXF ilegible: " + (e as Error).message; return; }
+  if (!ents.length) { dStatus.textContent = "el DXF no tiene entidades legibles (ASCII, sección ENTITIES): R12 o posterior"; return; }
+  const capas = capasDeDxf(ents);
+  const nuestro = capas.every((c) => /^(MARGENES|TERRENO|INTERFAZ_\d+|LINEA_LIBRE_\d+|ASIGNAR_.+|MURO_\d+|ASIGNAR_MURO_\d+)$/i.test(c.layer));
+  for (const c of capas) if (/^(MURO_\d+|ASIGNAR_MURO_\d+)$/i.test(c.layer)) c.rol = "ignorar";   // los muros se vuelven a poner con `muro …` (son un cuerpo rígido, no una línea)
+  if (nuestro) { try { importarDxfDef(ents, capas, nombre); } catch (e) { dStatus.textContent = "✖ " + (e as Error).message; } return; }
+  dialogoDxf(ents, capas, nombre);
+}
+function dialogoDxf(ents: Ent[], capas: CapaInfo[], nombre: string) {
+  document.getElementById("dxfDlg")?.remove();
+  const roles: [Rol, string][] = [["terreno", "terreno (superficie)"], ["interfaz", "interfaz de suelo"], ["linea", "línea libre"], ["margenes", "márgenes"], ["asignar", "puntos «asignar»"], ["ignorar", "ignorar"]];
+  const box = document.createElement("div"); box.id = "dxfDlg";
+  box.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;align-items:center;justify-content:center";
+  box.innerHTML = `<div style="background:#1b1b1d;color:#eee;border:1px solid #d08a3e;border-radius:10px;padding:16px 18px;max-width:760px;font:13px system-ui">
+    <b style="font-size:15px">Importar DXF · ${nombre}</b><div style="color:#aaa;margin:4px 0 10px">Elige qué es cada capa. Una sola capa de terreno; las interfaces se ordenan por el número del final del nombre o por orden de aparición.</div>
+    <table style="border-collapse:collapse;width:100%"><tr style="color:#d08a3e;text-align:left"><th>capa</th><th>entidades</th><th>x [m]</th><th>y [m]</th><th>rol</th></tr>` +
+    capas.map((c, i) => `<tr><td style="padding:3px 8px 3px 0">${c.layer}</td><td>${c.n} ${c.tipos.join("/")}</td><td>${c.xmin.toFixed(1)} … ${c.xmax.toFixed(1)}</td><td>${c.ymin.toFixed(1)} … ${c.ymax.toFixed(1)}</td>
+      <td><select data-i="${i}" class="dxfRol">${roles.map(([v, t]) => `<option value="${v}"${c.rol === v ? " selected" : ""}>${t}</option>`).join("")}</select></td></tr>`).join("") +
+    `</table><div style="margin-top:12px;text-align:right"><button id="dxfNo" class="tb">Cancelar</button> <button id="dxfOk" class="run">Importar</button></div><div id="dxfMsg" style="color:#e5382b;margin-top:6px"></div></div>`;
+  document.body.appendChild(box);
+  box.querySelector<HTMLButtonElement>("#dxfNo")!.onclick = () => box.remove();
+  box.querySelector<HTMLButtonElement>("#dxfOk")!.onclick = () => {
+    box.querySelectorAll<HTMLSelectElement>(".dxfRol").forEach((s) => { capas[parseInt(s.dataset.i!, 10)].rol = s.value as Rol; });
+    if (capas.filter((c) => c.rol === "terreno").length !== 1) { box.querySelector<HTMLDivElement>("#dxfMsg")!.textContent = "hace falta exactamente UNA capa con rol «terreno»"; return; }
+    try { importarDxfDef(ents, capas, nombre); box.remove(); } catch (e) { box.querySelector<HTMLDivElement>("#dxfMsg")!.textContent = "✖ " + (e as Error).message; }
+  };
+}
+$<HTMLButtonElement>("fImpDxf").addEventListener("click", () => $<HTMLInputElement>("fFileDxf").click());
+$<HTMLInputElement>("fFileDxf").addEventListener("change", async (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return; abrirDxf(await f.text(), f.name.replace(/\.dxf$/i, "")); (e.target as HTMLInputElement).value = ""; });
+document.addEventListener("dragover", (e) => { if (e.dataTransfer?.types.includes("Files")) e.preventDefault(); });
+document.addEventListener("drop", async (e) => {
+  const f = e.dataTransfer?.files?.[0]; if (!f) return; e.preventDefault();
+  if (/\.dxf$/i.test(f.name)) abrirDxf(await f.text(), f.name.replace(/\.dxf$/i, ""));
+  else if (/\.(hgeo|txt)$/i.test(f.name)) { selModel.value = "hgeo"; edWrap.hidden = false; edText.value = await f.text(); applyHgeo(); }
+});
+(window as unknown as { __abrirDxf: (t: string, n?: string) => void }).__abrirDxf = (t, n = "prueba") => abrirDxf(t, n);
 $<HTMLButtonElement>("fGuardar").addEventListener("click", () => {
   const txt = edText.value.trim() ? edText.value : (def ? serializeHgeo(def) : "");
   const nombre = (txt.match(/^#\s*([^\n]+)/)?.[1] ?? "talud").trim().replace(/[^\w\-]+/g, "_").slice(0, 40) || "talud";

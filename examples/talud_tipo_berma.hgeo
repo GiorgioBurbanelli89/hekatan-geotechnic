@@ -1,0 +1,7 @@
+# Talud tipo berma: cada tipo trae su propia parametrizacion (src/model/taludes.ts)
+margenes xmin=0 xmax=45 fondo=-24
+talud tipo=berma
+suelo ARENA E=60000 nu=0.3 phi=28 c=12 gamma=18
+asignar ARENA en 3,-12
+malla 1.6
+etapa peso propio
