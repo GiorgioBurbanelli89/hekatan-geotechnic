@@ -98,6 +98,9 @@ const c7 = 0.1012865073235, C7 = 0.7974269853531, e7 = 0.4701420641051, E7 = 0.0
 export const GP = [[1 / 3, 1 / 3], [c7, c7], [C7, c7], [c7, C7], [e7, e7], [E7, e7], [e7, E7]];
 export const GW = [0.225 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2];
 const NG = 7;
+export const RIGID_E = 1e9, RIGID_NU = 0.2;   // «rigidbody» de GEO5: elástico E = Eur = 1e9 kPa, ν = 0.2 (Geo5Solver_decomp.c:73262)
+/** Bits del modo SRM a partir de srmContinua (true = GEO5_SRM). */
+export function srmBits(f: boolean | number | undefined): number { return f === true ? GEO5_SRM : typeof f === "number" ? f : 0; }
 export const GEO5_SRM = 3;    // bits de la SRM en modo GEO5 (ver setSrm / geofem_set_srm). Antes 19: el bit 16 (porPaso) NO es lo que hace GEO5 (Tanda 4-5)
 
 export function t6(L1: number, L2: number): [number[], number[], number[]] {
@@ -171,7 +174,8 @@ export class GeoFem {
     }
     // constitutivo elástico (4 comp: xx yy zz xy)
     for (let mm = 0; mm < m.MAT.length; mm++) {
-      const E = m.MAT[mm][0], nu = m.MAT[mm][1], f = E / ((1 + nu) * (1 - 2 * nu));
+      const rg = this.modoG5 && this.rigid[mm];   // rigidbody de GEO5 (E 1e9, ν 0.2) SOLO en el modo GEO5 del muro (bit 32), como geofemWasm.ts
+      const E = rg ? RIGID_E : m.MAT[mm][0], nu = rg ? RIGID_NU : m.MAT[mm][1], f = E / ((1 + nu) * (1 - 2 * nu));
       const D = new Float64Array(16);
       D[0] = f * (1 - nu); D[1] = f * nu; D[2] = f * nu;
       D[4] = f * nu; D[5] = f * (1 - nu); D[6] = f * nu;
@@ -317,12 +321,21 @@ export class GeoFem {
   private srmContinua = false;      // SRM de GEO5: peldaños encadenados + tensiones en pasos de 0.1
   private lsMax = 1;                // pasadas de la búsqueda lineal (GEO5 max_ls_iterations)
   private soloTangente = false; private tangIni = false; private energiaPrev = false; private porPaso = false;
+  // MODO GEO5 DEL MURO (bit 32, como geofem.cpp; Tanda 12): ALoad = F_int de SRF 1 y u0 = η·Δu de la última it del último peldaño convergido
+  private modoG5 = false; private soloFint = false; private lastRaw: Float64Array | null = null; private lastEta = 1; private u0ext: Float64Array | null = null; private ALoadV: Float64Array | null = null;
+  private desempateZ = false;   // bit 64: principal del plano = σz (|Δ| ≤ 1e-14·max|σ|) → σz delante (medido, no del binario)
+  private static gDesempateZ = false;
+  private static empateZ(v: number[], ix: number[]): void {
+    const m = Math.max(Math.abs(v[0]), Math.abs(v[1]), Math.abs(v[2])), tol = 1e-14 * m;
+    for (let k = 0; k < 2; k++) if (ix[k + 1] === 2 && Math.abs(v[ix[k]] - v[ix[k + 1]]) <= tol) { const t = ix[k]; ix[k] = ix[k + 1]; ix[k + 1] = t; }
+  }
   /** Modo GEO5 de la SRM, los mismos bits que geofem_set_srm: 1 peldaños encadenados, 2 tangente del SRF nuevo al
    *  empezar el peldaño, 4 line search de 3 pasadas, 8 energía con el residuo previo, 16 retorno desde el inicio del paso.
    *  true = GEO5_SRM = 3 (antes 19; el bit 16 no es lo que hace GEO5: Tanda 4-5 de registros/2026-11-01_geo5_mapas_vs_geotechnic.md). */
   private setSrm(f: boolean | number | undefined): void {
-    const b = f === true ? GEO5_SRM : typeof f === "number" ? f : 0;
+    const b = srmBits(f);
     this.srmContinua = (b & 1) !== 0; this.tangIni = (b & 2) !== 0; this.lsMax = b & 4 ? 3 : 1; this.energiaPrev = (b & 8) !== 0; this.porPaso = (b & 16) !== 0;
+    this.modoG5 = (b & 32) !== 0; this.desempateZ = (b & 64) !== 0;
   }
   private mcp: [number, number, number][] = [];   // (φ, c, ψ) reducidos por la SRF del peldaño (índice 1..)
 
@@ -338,6 +351,7 @@ export class GeoFem {
   private static mcPrincDevuelta(sig: ArrayLike<number>, inf: { t2: number; ix: number[]; reg: number }): void {
     const c_ = (sig[0] + sig[1]) / 2, R_ = Math.sqrt((sig[0] - sig[1]) * (sig[0] - sig[1]) / 4 + sig[3] * sig[3]);
     const pv = [c_ + R_, c_ - R_, sig[2]], ix = [0, 1, 2]; ix.sort((a, b) => (pv[a] > pv[b] ? -1 : pv[a] < pv[b] ? 1 : 0));
+    if (GeoFem.gDesempateZ) GeoFem.empateZ(pv, ix);
     inf.t2 = Math.atan2(2 * sig[3], sig[0] - sig[1]); inf.ix = ix;
   }
   private static mcArista(ss: number[], D: number[][], n1: number[], g1: number[], n2: number[], g2: number[], ccos: number): number[] {
@@ -353,6 +367,7 @@ export class GeoFem {
     const cen = (sxx + syy) / 2, R = Math.sqrt(((sxx - syy) / 2) * ((sxx - syy) / 2) + sxy * sxy), t2 = Math.atan2(2 * sxy, sxx - syy);
     const str = [cen + R, cen - R, szz];
     const ix = [0, 1, 2]; ix.sort((a, b) => (str[a] > str[b] ? -1 : str[a] < str[b] ? 1 : 0));   // mismo orden que std::sort con «>»
+    if (GeoFem.gDesempateZ) GeoFem.empateZ(str, ix);
     const ss = [str[ix[0]], str[ix[1]], str[ix[2]]];
     const tol = GeoFem.ysTol;   // antes 1e-7·|σ|máx (relativa)
     const sp = Math.sin(phi), sg = Math.sin(psi), ccos = c * Math.cos(phi);
@@ -450,6 +465,8 @@ export class GeoFem {
           }
           sigN.set(sig);
           if (got) { this.DEP.set(Dep, kk * 16); this.hasDep[kk] = 1; } else this.hasDep[kk] = 0;
+        } else if (this.soloTangente) {   // solo la tangente del retorno (las tensiones guardadas no se tocan), como geofem.cpp
+          if (got) { this.DEP.set(Dep, kk * 16); this.hasDep[kk] = 1; } else this.hasDep[kk] = 0;
         }
       }
     }
@@ -473,20 +490,24 @@ export class GeoFem {
     const ADDisp = new Float64Array(nf), DForce = new Float64Array(nf);
     let conv = false, it = 0;
     if (!keep) this.resetState();   // keep = la etapa arranca del estado (σ, ε_pl) que dejó la anterior
-    if (keep && Fref && this.tangIni) { this.soloTangente = true; this.assembleInc(du, ab, false, Fi); this.soloTangente = false; }
-    this.assembleInc(du, ab, false, Fi);
+    GeoFem.gDesempateZ = this.desempateZ;
+    // porPaso: el retorno de cada iteración sale del estado del INICIO del paso con el incremento ACUMULADO (como geofem.cpp).
+    // U0 = incremento inicial (modo GEO5: η·Δu del último peldaño), solo en σ.
+    const S0 = Float64Array.from(this.SIG), E0 = Float64Array.from(this.EPL), uT = new Float64Array(ndof), CLoad = new Float64Array(nf);
+    const U0 = this.porPaso && this.u0ext && this.u0ext.length === ndof ? this.u0ext : new Float64Array(ndof);
+    const evalInc = (dinc: Float64Array, commit: boolean, Fo: Float64Array): void => {
+      if (!this.porPaso) { this.assembleInc(dinc, ab, commit, Fo); return; }
+      for (let d = 0; d < ndof; d++) uT[d] = U0[d] + u[d] + dinc[d];
+      if (commit) { this.SIG.set(S0); this.EPL.set(E0); this.assembleInc(uT, ab, true, Fo); return; }
+      const cur = Float64Array.from(this.SIG); this.SIG.set(S0); this.assembleInc(uT, ab, false, Fo); this.SIG.set(cur);
+    };
+    if (this.soloFint) { this.assembleInc(du, ab, false, Fi); this.ALoadV = Float64Array.from(Fi); return [true, u, 0]; }   // ALoad = F_int (modo GEO5)
+    if (keep && Fref && this.tangIni) { this.soloTangente = true; evalInc(du, false, Fi); this.soloTangente = false; }
+    evalInc(du, false, Fi);
     this.gather(Fext, Fi, Rf);                                   // con TIES el esclavo suma en la fila del maestro
     DForce.set(Rf);
     if (Fref) this.gather(Fref, null, DForce);                   // SRM de GEO5: normas respecto a la carga total (como geofem.cpp)
     let rPrev = 1e300, ndiv = 0;
-    // porPaso: el retorno de cada iteración sale del estado del INICIO del paso con el incremento ACUMULADO (como geofem.cpp)
-    const S0 = Float64Array.from(this.SIG), E0 = Float64Array.from(this.EPL), uT = new Float64Array(ndof), CLoad = new Float64Array(nf);
-    const evalInc = (dinc: Float64Array, commit: boolean, Fo: Float64Array): void => {
-      if (!this.porPaso) { this.assembleInc(dinc, ab, commit, Fo); return; }
-      for (let d = 0; d < ndof; d++) uT[d] = u[d] + dinc[d];
-      if (commit) { this.SIG.set(S0); this.EPL.set(E0); this.assembleInc(uT, ab, true, Fo); return; }
-      const cur = Float64Array.from(this.SIG); this.SIG.set(S0); this.assembleInc(uT, ab, false, Fo); this.SIG.set(cur);
-    };
     for (it = 1; it <= maxit; it++) {
       if (!Number.isFinite(norm(Rf))) break;
       this.assembleK(this.Kt, false);
@@ -507,6 +528,7 @@ export class GeoFem {
         if (n0 > 1e-10 && n1 > 1e-10 && Math.abs(den) > 1e-10) { ratio = n1 / n0; if (ratio >= 0.8) acc = acc * s0 / den; }
         if (acc < 0.1) { al = 0.1; ratio = 0; } else if (acc >= 1.0) { al = 1.0; ratio = 0; } else { nls++; al = acc; }
       } while (nls < this.lsMax && ratio >= 0.8);
+      this.lastRaw = Float64Array.from(du); this.lastEta = al;   // DDisp crudo y η de la última it (arranque del peldaño siguiente, modo GEO5)
       for (let k = 0; k < nf; k++) drf[k] = al * duf[k];
       for (let d = 0; d < ndof; d++) du[d] *= al;
       if (this.energiaPrev) CLoad.set(Rf);                        // residuo ANTES de la iteración (bit 8)
@@ -676,7 +698,10 @@ export class GeoFem {
     let Racc = 1, fs = 1, nrelax = 0, rs = 0, prog = "";
     let ulo: Float64Array = new Float64Array(this.ndof);
     const steps: { srf: number; u: Float64Array }[] = [];
+    // modo GEO5 del muro (bit 32): pasos de carga de SRF 1 SIN porPaso (Tanda 13), porPaso solo en los peldaños (como geofem.cpp)
+    const pp = this.porPaso; if (this.modoG5) this.porPaso = false;
     const [c0, u1, n0] = this.srmContinua ? this.nrstepPasos(1.0, Ftot) : this.nrstepInc(1.0, Ftot, 0);   // GEO5: pasos de 0.1
+    this.porPaso = pp;
     // instantánea del estado de tensión (SRF=1) para los campos del visor
     const sig1 = Float64Array.from(this.SIG), epl1 = Float64Array.from(this.EPL), eps1 = new Float64Array(this.ne * NG * 4);
     for (let e = 0; e < this.ne; e++) for (let q = 0; q < NG; q++) {
@@ -691,6 +716,12 @@ export class GeoFem {
     const uel = this.scatter(x);
     this.log(`    SRM rs00 paso=1.0000 SRF=1.0000 ${c0 ? "CONVERGE" : "DIVERGE"} it=${n0}`);
     let uBase: Float64Array = Float64Array.from(u1);   // SRM continuada: desplazamiento del último estado convergido
+    let FL: Float64Array = Ftot, pend: Float64Array | null = null;   // pend = η·Δu de la última it del último peldaño convergido
+    if (this.srmContinua && this.modoG5) {   // GEO5: ALoad = F_int del estado de SRF 1 (carga y referencia de las normas), como geofem.cpp
+      this.soloFint = true; this.nrstep(1.0, Ftot, 0, undefined, true); this.soloFint = false; FL = this.ALoadV!;
+      let a = 0, b = 0; for (let k = 0; k < this.nfree; k++) { const d = this.free[k]; a += FL[d] * FL[d]; b += Ftot[d] * Ftot[d]; }
+      this.log(`    SRM modo GEO5: |ALoad| = ${Math.sqrt(a).toFixed(4)} (|F| = ${Math.sqrt(b).toFixed(4)})`);
+    }
     for (;;) {
       const s = 1 - (1 - RED0) / Math.pow(RELAX, nrelax);
       if (s > MINSTEP) break;
@@ -700,10 +731,12 @@ export class GeoFem {
       let conv: boolean, u: Float64Array, nit: number;
       if (this.srmContinua) {   // GEO5: desde el último estado convergido; si diverge, se vuelve a él (como geofem.cpp)
         const s0 = Float64Array.from(this.SIG), e0 = Float64Array.from(this.EPL), d0 = Float64Array.from(this.DEP), h0 = Uint8Array.from(this.hasDep);
-        const [cc, du, it] = this.nrstep(trial, Ftot, rs, undefined, true, Ftot); conv = cc; nit = it;
+        this.u0ext = this.modoG5 ? pend : null;
+        const [cc, du, it] = this.nrstep(trial, FL, rs, undefined, true, FL); conv = cc; nit = it; this.u0ext = null;
         if (conv) { let m = 0; for (let d = 0; d < this.ndof; d++) m = Math.max(m, Math.abs(du[d])); if (!(m < 1.0)) conv = false; }
         if (conv) { u = Float64Array.from(uBase); for (let d = 0; d < this.ndof; d++) u[d] += du[d]; uBase = u; }
         else { u = Float64Array.from(du); this.SIG.set(s0); this.EPL.set(e0); this.DEP.set(d0); this.hasDep.set(h0); }
+        if (this.modoG5) { if (conv) { pend = new Float64Array(this.ndof); for (let d = 0; d < this.ndof; d++) pend[d] = this.lastEta * this.lastRaw![d]; } else pend = null; }
       } else [conv, u, nit] = this.nrstep(trial, Ftot, rs);   // SRF > 1: sin reintento por incrementos (la divergencia fija el FS; con reintento Demo04 etapa 3 daba 1.7369)
       if (conv && Number.isFinite(norm(u))) {
         Racc *= s; fs = trial; ulo = u; steps.push({ srf: trial, u });

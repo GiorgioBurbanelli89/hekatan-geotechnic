@@ -2,7 +2,7 @@
 // que GeoFem (solver.ts); el log llega línea a línea por Module.geoLog.
 import { fgConAgua, extraAguaEtapa } from "./agua";
 import type { GeoModel, StageResult, Log } from "./solver";
-import { GEO5_SRM } from "./solver";
+import { GEO5_SRM, RIGID_E, RIGID_NU, srmBits } from "./solver";
 // @ts-ignore — módulo generado por emcc (build_wasm.sh)
 import createModule from "./built/geofem.js";
 
@@ -54,11 +54,16 @@ export class GeoFemWasm {
     const pF = mod._geofem_alloc_i(m.FIXED.length), pMat = mod._geofem_alloc(6 * nmat);
     mod.HEAPF64.set(m.X, pX >> 3); mod.HEAPF64.set(m.Y, pY >> 3);
     mod.HEAP32.set(m.ELE.flat(), pE >> 2); mod.HEAP32.set(m.EMAT, pM >> 2); mod.HEAP32.set(m.FIXED, pF >> 2);
-    mod.HEAPF64.set(m.MAT.flat(), pMat >> 3);
+    // RIGID BODY de GEO5 = elástico E = Eur = 1e9 kPa, ν = 0.2 (binario: Geo5Solver_decomp.c:73262, material tipo 1). Tanda 12:
+    // con el E del hormigón (2.1e7) el Δu del 1.1111 salía 12 % mayor que el del solver real; con 1e9, a 1e-10.
+    // SOLO en el modo GEO5 del muro (bit 32): los demás casos (otros oráculos: Abaqus, SAP) siguen con el E del material.
+    const rigM = m.RIGID ?? (m.MATNAMES ?? []).map((n) => /muro|hormig|concret|wall/i.test(n));
+    const g5 = (srmBits(m.srmContinua) & 32) !== 0;
+    mod.HEAPF64.set(m.MAT.flatMap((M, i) => (g5 && rigM[i] ? [RIGID_E, RIGID_NU, ...M.slice(2)] : M)), pMat >> 3);
     const h = mod._geofem_create(nn, ne, pX, pY, pE, pM, m.FIXED.length, pF, nmat, pMat);
     // materiales RÍGIDOS (muro = «Rigid body» de GEO5: región elástica que la SRM no reduce)
     if (m.RIGID?.some((r) => r)) { const pR = mod._geofem_alloc_i(nmat); mod.HEAP32.set(m.RIGID.map((r) => (r ? 1 : 0)), pR >> 2); mod._geofem_set_rigid(h, pR, nmat); mod._geofem_free(pR); }
-    if (m.srmContinua) mod._geofem_set_srm(h, typeof m.srmContinua === "number" ? m.srmContinua : GEO5_SRM);   // modo GEO5 (bits: ver geofem.cpp)
+    if (m.srmContinua) mod._geofem_set_srm(h, srmBits(m.srmContinua));   // modo GEO5 (bits: ver geofem.cpp)
     if (m.MODEL?.some((v) => v)) { const pD = mod._geofem_alloc_i(nmat); mod.HEAP32.set(m.MODEL, pD >> 2); mod._geofem_set_model(h, pD, nmat); mod._geofem_free(pD); }   // Mohr-Coulomb por material
     for (const p of [pX, pY, pE, pM, pF, pMat]) mod._geofem_free(p);
     return new GeoFemWasm(mod, h, m, log);
