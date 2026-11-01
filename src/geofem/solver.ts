@@ -98,7 +98,7 @@ const c7 = 0.1012865073235, C7 = 0.7974269853531, e7 = 0.4701420641051, E7 = 0.0
 export const GP = [[1 / 3, 1 / 3], [c7, c7], [C7, c7], [c7, C7], [e7, e7], [E7, e7], [e7, E7]];
 export const GW = [0.225 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2];
 const NG = 7;
-export const GEO5_SRM = 19;   // bits de la SRM en modo GEO5 (ver setSrm / geofem_set_srm)
+export const GEO5_SRM = 3;    // bits de la SRM en modo GEO5 (ver setSrm / geofem_set_srm). Antes 19: el bit 16 (porPaso) NO es lo que hace GEO5 (Tanda 4-5)
 
 export function t6(L1: number, L2: number): [number[], number[], number[]] {
   const L3 = 1 - L1 - L2;
@@ -319,7 +319,7 @@ export class GeoFem {
   private soloTangente = false; private tangIni = false; private energiaPrev = false; private porPaso = false;
   /** Modo GEO5 de la SRM, los mismos bits que geofem_set_srm: 1 peldaños encadenados, 2 tangente del SRF nuevo al
    *  empezar el peldaño, 4 line search de 3 pasadas, 8 energía con el residuo previo, 16 retorno desde el inicio del paso.
-   *  true = 19 (el que calca el Log_File de GeoFEM: registros_etapas.md). */
+   *  true = GEO5_SRM = 3 (antes 19; el bit 16 no es lo que hace GEO5: Tanda 4-5 de registros/2026-11-01_geo5_mapas_vs_geotechnic.md). */
   private setSrm(f: boolean | number | undefined): void {
     const b = f === true ? GEO5_SRM : typeof f === "number" ? f : 0;
     this.srmContinua = (b & 1) !== 0; this.tangIni = (b & 2) !== 0; this.lsMax = b & 4 ? 3 : 1; this.energiaPrev = (b & 8) !== 0; this.porPaso = (b & 16) !== 0;
@@ -328,7 +328,18 @@ export class GeoFem {
 
   // ---- MOHR-COULOMB: el mismo retorno de Clausen que geofem.cpp (portado de mc_stress.m). Tracción positiva.
   private static fmc(s: number[], sp: number, cc: number): number { return 0.5 * (s[0] - s[2]) + 0.5 * (s[0] + s[2]) * sp - cc; }
-  private static mcValido(s: number[], sp: number, cc: number, tol: number): boolean { return s[0] >= s[1] - tol && s[1] >= s[2] - tol && GeoFem.fmc(s, sp, cc) <= tol; }
+  // admisibilidad de GEO5 (FUN_005a67e0): F1, F2, F3 <= tol sobre los valores SIN reordenar; no se exige σ1 >= σ2 >= σ3 (ver geofem.cpp)
+  private static mcValido(s: number[], sp: number, cc: number, tol: number): boolean {
+    const f2 = 0.5 * (s[1] - s[2]) + 0.5 * (s[1] + s[2]) * sp - cc, f3 = 0.5 * (s[0] - s[1]) + 0.5 * (s[0] + s[1]) * sp - cc;
+    return GeoFem.fmc(s, sp, cc) <= tol && f2 <= tol && f3 <= tol;
+  }
+  static ysTol = 0.001;   // ys_tolerance de GEO5 (kPa, ABSOLUTA)
+  // tangente con las principales de la σ DEVUELTA (FUN_005a8680), no de la de prueba
+  private static mcPrincDevuelta(sig: ArrayLike<number>, inf: { t2: number; ix: number[]; reg: number }): void {
+    const c_ = (sig[0] + sig[1]) / 2, R_ = Math.sqrt((sig[0] - sig[1]) * (sig[0] - sig[1]) / 4 + sig[3] * sig[3]);
+    const pv = [c_ + R_, c_ - R_, sig[2]], ix = [0, 1, 2]; ix.sort((a, b) => (pv[a] > pv[b] ? -1 : pv[a] < pv[b] ? 1 : 0));
+    inf.t2 = Math.atan2(2 * sig[3], sig[0] - sig[1]); inf.ix = ix;
+  }
   private static mcArista(ss: number[], D: number[][], n1: number[], g1: number[], n2: number[], g2: number[], ccos: number): number[] {
     const Dg1 = [0, 1, 2].map((i) => D[i][0] * g1[0] + D[i][1] * g1[1] + D[i][2] * g1[2]), Dg2 = [0, 1, 2].map((i) => D[i][0] * g2[0] + D[i][1] * g2[1] + D[i][2] * g2[2]);
     const L11 = n1[0] * Dg1[0] + n1[1] * Dg1[1] + n1[2] * Dg1[2], L22 = n2[0] * Dg2[0] + n2[1] * Dg2[1] + n2[2] * Dg2[2];
@@ -343,7 +354,7 @@ export class GeoFem {
     const str = [cen + R, cen - R, szz];
     const ix = [0, 1, 2]; ix.sort((a, b) => (str[a] > str[b] ? -1 : str[a] < str[b] ? 1 : 0));   // mismo orden que std::sort con «>»
     const ss = [str[ix[0]], str[ix[1]], str[ix[2]]];
-    const tol = 1e-7 * Math.max(1, Math.max(Math.abs(str[0]), Math.max(Math.abs(str[1]), Math.abs(str[2]))));
+    const tol = GeoFem.ysTol;   // antes 1e-7·|σ|máx (relativa)
     const sp = Math.sin(phi), sg = Math.sin(psi), ccos = c * Math.cos(phi);
     for (let i = 0; i < 4; i++) out[i] = st[i];
     if (info) { info.t2 = t2; info.ix = ix.slice(); info.reg = 0; }
@@ -426,6 +437,7 @@ export class GeoFem {
             return GeoFem.mcReturn(tr, De, q[0], q[2], q[1], out, inf);
           };
           got = ret(deps, sig) !== 0;   // también en el ápice, tangente numérica (con la elástica la etapa 6 no convergía)
+          if (got) GeoFem.mcPrincDevuelta(sig, inf);
           if (got && (commit || this.soloTangente)) GeoFem.mcTangenteGeo5(inf, De, q[0], q[2], Dep);   // la de GEO5
         } else got = this.dpReturn(deps, al, k, De, commit || this.soloTangente, sigN, sig, Dep);
         const w = this.dJw[kk];

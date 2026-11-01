@@ -294,11 +294,25 @@ struct GeoFem {
   //      GeoFEM (FRGeoFEM.exe, MC\mohrcoulomb_rp.cpp, regiones F1 / F1F2 / F1F3 / ápice; memoria reference_geofem_mc_tangent).
   //      Portado línea a línea de ingenieria-inversa/hekatan-geo5-bridge/Demo04_replica/mc_stress.m (validado contra Abaqus en
   //      el talud Demo04). Tracción positiva. Deformación plana: principales en el plano (σa, σb) y σzz.
+  struct McInfo { double t2 = 0; int ix[3] = {0, 1, 2}; int reg = 0; };
   static double fmc(const double* s3, double sp, double cc) {   // s3 ordenado de mayor a menor
     return 0.5 * (s3[0] - s3[2]) + 0.5 * (s3[0] + s3[2]) * sp - cc;
   }
+  // admisibilidad de GEO5 (FUN_005a67e0, FRGeoFEM_exe_mc_decomp.c:6120-6164): F1, F2 y F3 sobre los valores devueltos SIN
+  // reordenar, todas <= tol. NO se exige σ1 >= σ2 >= σ3: un retorno a la cara con σ2 − σ1 = 1e-3 y F2 <= tol se queda en la CARA
+  // (antes se exigía el orden y se mandaba a la arista). Tanda 4, registros/2026-11-01_geo5_mapas_vs_geotechnic.md
   static bool mcValido(const double* s3, double sp, double cc, double tol) {
-    return s3[0] >= s3[1] - tol && s3[1] >= s3[2] - tol && fmc(s3, sp, cc) <= tol;
+    double f2 = 0.5 * (s3[1] - s3[2]) + 0.5 * (s3[1] + s3[2]) * sp - cc, f3 = 0.5 * (s3[0] - s3[1]) + 0.5 * (s3[0] + s3[1]) * sp - cc;
+    return fmc(s3, sp, cc) <= tol && f2 <= tol && f3 <= tol;
+  }
+  // tolerancia del retorno = ys_tolerance de GEO5 (0.001 kPa, ABSOLUTA: Geo5Solver_decomp.c:44030 → +0x438 → DAT_00722718)
+  static inline double ysTol = 0.001;
+  // tangente con las principales de la σ DEVUELTA (FUN_005a8680 recalcula ángulo y orden σ1 >= σ2 >= σ3 de la tensión guardada)
+  static void mcPrincDevuelta(const double* sig, McInfo& in) {
+    double c_ = (sig[0] + sig[1]) / 2, R_ = std::sqrt((sig[0] - sig[1]) * (sig[0] - sig[1]) / 4 + sig[3] * sig[3]);
+    double pv[3] = {c_ + R_, c_ - R_, sig[2]}; int ix[3] = {0, 1, 2};
+    std::sort(ix, ix + 3, [&](int a, int b) { return pv[a] > pv[b]; });
+    in.t2 = std::atan2(2 * sig[3], sig[0] - sig[1]); for (int k = 0; k < 3; k++) in.ix[k] = ix[k];
   }
   static void mcArista(const double* ss, const double D[3][3], const double* n1, const double* g1, const double* n2, const double* g2, double ccos, double* out) {
     double Dg1[3], Dg2[3];
@@ -310,7 +324,6 @@ struct GeoFem {
     for (int i = 0; i < 3; i++) out[i] = ss[i] - d1 * Dg1[i] - d2 * Dg2[i];
   }
   /** σ de prueba (4: xx yy zz xy) → σ devuelta. Devuelve la región: 0 elástico, 1 cara, 2 arista, 3 ÁPICE. */
-  struct McInfo { double t2 = 0; int ix[3] = {0, 1, 2}; int reg = 0; };
   static int mcReturn(const double* st, const double* De, double phi, double psi, double c, double* out, McInfo* info = nullptr) {
     double sxx = st[0], syy = st[1], szz = st[2], sxy = st[3];
     double cen = (sxx + syy) / 2, R = std::sqrt(((sxx - syy) / 2) * ((sxx - syy) / 2) + sxy * sxy), t2 = std::atan2(2 * sxy, sxx - syy);
@@ -318,7 +331,7 @@ struct GeoFem {
     int ix[3] = {0, 1, 2};
     std::sort(ix, ix + 3, [&](int a, int b) { return str[a] > str[b]; });
     double ss[3] = {str[ix[0]], str[ix[1]], str[ix[2]]};
-    double tol = 1e-7 * std::max(1.0, std::max(std::fabs(str[0]), std::max(std::fabs(str[1]), std::fabs(str[2]))));
+    double tol = ysTol;   // antes 1e-7·|σ|máx (relativa)
     double sp = std::sin(phi), sg = std::sin(psi), ccos = c * std::cos(phi);
     for (int i = 0; i < 4; i++) out[i] = st[i];
     if (info) { info->t2 = t2; for (int k = 0; k < 3; k++) info->ix[k] = ix[k]; info->reg = 0; }
@@ -425,6 +438,7 @@ struct GeoFem {
           // (como el D-P del motor): la etapa 6 del muro por etapas dejaba de converger (0 % de la carga). GEO5 tiene su
           // propia tangente de vértice (FUN_0045d760), no la elástica.
           got = ret(deps, sig) != 0;
+          if (got) mcPrincDevuelta(sig, inf);
           if (got && (commit || soloTangente)) mcTangenteGeo5(inf, De, q[0], q[2], Dep);   // la de GEO5 (antes numérica: ver abajo, registro)
         } else got = dpReturn(deps, al, k, De, commit || soloTangente, sigN, sig, Dep);
         double w = dJw[kk];

@@ -1,0 +1,195 @@
+
+> hekatan-geotechnic@0.1.0 test
+> tsx tests/demo04.ts && tsx tests/muro_geo5.ts && tsx tests/dinamico_columna.ts && tsx tests/sismo_muro.ts && tsx tests/dinamico_muro.ts && tsx tests/etapas_ts_wasm.ts
+
+motor=ts banda=103 nfree=1150
+### etapa1 (peso propio) ###
+  etapa1 (peso propio)   >>> FS=1.6935  (GEO5=1.69)  [0.5 s]
+### etapa2 (+sobrecarga) ###
+  etapa2 (+sobrecarga)   >>> FS=1.4810  (GEO5=1.48)  [0.5 s]
+### etapa3 (+ancla) ###
+  etapa3 (+ancla)        >>> FS=1.6935  (GEO5=1.69)  [0.4 s]
+TOTAL 1.4 s
+ts wall 1.39 s; FS = 1.6935 / 1.4810 / 1.6935
+ok    T t=1 peso muro                              Hekatan   88.4365  GEO5    88.44  dif  -0.0035
+ok    T t=1 estático Fx                            Hekatan   36.8260  GEO5    36.83  dif  -0.0040
+ok    T t=1 estático Fz                            Hekatan   41.9173  GEO5    41.92  dif  -0.0027
+ok    T t=1 estático x                             Hekatan    2.5691  GEO5     2.57  dif  -0.0009
+ok    T t=1 estático y                             Hekatan    1.2621  GEO5     1.26  dif   0.0021
+ok    T t=1 sísmico Fx                             Hekatan   53.3149  GEO5    53.32  dif  -0.0051
+ok    T t=1 sísmico Fz                             Hekatan   88.6267  GEO5    88.63  dif  -0.0033
+ok    T t=1 sísmico x                              Hekatan    2.1160  GEO5     2.12  dif  -0.0040
+ok    T t=1 sísmico y                              Hekatan    2.4526  GEO5     2.45  dif   0.0026
+ok    T t=0.2 peso muro                            Hekatan   33.2360  GEO5    33.24  dif  -0.0040
+ok    T t=0.2 estático Fx                          Hekatan   23.6332  GEO5    23.63  dif   0.0032
+ok    T t=0.2 estático Fz                          Hekatan   37.1155  GEO5    37.12  dif  -0.0045
+ok    T t=0.2 estático x                           Hekatan    2.5134  GEO5     2.51  dif   0.0034
+ok    T t=0.2 estático y                           Hekatan    0.9524  GEO5     0.95  dif   0.0024
+ok    T t=0.2 sísmico Fx                           Hekatan   33.5843  GEO5    33.59  dif  -0.0057
+ok    T t=0.2 sísmico Fz                           Hekatan   58.0139  GEO5    58.02  dif  -0.0061
+ok    T t=0.2 sísmico x                            Hekatan    2.0333  GEO5     2.03  dif   0.0033
+ok    T t=0.2 sísmico y                            Hekatan    1.8697  GEO5     1.87  dif  -0.0003
+ok    T t=0.4 peso muro                            Hekatan   47.0361  GEO5    47.04  dif  -0.0039
+ok    T t=0.4 estático Fx                          Hekatan   26.6310  GEO5    26.63  dif   0.0010
+ok    T t=0.4 estático Fz                          Hekatan   38.2066  GEO5    38.21  dif  -0.0034
+ok    T t=0.4 estático x                           Hekatan    2.5273  GEO5     2.53  dif  -0.0027
+ok    T t=0.4 estático y                           Hekatan    1.0338  GEO5     1.03  dif   0.0038
+ok    T t=0.4 sísmico Fx                           Hekatan   38.3884  GEO5    38.39  dif  -0.0016
+ok    T t=0.4 sísmico Fz                           Hekatan   65.8679  GEO5    65.87  dif  -0.0021
+ok    T t=0.4 sísmico x                            Hekatan    2.0605  GEO5     2.06  dif   0.0005
+ok    T t=0.4 sísmico y                            Hekatan    2.0104  GEO5     2.01  dif   0.0004
+ok    T t=0.6 peso muro                            Hekatan   60.8363  GEO5    60.84  dif  -0.0037
+ok    T t=0.6 estático Fx                          Hekatan   29.8335  GEO5    29.83  dif   0.0035
+ok    T t=0.6 estático Fz                          Hekatan   39.3722  GEO5    39.37  dif   0.0022
+ok    T t=0.6 estático x                           Hekatan    2.5412  GEO5     2.54  dif   0.0012
+ok    T t=0.6 estático y                           Hekatan    1.1120  GEO5     1.11  dif   0.0020
+ok    T t=0.6 sísmico Fx                           Hekatan   43.1483  GEO5    43.15  dif  -0.0017
+ok    T t=0.6 sísmico Fz                           Hekatan   73.3757  GEO5    73.38  dif  -0.0043
+ok    T t=0.6 sísmico x                            Hekatan    2.0819  GEO5     2.08  dif   0.0019
+ok    T t=0.6 sísmico y                            Hekatan    2.1568  GEO5     2.16  dif  -0.0032
+ok    T t=0.8 peso muro                            Hekatan   74.6364  GEO5    74.64  dif  -0.0036
+ok    T t=0.8 estático Fx                          Hekatan   33.2319  GEO5    33.23  dif   0.0019
+ok    T t=0.8 estático Fz                          Hekatan   40.6091  GEO5    40.61  dif  -0.0009
+ok    T t=0.8 estático x                           Hekatan    2.5552  GEO5     2.56  dif  -0.0048
+ok    T t=0.8 estático y                           Hekatan    1.1879  GEO5     1.19  dif  -0.0021
+ok    T t=0.8 sísmico Fx                           Hekatan   48.1238  GEO5    48.13  dif  -0.0062
+ok    T t=0.8 sísmico Fz                           Hekatan   80.9620  GEO5    80.97  dif  -0.0080
+ok    T t=0.8 sísmico x                            Hekatan    2.1001  GEO5     2.10  dif   0.0001
+ok    T t=0.8 sísmico y                            Hekatan    2.3044  GEO5     2.30  dif   0.0044
+ok    kv=0 vuelco                                  Hekatan    2.7136  GEO5     2.71  dif   0.0036
+ok    kv=0 deslizamiento                           Hekatan    1.1974  GEO5     1.20  dif  -0.0026
+ok    kv=0 Mres                                    Hekatan  388.9565  GEO5   388.96  dif  -0.0035
+ok    kv=0 Movr                                    Hekatan  143.3357  GEO5   143.34  dif  -0.0043
+ok    kv=0.224 vuelco                              Hekatan    2.2797  GEO5     2.28  dif  -0.0003
+ok    kv=0.224 deslizamiento                       Hekatan    1.0503  GEO5     1.05  dif   0.0003
+ok    kv=-0.224 vuelco                             Hekatan    3.1058  GEO5     3.11  dif  -0.0042
+ok    kv=-0.224 deslizamiento                      Hekatan    1.3588  GEO5     1.36  dif  -0.0012
+ok    kv=0.092 vuelco                              Hekatan    2.5435  GEO5     2.54  dif   0.0035
+ok    kv=0.092 deslizamiento                       Hekatan    1.1340  GEO5     1.13  dif   0.0040
+ok    kv=-0.092 vuelco                             Hekatan    2.8775  GEO5     2.88  dif  -0.0025
+ok    kv=-0.092 deslizamiento                      Hekatan    1.2628  GEO5     1.26  dif   0.0028
+ok    L + dentellón peso muro                      Hekatan   38.1800  GEO5    38.18  dif   0.0000
+ok    L + dentellón estático Fx                    Hekatan   31.5082  GEO5    31.51  dif  -0.0018
+ok    L + dentellón estático Fz                    Hekatan   39.9818  GEO5    39.98  dif   0.0018
+ok    L + dentellón estático x                     Hekatan    1.6982  GEO5     1.70  dif  -0.0018
+ok    L + dentellón estático y                     Hekatan    0.8502  GEO5     0.85  dif   0.0002
+ok    L + dentellón sísmico Fx                     Hekatan   45.6091  GEO5    45.61  dif  -0.0009
+ok    L + dentellón sísmico Fz                     Hekatan   77.1590  GEO5    77.16  dif  -0.0010
+ok    L + dentellón sísmico x                      Hekatan    1.2413  GEO5     1.24  dif   0.0013
+ok    L + dentellón sísmico y                      Hekatan    1.9305  GEO5     1.93  dif   0.0005
+ok    L + dentellón vuelco (del %)                 Hekatan    1.6140  GEO5     1.61  dif  -0.0002
+ok    L + dentellón deslizamiento (del %)          Hekatan    1.6450  GEO5     1.65  dif  -0.0007
+ok    T + dentellón peso muro                      Hekatan   44.6200  GEO5    44.62  dif   0.0000
+ok    T + dentellón estático Fx                    Hekatan   31.5082  GEO5    31.51  dif  -0.0018
+ok    T + dentellón estático Fz                    Hekatan   39.9818  GEO5    39.98  dif   0.0018
+ok    T + dentellón estático x                     Hekatan    2.3982  GEO5     2.40  dif  -0.0018
+ok    T + dentellón estático y                     Hekatan    0.8502  GEO5     0.85  dif   0.0002
+ok    T + dentellón sísmico Fx                     Hekatan   45.6091  GEO5    45.61  dif  -0.0009
+ok    T + dentellón sísmico Fz                     Hekatan   77.1590  GEO5    77.16  dif  -0.0010
+ok    T + dentellón sísmico x                      Hekatan    1.9413  GEO5     1.94  dif   0.0013
+ok    T + dentellón sísmico y                      Hekatan    1.9305  GEO5     1.93  dif   0.0005
+ok    T + dentellón vuelco (del %)                 Hekatan    2.5987  GEO5     2.60  dif   0.0013
+ok    T + dentellón deslizamiento (del %)          Hekatan    1.5014  GEO5     1.50  dif  -0.0008
+ok    L sin dentellón peso muro                    Hekatan   34.7300  GEO5    34.73  dif   0.0000
+ok    L sin dentellón estático Fx                  Hekatan   26.6310  GEO5    26.63  dif   0.0010
+ok    L sin dentellón estático Fz                  Hekatan   38.2066  GEO5    38.21  dif  -0.0034
+ok    L sin dentellón estático x                   Hekatan    1.6772  GEO5     1.68  dif  -0.0028
+ok    L sin dentellón estático y                   Hekatan    1.0338  GEO5     1.03  dif   0.0038
+ok    L sin dentellón sísmico Fx                   Hekatan   38.3884  GEO5    38.39  dif  -0.0016
+ok    L sin dentellón sísmico Fz                   Hekatan   65.8679  GEO5    65.87  dif  -0.0021
+ok    L sin dentellón sísmico x                    Hekatan    1.2105  GEO5     1.21  dif   0.0005
+ok    L sin dentellón sísmico y                    Hekatan    2.0104  GEO5     2.01  dif   0.0004
+ok    L sin dentellón vuelco (del %)               Hekatan    1.5405  GEO5     1.54  dif  -0.0003
+ok    L sin dentellón deslizamiento (del %)        Hekatan    1.1749  GEO5     1.17  dif   0.0004
+ok    T vertical peso muro                         Hekatan   41.1700  GEO5    41.17  dif   0.0000
+ok    T vertical estático Fx                       Hekatan   26.6310  GEO5    26.63  dif   0.0010
+ok    T vertical estático Fz                       Hekatan   38.2066  GEO5    38.21  dif  -0.0034
+ok    T vertical estático x                        Hekatan    2.3772  GEO5     2.38  dif  -0.0028
+ok    T vertical estático y                        Hekatan    1.0338  GEO5     1.03  dif   0.0038
+ok    T vertical sísmico Fx                        Hekatan   38.3884  GEO5    38.39  dif  -0.0016
+ok    T vertical sísmico Fz                        Hekatan   65.8679  GEO5    65.87  dif  -0.0021
+ok    T vertical sísmico x                         Hekatan    1.9105  GEO5     1.91  dif   0.0005
+ok    T vertical sísmico y                         Hekatan    2.0104  GEO5     2.01  dif   0.0004
+ok    T vertical vuelco (del %)                    Hekatan    2.5130  GEO5     2.51  dif   0.0005
+ok    T vertical deslizamiento (del %)             Hekatan    1.1869  GEO5     1.19  dif   0.0004
+
+101/101 filas dentro de la tolerancia
+MODOS (subespacio, 11 vectores, 7 iteraciones): f1=1.498937 Hz  f2=4.496814 Hz  f3=7.494742 Hz  | masa total 22.637700 t
+DINÁMICO lineal: Newmark β=0.25 γ=0.5 α=0, Δt=0.005 s, 400 pasos, b1..b6 = 160000 800 1 400 1 0 [0.02 s]
+
+== columna de suelo: 147 nudos, 48 T6, 144 gdl (banda 8) ==
+masa total [t]       TS   22.6377  Abaqus   22.6377  Python   22.6377  exacta   22.6377  |TS-Abq| 7.2e-8 OK
+f1 [Hz]              TS    1.4989  Abaqus    1.4989  Python    1.4989  exacta    1.4989  |TS-Abq| 5.5e-8 OK
+f2 [Hz]              TS    4.4968  Abaqus    4.4968  Python    4.4968  exacta    4.4968  |TS-Abq| 1.2e-7 OK
+f3 [Hz]              TS    7.4947  Abaqus    7.4947  Python    7.4947  exacta    7.4947  |TS-Abq| 1.9e-7 OK
+Mef_x modo 1 [t]     TS   18.3494  Abaqus   18.3494  Python   18.3494                   |TS-Abq| 7.4e-7 OK
+Mef_x modo 2 [t]     TS    2.0388  Abaqus    2.0388  Python    2.0388                   |TS-Abq| 7.5e-8 OK
+Mef_x modo 3 [t]     TS    0.7340  Abaqus    0.7340  Python    0.7340                   |TS-Abq| 1.5e-8 OK
+u_x corona max [mm]  TS   16.5963  Abaqus   16.5963  Python   16.5963                   |TS-Abq| 1.1e-7 OK
+t del max [s]        TS    0.6000  Abaqus    0.6000  Python    0.6000                   |TS-Abq| 2.4e-8 OK
+u_x corona, 401 instantes: max|TS-Abaqus| = 9.31e-7 mm OK ; max|TS-Python| = 1.17e-11 mm
+(Abaqus guarda u en float32 en el .odb: ruido ~1e-6 mm)
+
+Rayleigh: a = 0.7848424008 1/s (Python 0.7848424008), b = 1.7696311665e-3 s (Python 1.7696311665e-3) ; Abaqus *DAMPING, ALPHA=0.784842400838564, BETA=0.0017696311664964
+DINÁMICO lineal: Newmark β=0.25 γ=0.5 α=0, Δt=0.005 s, 400 pasos, b1..b6 = 160000 800 1 400 1 0 [0.02 s]
+-- rayleigh: α=0 β=0.25 γ=0.5 + Rayleigh
+  u_x max [mm]       TS  -15.3017  Abaqus  -15.3017  Python  -15.3017                   |TS-Abq| 1.6e-7 OK
+  t del max [s]      TS    0.2650  Abaqus    0.2650  Python    0.2650                   |TS-Abq| 1.4e-8 OK
+  u_x(t), 401 instantes: max|TS-Abaqus| = 4.59e-7 mm OK ; max|TS-Python| = 1.94e-12 mm
+DINÁMICO lineal: Newmark β=0.275625 γ=0.55 α=-0.05, Δt=0.005 s, 400 pasos, b1..b6 = 145124.716553 725.623582766 0.814058956916 399.092970522 0.995464852608 -0.0000113378684807 [0.02 s]
+-- hht: α=-0.05 β=0.275625 γ=0.55
+  u_x max [mm]       TS   16.5955  Abaqus   16.5955  Python   16.5955                   |TS-Abq| 3.0e-7 OK
+  t del max [s]      TS    1.9350  Abaqus    1.9350  Python    1.9350                   |TS-Abq| 5.7e-8 OK
+  u_x(t), 401 instantes: max|TS-Abaqus| = 9.43e-7 mm OK ; max|TS-Python| = 6.40e-12 mm
+DINÁMICO lineal: Newmark β=0.275625 γ=0.55 α=-0.05, Δt=0.005 s, 400 pasos, b1..b6 = 145124.716553 725.623582766 0.814058956916 399.092970522 0.995464852608 -0.0000113378684807 [0.03 s]
+-- hht_rayleigh: α=-0.05 β=0.275625 γ=0.55 + Rayleigh
+  u_x max [mm]       TS  -15.3007  Abaqus  -15.3007  Python  -15.3007                   |TS-Abq| 5.7e-8 OK
+  t del max [s]      TS    0.2650  Abaqus    0.2650  Python    0.2650                   |TS-Abq| 1.4e-8 OK
+  u_x(t), 401 instantes: max|TS-Abaqus| = 4.79e-7 mm OK ; max|TS-Python| = 3.23e-11 mm
+
+SRM estática con TIES (rígido): u_x corona TS -13.908603 mm, Python -13.908603 mm, lado derecho -13.908603 mm OK
+DINÁMICO: todo OK a 4 decimales contra Abaqus
+SISMO seudoestático (kh -0.336, kv 0): ΣFx = -1775.3506 kN (Abaqus ΣRFx = -1775.3506) · 2798 nudos
+  u_x máx TS -26.5724 mm, Abaqus -26.5724 mm (nudo 79) · máx |TS−Abaqus| = 9.31e-7 mm (nudo 2726) OK
+SISMO: carga y desplazamientos OK a 4 decimales contra Abaqus
+== muro de Manabí, dinámico lineal: 6900 nudos, 3365 T6, 13470 gdl ==
+masa total [t]               Geotechnic   608.8673  Abaqus   608.8673  |dif| 2.4e-6 OK
+f1 [Hz]                      Geotechnic     6.1277  Abaqus     6.1277  |dif| 1.8e-7 OK
+f2 [Hz]                      Geotechnic     9.9276  Abaqus     9.9276  |dif| 4.2e-7 OK
+f3 [Hz]                      Geotechnic    10.7716  Abaqus    10.7716  |dif| 1.8e-7 OK
+u_x coronación máx [mm]      Geotechnic    -5.6414  Abaqus    -5.6414  |dif| 4.1e-8 OK
+instante del máx [s]         Geotechnic     3.0100  Abaqus     3.0100  |dif| 9.5e-9 OK
+u_x coronación, 2201 instantes: máx |Geotechnic − Abaqus| = 2.31e-7 mm OK
+a_x relativa corona     2201 instantes: máx |dif| = 1.19e-7 m/s² OK
+a_x relativa sup_detras 2201 instantes: máx |dif| = 2.18e-7 m/s² OK
+empuje peso [kN/m]           Geotechnic    18.5966  Abaqus    18.5966  |dif| 2.1e-7 OK
+(solo σ elástica, sin la viscosa: máx |dif| con Abaqus 7.82e-1 kN/m; es la parte β·K·v)
+empuje máximo [kN/m]         Geotechnic    54.9244  Abaqus    54.9244  |dif| 1.0e-6 OK
+instante del máximo [s]      Geotechnic     3.0100  Abaqus     3.0100  |dif| 9.5e-9 OK
+empuje sísmico, 2201 instantes: máx |dif| = 8.13e-7 kN/m OK
+MURO DINÁMICO: todo OK a 4 decimales contra Abaqus
+examples/muro_manabi_etapas.hgeo: malla 2082 nudos, 995 T6, 7 etapas
+  terreno      |u| máx 0.000 mm  dif u 0.0e+0 m · dif σ 0.0e+0 kPa · dif ε 0.0e+0  OK
+  muro         |u| máx 7.760 mm  dif u 0.0e+0 m · dif σ 0.0e+0 kPa · dif ε 0.0e+0  OK
+  bajo-talon   |u| máx 8.006 mm  dif u 0.0e+0 m · dif σ 0.0e+0 kPa · dif ε 0.0e+0  OK
+  capa1        |u| máx 10.003 mm  dif u 0.0e+0 m · dif σ 0.0e+0 kPa · dif ε 0.0e+0  OK
+  capa2        |u| máx 15.546 mm  dif u 0.0e+0 m · dif σ 0.0e+0 kPa · dif ε 0.0e+0  OK
+  capa3        |u| máx 22.157 mm  dif u 0.0e+0 m · dif σ 0.0e+0 kPa · dif ε 0.0e+0  OK
+  capa4        |u| máx 29.108 mm  dif u 0.0e+0 m · dif σ 0.0e+0 kPa · dif ε 0.0e+0  OK
+examples/muro_manabi_etapas_mc.hgeo: malla 2082 nudos, 995 T6, 7 etapas
+  terreno      |u| máx 0.000 mm  dif u 0.0e+0 m · dif σ 0.0e+0 kPa · dif ε 0.0e+0  OK
+  muro         |u| máx 6.183 mm  dif u 4.8e-18 m · dif σ 1.0e-8 kPa · dif ε 2.8e-17  OK
+  bajo-talon   |u| máx 6.425 mm  dif u 6.9e-18 m · dif σ 9.1e-8 kPa · dif ε 3.4e-17  OK
+  capa1        |u| máx 9.039 mm  dif u 3.8e-14 m · dif σ 2.1e-7 kPa · dif ε 3.1e-14  OK
+  capa2        |u| máx 14.660 mm  dif u 2.4e-13 m · dif σ 4.1e-7 kPa · dif ε 2.6e-12  OK
+  capa3        |u| máx 20.765 mm  dif u 2.7e-13 m · dif σ 3.6e-7 kPa · dif ε 2.6e-12  OK
+  capa4        |u| máx 27.128 mm  dif u 5.7e-13 m · dif σ 4.9e-7 kPa · dif ε 5.1e-12  OK
+examples/muro_manabi_etapas_mc_ebowles.hgeo: malla 2082 nudos, 995 T6, 7 etapas
+  terreno      |u| máx 0.000 mm  dif u 0.0e+0 m · dif σ 0.0e+0 kPa · dif ε 0.0e+0  OK
+  muro         |u| máx 7.762 mm  dif u 7.8e-18 m · dif σ 5.5e-9 kPa · dif ε 3.5e-17  OK
+  bajo-talon   |u| máx 8.047 mm  dif u 5.6e-18 m · dif σ 5.1e-8 kPa · dif ε 3.9e-17  OK
+  capa1        |u| máx 11.407 mm  dif u 2.8e-14 m · dif σ 1.1e-7 kPa · dif ε 1.1e-14  OK
+  capa2        |u| máx 18.883 mm  dif u 2.1e-13 m · dif σ 1.6e-7 kPa · dif ε 1.3e-12  OK
+  capa3        |u| máx 27.023 mm  dif u 1.7e-13 m · dif σ 2.2e-7 kPa · dif ε 1.6e-12  OK
+  capa4        |u| máx 35.653 mm  dif u 3.3e-13 m · dif σ 2.8e-7 kPa · dif ε 2.5e-12  OK
+ETAPAS: TS = WASM (Drucker-Prager y Mohr-Coulomb)

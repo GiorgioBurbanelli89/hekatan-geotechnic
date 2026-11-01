@@ -1,0 +1,5 @@
+wasm: FS = 1.4737  (62.2 s)  iteraciones 144
+
+real	1m5.249s
+user	0m0.168s
+sys	0m0.045s

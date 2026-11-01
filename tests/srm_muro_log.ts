@@ -1,12 +1,12 @@
-// SRM del muro de Manabí (malla EXACTA de GeoFEM) con el motor de Geotechnic en «modo GEO5» (srmContinua = bits 19),
+// SRM del muro de Manabí (malla EXACTA de GeoFEM) con el motor de Geotechnic en «modo GEO5» (srmContinua = GEO5_SRM, o los bits del 2.º argumento),
 // log en el formato de cmp_iterlogs_key.py → tests/out/srm_muro_<motor>.log, para compararlo con el Log_File de GEO5.
-//   npx tsx tests/srm_muro_log.ts [ts|wasm]
+//   npx tsx tests/srm_muro_log.ts [ts|wasm] [bits]
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { GeoFem, GeoModel } from "../src/geofem/solver";
+import { GeoFem, GeoModel, GEO5_SRM } from "../src/geofem/solver";
 import { GeoFemWasm } from "../src/geofem/geofemWasm";
 const engine = (process.argv[2] || "ts") as "ts" | "wasm";
 const model = JSON.parse(readFileSync(new URL("../examples/geofem_muro_manabi_malla.json", import.meta.url), "utf-8")) as GeoModel;
-(model as any).srmContinua = 19;
+(model as any).srmContinua = Number(process.argv[3] ?? GEO5_SRM);   // modo GEO5 (3 desde la Tanda 5; antes 19)
 const lines: string[] = [];
 const fem = engine === "wasm" ? await GeoFemWasm.create(model, (l: string) => lines.push(l)) : new GeoFem(model, (l: string) => lines.push(l));
 const t0 = performance.now();
