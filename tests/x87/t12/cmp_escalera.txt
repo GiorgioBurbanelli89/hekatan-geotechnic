@@ -1,0 +1,77 @@
+== log_e21e6_base
+peldaño  1 SRF 1.1111  it GEO5  3 motor  3  max|Δgi|/gi 7.3e-02  max|Δη| 2.0e-04  DIFIERE
+peldaño  2 SRF 1.2346  it GEO5  3 motor  9  max|Δgi|/gi 6.1e-01  max|Δη| 8.1e-01  DIFIERE
+peldaño  3 SRF 1.3717  it GEO5  3 motor  5  max|Δgi|/gi 1.6e+02  max|Δη| 6.6e-01  DIFIERE
+peldaño  4 SRF 1.2995  it GEO5  4 motor 12  max|Δgi|/gi 1.7e+01  max|Δη| 9.0e-01  DIFIERE
+peldaño  5 SRF 1.3679  it GEO5  9 motor 34  max|Δgi|/gi 9.8e-01  max|Δη| 9.0e-01  DIFIERE
+peldaño  6 SRF 1.4399  it GEO5  7 motor  3  max|Δgi|/gi 5.2e+01  max|Δη| 6.4e-01  DIFIERE
+peldaño  7 SRF 1.4030  it GEO5  8 motor  5  max|Δgi|/gi 1.2e+01  max|Δη| 2.7e-01  DIFIERE
+peldaño  8 SRF 1.3853  it GEO5  9 motor  3  max|Δgi|/gi 9.3e-01  max|Δη| 1.9e-01  DIFIERE
+peldaño  9 SRF 1.4028  it GEO5 12 motor  5  max|Δgi|/gi 9.8e-01  max|Δη| 8.9e-01  DIFIERE
+peldaño 10 SRF 1.4205  it GEO5  4 motor  5  max|Δgi|/gi 9.9e-01  max|Δη| 7.2e-01  DIFIERE
+peldaño 11 SRF 1.4385  it GEO5 12 motor  4  max|Δgi|/gi 9.8e-01  max|Δη| 9.0e-01  DIFIERE
+peor dif relativa |gi| (1 = nº de iteraciones distinto): 1.0e+00
+== log_e9
+peldaño  1 SRF 1.1111  it GEO5  3 motor  3  max|Δgi|/gi 1.1e-04  max|Δη| 0.0e+00  OK
+peldaño  2 SRF 1.2346  it GEO5  3 motor  3  max|Δgi|/gi 2.8e-04  max|Δη| 0.0e+00  OK
+peldaño  3 SRF 1.1696  it GEO5  3 motor  3  max|Δgi|/gi 5.3e-05  max|Δη| 0.0e+00  OK
+peldaño  4 SRF 1.2311  it GEO5  4 motor  4  max|Δgi|/gi 1.4e-04  max|Δη| 0.0e+00  OK
+peldaño  5 SRF 1.2959  it GEO5  9 motor  9  max|Δgi|/gi 3.7e-04  max|Δη| 0.0e+00  OK
+peldaño  6 SRF 1.2627  it GEO5  7 motor  7  max|Δgi|/gi 3.1e-02  max|Δη| 3.4e-02  DIFIERE
+peldaño  7 SRF 1.2951  it GEO5  8 motor  3  max|Δgi|/gi 3.6e+01  max|Δη| 8.9e-01  DIFIERE
+peldaño  8 SRF 1.2787  it GEO5  9 motor  3  max|Δgi|/gi 9.2e-01  max|Δη| 8.0e-01  DIFIERE
+peldaño  9 SRF 1.2949  it GEO5 12 motor  5  max|Δgi|/gi 9.8e-01  max|Δη| 8.2e-01  DIFIERE
+peldaño 10 SRF 1.3113  it GEO5  4 motor 13  max|Δgi|/gi 9.5e-01  max|Δη| 5.0e-01  DIFIERE
+peldaño 11 SRF 1.3279  it GEO5 12 motor 10  max|Δgi|/gi 9.7e-01  max|Δη| 9.0e-01  DIFIERE
+peldaño 12 SRF 1.3447  it GEO5  0 motor  7  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 13 SRF 1.3617  it GEO5  0 motor  4  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 14 SRF 1.3789  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 15 SRF 1.3964  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 16 SRF 1.4141  it GEO5  0 motor  4  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 17 SRF 1.4320  it GEO5  0 motor  5  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 18 SRF 1.4501  it GEO5  0 motor  4  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 19 SRF 1.4685  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 20 SRF 1.4870  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 21 SRF 1.5059  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 22 SRF 1.5249  it GEO5  0 motor  2  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 23 SRF 1.5442  it GEO5  0 motor  2  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 24 SRF 1.5638  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 25 SRF 1.5836  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 26 SRF 1.6036  it GEO5  0 motor  2  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 27 SRF 1.6239  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 28 SRF 1.6445  it GEO5  0 motor  4  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 29 SRF 1.6653  it GEO5  0 motor  4  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 30 SRF 1.6864  it GEO5  0 motor  5  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 31 SRF 1.7077  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 32 SRF 1.7293  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 33 SRF 1.7512  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 34 SRF 1.7734  it GEO5  0 motor  7  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 35 SRF 1.7958  it GEO5  0 motor  5  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 36 SRF 1.8186  it GEO5  0 motor  2  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 37 SRF 1.8416  it GEO5  0 motor  2  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 38 SRF 1.8649  it GEO5  0 motor  4  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 39 SRF 1.8885  it GEO5  0 motor  6  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 40 SRF 1.9124  it GEO5  0 motor  5  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 41 SRF 1.9366  it GEO5  0 motor  7  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 42 SRF 1.9611  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 43 SRF 1.9860  it GEO5  0 motor  2  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 44 SRF 2.0111  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 45 SRF 2.0366  it GEO5  0 motor  2  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 46 SRF 2.0623  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 47 SRF 2.0884  it GEO5  0 motor  3  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 48 SRF 2.1149  it GEO5  0 motor  9  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peldaño 49 SRF 2.1416  it GEO5  0 motor  6  max|Δgi|/gi 0.0e+00  max|Δη| 0.0e+00  DIFIERE
+peor dif relativa |gi| (1 = nº de iteraciones distinto): 1.0e+00
+== log_e9_ord2
+peldaño  1 SRF 1.1111  it GEO5  3 motor  3  max|Δgi|/gi 1.1e-04  max|Δη| 0.0e+00  OK
+peldaño  2 SRF 1.2346  it GEO5  3 motor  3  max|Δgi|/gi 2.8e-04  max|Δη| 0.0e+00  OK
+peldaño  3 SRF 1.1696  it GEO5  3 motor  3  max|Δgi|/gi 5.3e-05  max|Δη| 0.0e+00  OK
+peldaño  4 SRF 1.2311  it GEO5  4 motor  4  max|Δgi|/gi 1.4e-04  max|Δη| 0.0e+00  OK
+peldaño  5 SRF 1.2959  it GEO5  9 motor  9  max|Δgi|/gi 3.7e-04  max|Δη| 0.0e+00  OK
+peldaño  6 SRF 1.2627  it GEO5  7 motor  7  max|Δgi|/gi 4.3e-04  max|Δη| 0.0e+00  OK
+peldaño  7 SRF 1.2951  it GEO5  8 motor  8  max|Δgi|/gi 2.4e-04  max|Δη| 0.0e+00  OK
+peldaño  8 SRF 1.3283  it GEO5  9 motor  9  max|Δgi|/gi 4.1e-04  max|Δη| 0.0e+00  OK
+peldaño  9 SRF 1.3624  it GEO5 12 motor 12  max|Δgi|/gi 2.8e-04  max|Δη| 0.0e+00  OK
+peldaño 10 SRF 1.3973  it GEO5  4 motor  4  max|Δgi|/gi 3.3e-04  max|Δη| 0.0e+00  OK
+peldaño 11 SRF 1.3796  it GEO5 12 motor 14  max|Δgi|/gi 4.4e+00  max|Δη| 6.9e-01  DIFIERE
+peor dif relativa |gi| (1 = nº de iteraciones distinto): 1.0e+00

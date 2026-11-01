@@ -1,0 +1,42 @@
+== 1.1111 E 2.1e7 (base)
+it 1: eta motor 0.454864  GEO5 0.454741
+  DDisp crudo  |mot| 7.96684e-03 |G5| 7.95211e-03  rel 9.94e-03  esc 1.0018053  corr 0.999950  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0033 1.0011 1.0017  dif rel 0.006 0.018 0.009
+  u tras it    |mot| 3.62383e-03 |G5| 3.61615e-03  rel 1.00e-02  esc 1.0020761  corr 0.999950  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0036 1.0014 1.0020  dif rel 0.006 0.018 0.009
+it 2: eta motor 1.000000  GEO5 1.000000
+  DDisp crudo  |mot| 4.78118e-03 |G5| 4.78444e-03  rel 2.82e-02  esc 0.9989229  corr 0.999583  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0106 0.9843 0.9996  dif rel 0.026 0.044 0.026
+  u tras it    |mot| 8.35319e-03 |G5| 8.34464e-03  rel 2.01e-02  esc 1.0008236  corr 0.999790  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0080 0.9923 1.0010  dif rel 0.017 0.032 0.019
+it 3: eta motor 1.000000  GEO5 1.000000
+  DDisp crudo  |mot| 6.22293e-04 |G5| 5.53099e-04  rel 1.80e-01  esc 1.1167130  corr 0.992129  | zonas x<9.3 / muro / x>10.5: mot/G5 1.2186 1.2212 1.0986  dif rel 0.319 0.242 0.153
+  u tras it    |mot| 8.59449e-03 |G5| 8.57697e-03  rel 1.12e-02  esc 1.0019811  corr 0.999935  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0046 1.0013 1.0018  dif rel 0.007 0.017 0.011
+== 1.1111 E 1e9
+it 1: eta motor 0.454741  GEO5 0.454741
+  DDisp crudo  |mot| 7.95211e-03 |G5| 7.95211e-03  rel 8.92e-11  esc 1.0000000  corr 1.000000  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0000 1.0000 1.0000  dif rel 0.000 0.000 0.000
+  u tras it    |mot| 3.61615e-03 |G5| 3.61615e-03  rel 8.50e-11  esc 1.0000000  corr 1.000000  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0000 1.0000 1.0000  dif rel 0.000 0.000 0.000
+it 2: eta motor 1.000000  GEO5 1.000000
+  DDisp crudo  |mot| 4.78444e-03 |G5| 4.78444e-03  rel 3.71e-10  esc 1.0000000  corr 1.000000  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0000 1.0000 1.0000  dif rel 0.000 0.000 0.000
+  u tras it    |mot| 8.34464e-03 |G5| 8.34464e-03  rel 1.76e-10  esc 1.0000000  corr 1.000000  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0000 1.0000 1.0000  dif rel 0.000 0.000 0.000
+it 3: eta motor 1.000000  GEO5 1.000000
+  DDisp crudo  |mot| 5.53099e-04 |G5| 5.53099e-04  rel 2.47e-09  esc 1.0000000  corr 1.000000  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0000 1.0000 1.0000  dif rel 0.000 0.000 0.000
+  u tras it    |mot| 8.57697e-03 |G5| 8.57697e-03  rel 1.41e-11  esc 1.0000000  corr 1.000000  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0000 1.0000 1.0000  dif rel 0.000 0.000 0.000
+== 1.2627 sin desempate
+it 1: eta motor 0.100000  GEO5 0.100000
+  DDisp crudo  |mot| 2.55740e-02 |G5| 2.55754e-02  rel 1.32e-03  esc 0.9999458  corr 0.999999  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0005 0.9991 1.0000  dif rel 0.005 0.003 0.001
+  u tras it    |mot| 2.55740e-03 |G5| 2.55754e-03  rel 1.32e-03  esc 0.9999458  corr 0.999999  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0005 0.9991 1.0000  dif rel 0.005 0.003 0.001
+it 2: eta motor 0.767116  GEO5 0.766303
+  DDisp crudo  |mot| 1.56276e-02 |G5| 1.56330e-02  rel 2.78e-03  esc 0.9996482  corr 0.999996  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0005 0.9966 0.9998  dif rel 0.004 0.006 0.002
+  u tras it    |mot| 1.35660e-02 |G5| 1.35579e-02  rel 2.64e-03  esc 1.0005926  corr 0.999996  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0013 0.9979 1.0007  dif rel 0.004 0.005 0.002
+it 3: eta motor 1.000000  GEO5 1.000000
+  DDisp crudo  |mot| 4.43563e-03 |G5| 4.43252e-03  rel 1.53e-02  esc 1.0005841  corr 0.999865  | zonas x<9.3 / muro / x>10.5: mot/G5 0.9990 1.0192 0.9991  dif rel 0.020 0.030 0.013
+  u tras it    |mot| 1.77334e-02 |G5| 1.77302e-02  rel 2.42e-03  esc 1.0001754  corr 0.999997  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0000 1.0026 1.0000  dif rel 0.004 0.006 0.002
+it 4: eta motor 0.183836  GEO5 0.163957
+  DDisp crudo  |mot| 1.76896e-03 |G5| 1.81840e-03  rel 5.30e-02  esc 0.9717777  corr 0.998923  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0111 1.0067 0.9721  dif rel 0.058 0.051 0.053
+  u tras it    |mot| 1.78284e-02 |G5| 1.78135e-02  rel 2.72e-03  esc 1.0008321  corr 0.999996  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0006 1.0027 1.0007  dif rel 0.004 0.006 0.002
+it 5: eta motor 0.109381  GEO5 0.122500
+  DDisp crudo  |mot| 2.48167e-03 |G5| 2.43587e-03  rel 5.27e-02  esc 1.0175882  corr 0.998800  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0373 1.0047 1.0189  dif rel 0.065 0.042 0.053
+  u tras it    |mot| 1.79039e-02 |G5| 1.78976e-02  rel 2.54e-03  esc 1.0003456  corr 0.999996  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0003 1.0026 1.0002  dif rel 0.004 0.006 0.002
+it 6: eta motor 0.103162  GEO5 0.115032
+  DDisp crudo  |mot| 2.78220e-03 |G5| 2.76810e-03  rel 4.46e-02  esc 1.0041126  corr 0.999012  | zonas x<9.3 / muro / x>10.5: mot/G5 0.9956 1.0063 1.0052  dif rel 0.026 0.018 0.045
+  u tras it    |mot| 1.79934e-02 |G5| 1.79983e-02  rel 3.33e-03  esc 0.9997198  corr 0.999994  | zonas x<9.3 / muro / x>10.5: mot/G5 0.9999 1.0025 0.9995  dif rel 0.003 0.006 0.003
+it 7: eta motor 0.301652  GEO5 0.267504
+  DDisp crudo  |mot| 2.30558e-03 |G5| 2.80196e-03  rel 2.42e-01  esc 0.8092664  corr 0.983240  | zonas x<9.3 / muro / x>10.5: mot/G5 0.8884 0.7346 0.8245  dif rel 0.178 0.333 0.239
+  u tras it    |mot| 1.82668e-02 |G5| 1.82703e-02  rel 8.77e-03  esc 0.9997656  corr 0.999957  | zonas x<9.3 / muro / x>10.5: mot/G5 1.0009 1.0021 0.9995  dif rel 0.003 0.009 0.009

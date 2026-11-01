@@ -1,0 +1,176 @@
+diff --git a/src/geofem/cpp/geofem.cpp b/src/geofem/cpp/geofem.cpp
+index e02c029..2153288 100644
+--- a/src/geofem/cpp/geofem.cpp
++++ b/src/geofem/cpp/geofem.cpp
+@@ -111,6 +111,11 @@ struct GeoFem {
+   // peldaño desde cero con toda la carga (lo de siempre).
+   bool srmContinua = false;
+   int lsMax = 1;
++  // MODO GEO5 DEL MURO (bit 32 de geofem_set_srm; Tanda 12, tests/x87/t12): carga de los peldaños = ALoad = F_int del estado de
++  // SRF 1 (GEO5 pone ALoad = F_int al empezar la SRM) y arranque de cada peldaño con u0 = η·Δu de la ÚLTIMA iteración del último
++  // peldaño convergido (0 tras un fallo), metido solo en σ (porPaso), no en u. Medido contra el solver real: los 10 primeros
++  // peldaños del muro de Manabí iteración a iteración (η, |gi|) y FS = 1.362360 como GEO5.
++  bool modoG5 = false, soloFint = false; vector<double> lastRaw, u0ext, ALoadV; double lastEta = 1;
+   bool soloTangente = false, tangIni = false, energiaPrev = false, porPaso = false;   // assembleInc: guardar solo la tangente del retorno (inicio de un peldaño continuado)   // pasadas de la búsqueda lineal (GEO5 max_ls_iterations): 1 por defecto, 3 en el modo GEO5 del muro   // fracción de la carga NUEVA de la etapa que llegó al equilibrio (GEO5: «Attained loading»)
+   vector<double> Flast;   // carga total en equilibrio al acabar la etapa anterior (para aplicar la nueva por incrementos)   // EPSacc: ε acumulada por punto de Gauss, SOLO mientras el elemento está activo
+ 
+@@ -308,10 +313,19 @@ struct GeoFem {
+   // tolerancia del retorno = ys_tolerance de GEO5 (0.001 kPa, ABSOLUTA: Geo5Solver_decomp.c:44030 → +0x438 → DAT_00722718)
+   static inline double ysTol = 0.001;
+   // tangente con las principales de la σ DEVUELTA (FUN_005a8680 recalcula ángulo y orden σ1 >= σ2 >= σ3 de la tensión guardada)
++  // DESEMPATE de principales (bit 64): una principal del plano IGUAL a σz (|Δ| <= 1e-14·max|σ|, típico tras volver a la arista
++  // σ1 = σ2) -> σz delante. No sale del binario: GEO5 (invariant.cpp, FUN_0062d6a0, ordenación por selección con '<') decide por el
++  // último bit de su σ. Es la elección que reproduce el muro de Manabí (peldaño 1.2627, el. 519 PG 4: sin ella FS 2.1149, con ella 1.3624).
++  static inline bool gDesempateZ = false;
++  static void empateZ(const double* v, int* ix) {
++    double m = std::max(std::max(std::fabs(v[0]), std::fabs(v[1])), std::fabs(v[2])), tol = 1e-14 * m;
++    for (int k = 0; k < 2; k++) if (ix[k + 1] == 2 && std::fabs(v[ix[k]] - v[ix[k + 1]]) <= tol) std::swap(ix[k], ix[k + 1]);
++  }
+   static void mcPrincDevuelta(const double* sig, McInfo& in) {
+     double c_ = (sig[0] + sig[1]) / 2, R_ = std::sqrt((sig[0] - sig[1]) * (sig[0] - sig[1]) / 4 + sig[3] * sig[3]);
+     double pv[3] = {c_ + R_, c_ - R_, sig[2]}; int ix[3] = {0, 1, 2};
+     std::sort(ix, ix + 3, [&](int a, int b) { return pv[a] > pv[b]; });
++    if (gDesempateZ) empateZ(pv, ix);
+     in.t2 = std::atan2(2 * sig[3], sig[0] - sig[1]); for (int k = 0; k < 3; k++) in.ix[k] = ix[k];
+   }
+   static void mcArista(const double* ss, const double D[3][3], const double* n1, const double* g1, const double* n2, const double* g2, double ccos, double* out) {
+@@ -330,6 +344,7 @@ struct GeoFem {
+     double str[3] = {cen + R, cen - R, szz};
+     int ix[3] = {0, 1, 2};
+     std::sort(ix, ix + 3, [&](int a, int b) { return str[a] > str[b]; });
++    if (gDesempateZ) empateZ(str, ix);
+     double ss[3] = {str[ix[0]], str[ix[1]], str[ix[2]]};
+     double tol = ysTol;   // antes 1e-7·|σ|máx (relativa)
+     double sp = std::sin(phi), sg = std::sin(psi), ccos = c * std::cos(phi);
+@@ -476,25 +491,27 @@ struct GeoFem {
+     vector<double> CLoad(nf, 0.0), du(ndof, 0.0), Fi(ndof, 0.0), F1(ndof, 0.0), Rf(nf), R1(nf), duf(nf), drf(nf), ADDisp(nf, 0.0), DForce(nf);
+     bool conv = false; int it = 0;
+     if (!keep) resetState();   // keep = la etapa arranca del estado (σ, ε_pl) que dejó la anterior
++    // porPaso: el retorno de cada iteración sale del estado del INICIO del paso con el incremento ACUMULADO del paso
++    // (no se fijan tensiones por iteración). U0 = incremento inicial (modo GEO5: η·Δu del último peldaño), solo en σ.
++    const vector<double> S0 = SIG, E0 = EPL; vector<double> uT(ndof);
++    const vector<double> U0 = (porPaso && u0ext.size() == (size_t)ndof) ? u0ext : vector<double>(ndof, 0.0);
++    auto evalInc = [&](const double* dinc, bool commit, double* Fo) {
++      if (!porPaso) { assembleInc(dinc, ab, commit, Fo); return; }
++      for (int d = 0; d < ndof; d++) uT[d] = U0[d] + u[d] + dinc[d];
++      if (commit) { SIG = S0; EPL = E0; assembleInc(uT.data(), ab, true, Fo); return; }
++      vector<double> cur; cur.swap(SIG); SIG = S0; assembleInc(uT.data(), ab, false, Fo); SIG.swap(cur);
++    };
++    if (soloFint) { assembleInc(du.data(), ab, false, Fi.data()); ALoadV = Fi; itOut = 0; return true; }   // ALoad = F_int (modo GEO5)
+     // peldaño CONTINUADO de la SRM: la primera tangente sale del retorno con la resistencia YA reducida (GEO5 da en la
+     // iteración 1 un paso ~2 veces mayor que con la tangente del peldaño anterior, y lo recorta con η)
+-    if (keep && Fref && tangIni) { soloTangente = true; assembleInc(du.data(), ab, false, Fi.data()); soloTangente = false; }
+-    assembleInc(du.data(), ab, false, Fi.data());
++    if (keep && Fref && tangIni) { soloTangente = true; evalInc(du.data(), false, Fi.data()); soloTangente = false; }
++    evalInc(du.data(), false, Fi.data());
+     for (int k = 0; k < nf; k++) Rf[k] = Fext[fr[k]] - Fi[fr[k]];
+     DForce = Rf;
+     // Fref: referencia de las normas de fuerza y de energía. GEO5, en los peldaños de la SRM, normaliza con la carga TOTAL
+     // de la etapa (|g| = 93.4 kN constante en todos los peldaños del Log_File del muro), no con el residuo inicial del peldaño
+     if (Fref) for (int k = 0; k < nf; k++) DForce[k] = Fref[fr[k]];
+     double rPrev = 1e300; int ndiv = 0;
+-    // porPaso: el retorno de cada iteración sale del estado del INICIO del paso con el incremento ACUMULADO del paso
+-    // (no se fijan tensiones por iteración)
+-    const vector<double> S0 = SIG, E0 = EPL; vector<double> uT(ndof);
+-    auto evalInc = [&](const double* dinc, bool commit, double* Fo) {
+-      if (!porPaso) { assembleInc(dinc, ab, commit, Fo); return; }
+-      for (int d = 0; d < ndof; d++) uT[d] = u[d] + dinc[d];
+-      if (commit) { SIG = S0; EPL = E0; assembleInc(uT.data(), ab, true, Fo); return; }
+-      vector<double> cur; cur.swap(SIG); SIG = S0; assembleInc(uT.data(), ab, false, Fo); SIG.swap(cur);
+-    };
+     for (it = 1; it <= maxit; it++) {
+       if (!std::isfinite(vnorm(Rf.data(), nf))) break;
+       assembleK(Kt, false);
+@@ -517,6 +534,7 @@ struct GeoFem {
+         if (n0 > 1e-10 && n1 > 1e-10 && std::fabs(den) > 1e-10) { ratio = n1 / n0; if (ratio >= 0.8) acc = acc * s0 / den; }
+         if (acc < 0.1) { al = 0.1; ratio = 0; } else if (acc >= 1.0) { al = 1.0; ratio = 0; } else { nls++; al = acc; }
+       } while (nls < lsMax && ratio >= 0.8);
++      lastRaw = du; lastEta = al;   // DDisp crudo y η de la última iteración (arranque del peldaño siguiente en modo GEO5)
+       for (int k = 0; k < nf; k++) drf[k] = al * duf[k];
+       for (int d = 0; d < ndof; d++) du[d] *= al;
+       if (energiaPrev) CLoad = Rf;   // GEO5 FUN_005eb0a0: √(DDisp·CLoad) con CLoad = residuo ANTES de la iteración
+@@ -700,6 +718,13 @@ struct GeoFem {
+     LOG(fmt("    SRM rs00 paso=1.0000 SRF=1.0000 %s it=%d", c0 ? "CONVERGE" : "DIVERGE", n0));
+     nstepsOut = 0;
+     vector<double> uBase = u;   // SRM continuada: desplazamiento del último estado convergido
++    vector<double> FLv(Ftot, Ftot + ndof), pend;   // pend = η·Δu de la última iteración del último peldaño convergido
++    if (srmContinua && modoG5) {   // GEO5: ALoad = F_int del estado de SRF 1 (carga y referencia de las normas de los peldaños)
++      soloFint = true; vector<double> z; int iz; nrstep(1.0, Ftot, 0, z, iz, true); soloFint = false; FLv = ALoadV;
++      double a = 0, b = 0; for (int k = 0; k < nfree; k++) { a += FLv[free_[k]] * FLv[free_[k]]; b += Ftot[free_[k]] * Ftot[free_[k]]; }
++      LOG(fmt("    SRM modo GEO5: |ALoad| = %.4f (|F| = %.4f)", std::sqrt(a), std::sqrt(b)));
++    }
++    const double* FL = FLv.data();
+     for (;;) {
+       double s = 1 - (1 - RED0) / std::pow(RELAX, nrelax);
+       if (s > MINSTEP) break;
+@@ -709,10 +734,12 @@ struct GeoFem {
+       int nit; bool conv;
+       if (srmContinua) {
+         const vector<double> s0 = SIG, e0 = EPL, d0 = DEP; const vector<unsigned char> h0 = hasDep;
+-        vector<double> du; conv = nrstep(trial, Ftot, rs, du, nit, true, Ftot);
++        u0ext.clear(); if (modoG5 && !pend.empty()) u0ext = pend;
++        vector<double> du; conv = nrstep(trial, FL, rs, du, nit, true, FL); u0ext.clear();
+         if (conv) { double m = 0; for (int d = 0; d < ndof; d++) m = std::max(m, std::fabs(du[d])); if (!(m < 1.0)) conv = false; }
+         if (conv) { u = uBase; for (int d = 0; d < ndof; d++) u[d] += du[d]; uBase = u; }
+         else { SIG = s0; EPL = e0; DEP = d0; hasDep = h0; }
++        if (modoG5) { if (conv) { pend.assign(ndof, 0.0); for (int d = 0; d < ndof; d++) pend[d] = lastEta * lastRaw[d]; } else pend.clear(); }
+       } else conv = nrstep(trial, Ftot, rs, u, nit);   // SRF > 1: SIN reintento por incrementos (la divergencia de GEO5 es la que fija el FS; con reintento Demo04 etapa 3 daba 1.7369 en vez de 1.69)
+       if (conv && std::isfinite(vnorm(u.data(), ndof))) {
+         Racc *= s; fs = trial; ulo = u;
+@@ -749,8 +776,9 @@ int geofem_create(int nn, int ne, const double* X, const double* Y, const int* E
+ EMSCRIPTEN_KEEPALIVE void geofem_set_rigid(int h, const int* rigid, int n) { GeoFem* g = handles[h]; g->rigid.assign(rigid, rigid + n); }
+ // modo GEO5 por bits: 1 SRM continuada + tensiones en pasos de 0.1 + normas respecto a ‖F‖ · 2 tangente inicial con la
+ // resistencia reducida · 4 búsqueda lineal de 3 pasadas · 8 norma de energía con el residuo de la iteración ANTERIOR
++// · 16 porPaso · 32 modo GEO5 del muro (ALoad = F_int, u0 = η·Δu del último peldaño) · 64 desempate σz delante. Muro: 115
+ EMSCRIPTEN_KEEPALIVE void geofem_set_apex(double a) { GeoFem::gApex = a; }
+-EMSCRIPTEN_KEEPALIVE void geofem_set_srm(int h, int f) { GeoFem* g = handles[h]; g->srmContinua = f & 1; g->tangIni = (f & 2) != 0; g->lsMax = (f & 4) ? 3 : 1; g->energiaPrev = (f & 8) != 0; g->porPaso = (f & 16) != 0; }
++EMSCRIPTEN_KEEPALIVE void geofem_set_srm(int h, int f) { GeoFem* g = handles[h]; g->srmContinua = f & 1; g->tangIni = (f & 2) != 0; g->lsMax = (f & 4) ? 3 : 1; g->energiaPrev = (f & 8) != 0; g->porPaso = (f & 16) != 0; g->modoG5 = (f & 32) != 0; GeoFem::gDesempateZ = (f & 64) != 0; }
+ EMSCRIPTEN_KEEPALIVE void geofem_set_model(int h, const int* m, int n) { GeoFem* g = handles[h]; g->model.assign(m, m + n); }
+ EMSCRIPTEN_KEEPALIVE void geofem_set_mat(int h, const double* MAT) { GeoFem* g = handles[h]; std::memcpy(g->MAT.data(), MAT, sizeof(double) * 6 * g->nmat); }
+ EMSCRIPTEN_KEEPALIVE int geofem_band(int h) { return handles[h]->band; }
+diff --git a/src/geofem/geofemWasm.ts b/src/geofem/geofemWasm.ts
+index d356a56..28e6972 100644
+--- a/src/geofem/geofemWasm.ts
++++ b/src/geofem/geofemWasm.ts
+@@ -2,7 +2,7 @@
+ // que GeoFem (solver.ts); el log llega línea a línea por Module.geoLog.
+ import { fgConAgua, extraAguaEtapa } from "./agua";
+ import type { GeoModel, StageResult, Log } from "./solver";
+-import { GEO5_SRM } from "./solver";
++import { GEO5_SRM, RIGID_E, RIGID_NU } from "./solver";
+ // @ts-ignore — módulo generado por emcc (build_wasm.sh)
+ import createModule from "./built/geofem.js";
+ 
+@@ -54,7 +54,10 @@ export class GeoFemWasm {
+     const pF = mod._geofem_alloc_i(m.FIXED.length), pMat = mod._geofem_alloc(6 * nmat);
+     mod.HEAPF64.set(m.X, pX >> 3); mod.HEAPF64.set(m.Y, pY >> 3);
+     mod.HEAP32.set(m.ELE.flat(), pE >> 2); mod.HEAP32.set(m.EMAT, pM >> 2); mod.HEAP32.set(m.FIXED, pF >> 2);
+-    mod.HEAPF64.set(m.MAT.flat(), pMat >> 3);
++    // RIGID BODY de GEO5 = elástico E = Eur = 1e9 kPa, ν = 0.2 (binario: Geo5Solver_decomp.c:73262, material tipo 1). Tanda 12:
++    // con el E del hormigón (2.1e7) el Δu del 1.1111 salía 12 % mayor que el del solver real; con 1e9, a 1e-10.
++    const rigM = m.RIGID ?? (m.MATNAMES ?? []).map((n) => /muro|hormig|concret|wall/i.test(n));
++    mod.HEAPF64.set(m.MAT.flatMap((M, i) => (rigM[i] ? [RIGID_E, RIGID_NU, ...M.slice(2)] : M)), pMat >> 3);
+     const h = mod._geofem_create(nn, ne, pX, pY, pE, pM, m.FIXED.length, pF, nmat, pMat);
+     // materiales RÍGIDOS (muro = «Rigid body» de GEO5: región elástica que la SRM no reduce)
+     if (m.RIGID?.some((r) => r)) { const pR = mod._geofem_alloc_i(nmat); mod.HEAP32.set(m.RIGID.map((r) => (r ? 1 : 0)), pR >> 2); mod._geofem_set_rigid(h, pR, nmat); mod._geofem_free(pR); }
+diff --git a/src/geofem/solver.ts b/src/geofem/solver.ts
+index a4f0bd8..150e0b1 100644
+--- a/src/geofem/solver.ts
++++ b/src/geofem/solver.ts
+@@ -98,6 +98,7 @@ const c7 = 0.1012865073235, C7 = 0.7974269853531, e7 = 0.4701420641051, E7 = 0.0
+ export const GP = [[1 / 3, 1 / 3], [c7, c7], [C7, c7], [c7, C7], [e7, e7], [E7, e7], [e7, E7]];
+ export const GW = [0.225 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1259391805448 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2, 0.1323941527885 / 2];
+ const NG = 7;
++export const RIGID_E = 1e9, RIGID_NU = 0.2;   // «rigidbody» de GEO5: elástico E = Eur = 1e9 kPa, ν = 0.2 (Geo5Solver_decomp.c:73262)
+ export const GEO5_SRM = 3;    // bits de la SRM en modo GEO5 (ver setSrm / geofem_set_srm). Antes 19: el bit 16 (porPaso) NO es lo que hace GEO5 (Tanda 4-5)
+ 
+ export function t6(L1: number, L2: number): [number[], number[], number[]] {
+@@ -171,7 +172,7 @@ export class GeoFem {
+     }
+     // constitutivo elástico (4 comp: xx yy zz xy)
+     for (let mm = 0; mm < m.MAT.length; mm++) {
+-      const E = m.MAT[mm][0], nu = m.MAT[mm][1], f = E / ((1 + nu) * (1 - 2 * nu));
++      const E = this.rigid[mm] ? RIGID_E : m.MAT[mm][0], nu = this.rigid[mm] ? RIGID_NU : m.MAT[mm][1], f = E / ((1 + nu) * (1 - 2 * nu));
+       const D = new Float64Array(16);
+       D[0] = f * (1 - nu); D[1] = f * nu; D[2] = f * nu;
+       D[4] = f * nu; D[5] = f * (1 - nu); D[6] = f * nu;
