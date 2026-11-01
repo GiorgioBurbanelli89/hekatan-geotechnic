@@ -1,0 +1,227 @@
+D123=3
+MALLA GEO5: 5537 nodos, 2684 T6 (SOIL_1=501, SOIL_2=2183), 328 gdl fijos
+MAT SOIL_1: E=25000 nu=0.28 phi=30.00 c=0.00 gamma=18.5 psi=0.0
+MAT SOIL_2: E=15500 nu=0.30 phi=29.97 c=0.00 gamma=17.5 psi=0.0
+  RS=1 SRF=1.0000 it= 1 eta=1.0000 DNorm=3.02210e-01 OBFNorm=1.53645e-01 ENorm=1.26452e-02 |gi|=1.4358e+00 dx=0.4
+  RS=1 SRF=1.0000 it= 2 eta=0.7452 DNorm=6.13194e-04 OBFNorm=1.41720e-01 ENorm=2.39056e-03 |gi|=1.3243e+00 dx=0.4
+  RS=1 SRF=1.0000 it= 3 eta=0.5898 DNorm=3.39985e-04 OBFNorm=1.15039e-01 ENorm=4.17456e-03 |gi|=1.0750e+00 dx=0.4
+  RS=1 SRF=1.0000 it= 4 eta=0.4925 DNorm=1.47148e-04 OBFNorm=8.00894e-02 ENorm=3.10788e-03 |gi|=7.4841e-01 dx=0.4
+  RS=1 SRF=1.0000 it= 5 eta=1.0000 DNorm=1.94057e-04 OBFNorm=6.01908e-02 ENorm=3.32596e-03 |gi|=5.6246e-01 dx=0.4
+  RS=1 SRF=1.0000 it= 6 eta=0.3095 DNorm=8.82367e-05 OBFNorm=5.88959e-02 ENorm=2.63489e-03 |gi|=5.5036e-01 dx=0.4
+  RS=1 SRF=1.0000 it= 7 eta=0.4757 DNorm=5.49649e-05 OBFNorm=4.39547e-02 ENorm=2.04325e-03 |gi|=4.1074e-01 dx=0.4
+  RS=1 SRF=1.0000 it= 8 eta=0.3087 DNorm=6.68809e-05 OBFNorm=4.90318e-02 ENorm=2.31886e-03 |gi|=4.5818e-01 dx=0.4
+  RS=1 SRF=1.0000 it= 9 eta=0.4830 DNorm=5.60003e-05 OBFNorm=3.92527e-02 ENorm=1.96111e-03 |gi|=3.6680e-01 dx=0.4
+  RS=1 SRF=1.0000 it=10 eta=0.2589 DNorm=5.95077e-05 OBFNorm=4.79979e-02 ENorm=2.15474e-03 |gi|=4.4852e-01 dx=0.4
+  RS=1 SRF=1.0000 it=11 eta=0.5570 DNorm=6.21922e-05 OBFNorm=3.20221e-02 ENorm=1.91643e-03 |gi|=2.9923e-01 dx=0.4
+  RS=1 SRF=1.0000 it=12 eta=0.1653 DNorm=6.19913e-05 OBFNorm=5.38438e-02 ENorm=2.21594e-03 |gi|=5.0315e-01 dx=0.4
+  RS=1 SRF=1.0000 it=13 eta=1.0000 DNorm=1.02265e-04 OBFNorm=3.37939e-02 ENorm=2.47094e-03 |gi|=3.1579e-01 dx=0.4
+  RS=1 SRF=1.0000 it=14 eta=0.2728 DNorm=4.37144e-05 OBFNorm=3.80846e-02 ENorm=1.67013e-03 |gi|=3.5589e-01 dx=0.4
+  RS=1 SRF=1.0000 it=15 eta=0.5029 DNorm=3.58011e-05 OBFNorm=3.31172e-02 ENorm=1.52454e-03 |gi|=3.0947e-01 dx=0.4
+  RS=1 SRF=1.0000 it=16 eta=0.2308 DNorm=6.50160e-05 OBFNorm=3.95467e-02 ENorm=2.27809e-03 |gi|=3.6955e-01 dx=0.4
+  RS=1 SRF=1.0000 it=17 eta=0.4585 DNorm=8.77157e-05 OBFNorm=3.45405e-02 ENorm=2.57362e-03 |gi|=3.2277e-01 dx=0.4
+  RS=1 SRF=1.0000 it=18 eta=0.2047 DNorm=2.67383e-04 OBFNorm=6.28903e-02 ENorm=5.16117e-03 |gi|=5.8769e-01 dx=0.4
+  RS=1 SRF=1.0000 it=19 eta=0.5272 DNorm=1.37714e-04 OBFNorm=4.51478e-02 ENorm=3.28391e-03 |gi|=4.2189e-01 dx=0.4
+  RS=1 SRF=1.0000 it=20 eta=0.1558 DNorm=1.23027e-04 OBFNorm=7.22930e-02 ENorm=3.54145e-03 |gi|=6.7555e-01 dx=0.4
+  RS=1 SRF=1.0000 it=21 eta=0.5614 DNorm=6.47277e-05 OBFNorm=4.97043e-02 ENorm=2.19771e-03 |gi|=4.6447e-01 dx=0.4
+  RS=1 SRF=1.0000 it=22 eta=0.1000 DNorm=2.62053e-05 OBFNorm=5.79196e-02 ENorm=1.56381e-03 |gi|=5.4124e-01 dx=0.4
+  RS=1 SRF=1.0000 it=23 eta=1.0000 DNorm=2.05892e-05 OBFNorm=1.51473e-02 ENorm=7.32366e-04 |gi|=1.4155e-01 dx=0.4
+  RS=1 SRF=1.0000 it=24 eta=0.3999 DNorm=8.61952e-06 OBFNorm=8.42094e-03 ENorm=2.76156e-04 |gi|=7.8690e-02 dx=0.4
+  RS=2 SRF=1.0000 it= 1 eta=1.0000 DNorm=3.02293e-01 OBFNorm=1.44785e-01 ENorm=9.88231e-03 |gi|=1.3530e+00 dx=0.4
+  RS=2 SRF=1.0000 it= 2 eta=1.0000 DNorm=5.02252e-04 OBFNorm=8.69659e-02 ENorm=2.38912e-03 |gi|=8.1270e-01 dx=0.4
+  RS=2 SRF=1.0000 it= 3 eta=0.3438 DNorm=5.13783e-05 OBFNorm=8.00093e-02 ENorm=2.05091e-03 |gi|=7.4769e-01 dx=0.4
+  RS=2 SRF=1.0000 it= 4 eta=0.6077 DNorm=4.84885e-05 OBFNorm=5.19578e-02 ENorm=1.33774e-03 |gi|=4.8555e-01 dx=0.4
+  RS=2 SRF=1.0000 it= 5 eta=1.0000 DNorm=5.48314e-05 OBFNorm=4.02511e-02 ENorm=1.71031e-03 |gi|=3.7615e-01 dx=0.4
+  RS=2 SRF=1.0000 it= 6 eta=0.5387 DNorm=3.65795e-05 OBFNorm=3.50686e-02 ENorm=1.53216e-03 |gi|=3.2772e-01 dx=0.4
+  RS=2 SRF=1.0000 it= 7 eta=0.2674 DNorm=3.67088e-05 OBFNorm=3.43126e-02 ENorm=1.65931e-03 |gi|=3.2065e-01 dx=0.4
+  RS=2 SRF=1.0000 it= 8 eta=0.5270 DNorm=3.41096e-05 OBFNorm=2.80839e-02 ENorm=1.39282e-03 |gi|=2.6244e-01 dx=0.4
+  RS=2 SRF=1.0000 it= 9 eta=0.2867 DNorm=4.68778e-05 OBFNorm=3.54581e-02 ENorm=1.76929e-03 |gi|=3.3136e-01 dx=0.4
+  RS=2 SRF=1.0000 it=10 eta=0.4278 DNorm=4.09066e-05 OBFNorm=3.62591e-02 ENorm=1.63359e-03 |gi|=3.3884e-01 dx=0.4
+  RS=3 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51147e-01 OBFNorm=1.43154e-01 ENorm=6.81645e-03 |gi|=6.6896e-01 dx=0.2
+  RS=3 SRF=1.0000 it= 2 eta=1.0000 DNorm=2.45797e-04 OBFNorm=9.58319e-02 ENorm=2.31466e-03 |gi|=4.4783e-01 dx=0.2
+  RS=3 SRF=1.0000 it= 3 eta=0.4321 DNorm=3.64720e-05 OBFNorm=8.86490e-02 ENorm=2.06332e-03 |gi|=4.1426e-01 dx=0.2
+  RS=3 SRF=1.0000 it= 4 eta=0.3742 DNorm=2.51381e-05 OBFNorm=6.84449e-02 ENorm=1.68606e-03 |gi|=3.1985e-01 dx=0.2
+  RS=3 SRF=1.0000 it= 5 eta=1.0000 DNorm=4.65210e-05 OBFNorm=2.95684e-02 ENorm=1.43197e-03 |gi|=1.3817e-01 dx=0.2
+  RS=3 SRF=1.0000 it= 6 eta=0.1119 DNorm=2.08761e-05 OBFNorm=3.68677e-02 ENorm=1.46352e-03 |gi|=1.7228e-01 dx=0.2
+  RS=3 SRF=1.0000 it= 7 eta=0.5593 DNorm=1.75075e-05 OBFNorm=3.08948e-02 ENorm=1.12542e-03 |gi|=1.4437e-01 dx=0.2
+  RS=3 SRF=1.0000 it= 8 eta=0.3316 DNorm=1.34019e-05 OBFNorm=2.63104e-02 ENorm=1.02146e-03 |gi|=1.2295e-01 dx=0.2
+  RS=3 SRF=1.0000 it= 9 eta=1.0000 DNorm=1.14926e-05 OBFNorm=1.31701e-02 ENorm=6.31848e-04 |gi|=6.1544e-02 dx=0.2
+  RS=3 SRF=1.0000 it=10 eta=0.4928 DNorm=2.65108e-06 OBFNorm=5.28868e-03 ENorm=2.09947e-04 |gi|=2.4714e-02 dx=0.2
+  RS=4 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51118e-01 OBFNorm=1.55166e-01 ENorm=8.15267e-03 |gi|=7.2501e-01 dx=0.2
+  RS=4 SRF=1.0000 it= 2 eta=1.0000 DNorm=3.65006e-04 OBFNorm=1.06306e-01 ENorm=1.53699e-03 |gi|=4.9671e-01 dx=0.2
+  RS=4 SRF=1.0000 it= 3 eta=1.0000 DNorm=9.14140e-05 OBFNorm=5.12372e-02 ENorm=1.65831e-03 |gi|=2.3940e-01 dx=0.2
+  RS=4 SRF=1.0000 it= 4 eta=0.1939 DNorm=2.54929e-05 OBFNorm=5.69199e-02 ENorm=1.79267e-03 |gi|=2.6596e-01 dx=0.2
+  RS=4 SRF=1.0000 it= 5 eta=1.0000 DNorm=4.58513e-05 OBFNorm=4.30383e-02 ENorm=1.92046e-03 |gi|=2.0110e-01 dx=0.2
+  RS=4 SRF=1.0000 it= 6 eta=0.4176 DNorm=1.48378e-05 OBFNorm=2.53365e-02 ENorm=8.69331e-04 |gi|=1.1838e-01 dx=0.2
+  RS=4 SRF=1.0000 it= 7 eta=1.0000 DNorm=7.35165e-06 OBFNorm=1.29998e-02 ENorm=4.70634e-04 |gi|=6.0741e-02 dx=0.2
+  RS=4 SRF=1.0000 it= 8 eta=1.0000 DNorm=3.81493e-06 OBFNorm=9.50376e-03 ENorm=3.45538e-04 |gi|=4.4406e-02 dx=0.2
+  RS=5 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51113e-01 OBFNorm=1.59435e-01 ENorm=7.54340e-03 |gi|=7.4499e-01 dx=0.2
+  RS=5 SRF=1.0000 it= 2 eta=1.0000 DNorm=3.65768e-04 OBFNorm=1.55398e-01 ENorm=2.26135e-03 |gi|=7.2612e-01 dx=0.2
+  RS=5 SRF=1.0000 it= 3 eta=1.0000 DNorm=1.17555e-04 OBFNorm=5.33834e-02 ENorm=1.01632e-03 |gi|=2.4944e-01 dx=0.2
+  RS=5 SRF=1.0000 it= 4 eta=1.0000 DNorm=5.14291e-05 OBFNorm=2.31973e-02 ENorm=6.53639e-04 |gi|=1.0839e-01 dx=0.2
+  RS=5 SRF=1.0000 it= 5 eta=1.0000 DNorm=1.39717e-05 OBFNorm=1.59529e-02 ENorm=6.09236e-04 |gi|=7.4543e-02 dx=0.2
+  RS=5 SRF=1.0000 it= 6 eta=0.4419 DNorm=4.26291e-06 OBFNorm=8.22781e-03 ENorm=2.92050e-04 |gi|=3.8446e-02 dx=0.2
+  RS=6 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51147e-01 OBFNorm=1.09286e-01 ENorm=7.38982e-03 |gi|=5.1064e-01 dx=0.2
+  RS=6 SRF=1.0000 it= 2 eta=1.0000 DNorm=2.17460e-04 OBFNorm=3.93104e-02 ENorm=6.99082e-04 |gi|=1.8368e-01 dx=0.2
+  RS=6 SRF=1.0000 it= 3 eta=1.0000 DNorm=4.54815e-05 OBFNorm=1.07367e-02 ENorm=1.27152e-04 |gi|=5.0167e-02 dx=0.2
+  RS=6 SRF=1.0000 it= 4 eta=1.0000 DNorm=8.15328e-06 OBFNorm=3.53620e-03 ENorm=6.96493e-05 |gi|=1.6523e-02 dx=0.2
+  RS=7 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51152e-01 OBFNorm=1.07179e-01 ENorm=6.21132e-03 |gi|=5.0077e-01 dx=0.2
+  RS=7 SRF=1.0000 it= 2 eta=1.0000 DNorm=2.30074e-04 OBFNorm=3.10121e-02 ENorm=6.50944e-04 |gi|=1.4490e-01 dx=0.2
+  RS=7 SRF=1.0000 it= 3 eta=0.6247 DNorm=3.99349e-05 OBFNorm=2.00244e-02 ENorm=6.49524e-05 |gi|=9.3558e-02 dx=0.2
+  RS=7 SRF=1.0000 it= 4 eta=1.0000 DNorm=2.19698e-05 OBFNorm=2.27472e-03 ENorm=9.62808e-05 |gi|=1.0628e-02 dx=0.2
+  RS=8 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51163e-01 OBFNorm=9.68053e-02 ENorm=6.26773e-03 |gi|=4.5230e-01 dx=0.2
+  RS=8 SRF=1.0000 it= 2 eta=1.0000 DNorm=1.53240e-04 OBFNorm=3.65721e-02 ENorm=8.12295e-04 |gi|=1.7088e-01 dx=0.2
+  RS=8 SRF=1.0000 it= 3 eta=1.0000 DNorm=3.29181e-05 OBFNorm=1.83776e-02 ENorm=4.91579e-04 |gi|=8.5866e-02 dx=0.2
+  RS=8 SRF=1.0000 it= 4 eta=1.0000 DNorm=1.56027e-05 OBFNorm=5.73322e-03 ENorm=1.06204e-04 |gi|=2.6787e-02 dx=0.2
+  RS=9 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51122e-01 OBFNorm=1.61484e-01 ENorm=8.13463e-03 |gi|=7.5447e-01 dx=0.2
+  RS=9 SRF=1.0000 it= 2 eta=1.0000 DNorm=3.40766e-04 OBFNorm=7.44769e-02 ENorm=2.04444e-03 |gi|=3.4796e-01 dx=0.2
+  RS=9 SRF=1.0000 it= 3 eta=1.0000 DNorm=9.72191e-05 OBFNorm=2.10997e-02 ENorm=1.72356e-04 |gi|=9.8580e-02 dx=0.2
+  RS=9 SRF=1.0000 it= 4 eta=1.0000 DNorm=1.53954e-05 OBFNorm=8.45112e-03 ENorm=8.38897e-05 |gi|=3.9484e-02 dx=0.2
+  RS=10 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51160e-01 OBFNorm=7.67429e-02 ENorm=6.17740e-03 |gi|=3.5858e-01 dx=0.2
+  RS=10 SRF=1.0000 it= 2 eta=1.0000 DNorm=1.66956e-04 OBFNorm=2.68378e-02 ENorm=3.47563e-04 |gi|=1.2540e-01 dx=0.2
+  RS=10 SRF=1.0000 it= 3 eta=1.0000 DNorm=3.40956e-05 OBFNorm=1.11679e-02 ENorm=2.38525e-04 |gi|=5.2182e-02 dx=0.2
+  RS=10 SRF=1.0000 it= 4 eta=1.0000 DNorm=6.95358e-06 OBFNorm=6.28401e-03 ENorm=1.95224e-04 |gi|=2.9362e-02 dx=0.2
+  RS=11 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51137e-01 OBFNorm=1.62669e-01 ENorm=7.31805e-03 |gi|=7.6000e-01 dx=0.2
+  RS=11 SRF=1.0000 it= 2 eta=1.0000 DNorm=3.62552e-04 OBFNorm=6.08618e-02 ENorm=6.48346e-04 |gi|=2.8435e-01 dx=0.2
+  RS=11 SRF=1.0000 it= 3 eta=1.0000 DNorm=3.57551e-05 OBFNorm=1.74374e-02 ENorm=1.96208e-04 |gi|=8.1469e-02 dx=0.2
+  RS=11 SRF=1.0000 it= 4 eta=1.0000 DNorm=8.68019e-06 OBFNorm=7.26517e-03 ENorm=3.94655e-05 |gi|=3.3944e-02 dx=0.2
+  RS=12 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51122e-01 OBFNorm=1.49787e-01 ENorm=8.19199e-03 |gi|=6.9989e-01 dx=0.2
+  RS=12 SRF=1.0000 it= 2 eta=1.0000 DNorm=3.59258e-04 OBFNorm=6.63293e-02 ENorm=1.86699e-03 |gi|=3.0993e-01 dx=0.2
+  RS=12 SRF=1.0000 it= 3 eta=1.0000 DNorm=7.29302e-05 OBFNorm=1.49754e-02 ENorm=4.72559e-04 |gi|=6.9973e-02 dx=0.2
+  RS=12 SRF=1.0000 it= 4 eta=1.0000 DNorm=1.86834e-05 OBFNorm=5.68157e-03 ENorm=1.79084e-04 |gi|=2.6547e-02 dx=0.2
+  RS=13 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51168e-01 OBFNorm=8.04777e-02 ENorm=5.72048e-03 |gi|=3.7602e-01 dx=0.2
+  RS=13 SRF=1.0000 it= 2 eta=1.0000 DNorm=1.47693e-04 OBFNorm=2.99015e-02 ENorm=6.35641e-04 |gi|=1.3971e-01 dx=0.2
+  RS=13 SRF=1.0000 it= 3 eta=1.0000 DNorm=2.56383e-05 OBFNorm=1.31944e-02 ENorm=3.19779e-04 |gi|=6.1649e-02 dx=0.2
+  RS=13 SRF=1.0000 it= 4 eta=1.0000 DNorm=7.37241e-06 OBFNorm=3.17410e-03 ENorm=5.68675e-05 |gi|=1.4831e-02 dx=0.2
+  RS=14 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51124e-01 OBFNorm=1.60292e-01 ENorm=7.71279e-03 |gi|=7.4894e-01 dx=0.2
+  RS=14 SRF=1.0000 it= 2 eta=1.0000 DNorm=3.72424e-04 OBFNorm=7.08002e-02 ENorm=6.42358e-04 |gi|=3.3080e-01 dx=0.2
+  RS=14 SRF=1.0000 it= 3 eta=1.0000 DNorm=7.80496e-05 OBFNorm=1.90756e-02 ENorm=2.28656e-04 |gi|=8.9128e-02 dx=0.2
+  RS=14 SRF=1.0000 it= 4 eta=1.0000 DNorm=1.08976e-05 OBFNorm=7.36318e-03 ENorm=1.52856e-04 |gi|=3.4403e-02 dx=0.2
+  RS=15 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51124e-01 OBFNorm=1.53650e-01 ENorm=8.00822e-03 |gi|=7.1793e-01 dx=0.2
+  RS=15 SRF=1.0000 it= 2 eta=1.0000 DNorm=3.43599e-04 OBFNorm=8.97184e-02 ENorm=2.76867e-03 |gi|=4.1921e-01 dx=0.2
+  RS=15 SRF=1.0000 it= 3 eta=1.0000 DNorm=7.74155e-05 OBFNorm=2.47182e-02 ENorm=1.90323e-04 |gi|=1.1550e-01 dx=0.2
+  RS=15 SRF=1.0000 it= 4 eta=1.0000 DNorm=1.48632e-05 OBFNorm=6.91779e-03 ENorm=7.50274e-05 |gi|=3.2323e-02 dx=0.2
+  RS=16 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51151e-01 OBFNorm=8.63879e-02 ENorm=6.34544e-03 |gi|=4.0364e-01 dx=0.2
+  RS=16 SRF=1.0000 it= 2 eta=1.0000 DNorm=2.14602e-04 OBFNorm=3.12504e-02 ENorm=2.69962e-04 |gi|=1.4601e-01 dx=0.2
+  RS=16 SRF=1.0000 it= 3 eta=1.0000 DNorm=3.46946e-05 OBFNorm=1.66878e-02 ENorm=2.82741e-04 |gi|=7.7972e-02 dx=0.2
+  RS=16 SRF=1.0000 it= 4 eta=1.0000 DNorm=1.03371e-05 OBFNorm=6.60219e-03 ENorm=1.07118e-04 |gi|=3.0848e-02 dx=0.2
+  RS=17 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51145e-01 OBFNorm=1.44679e-01 ENorm=7.66954e-03 |gi|=6.7602e-01 dx=0.2
+  RS=17 SRF=1.0000 it= 2 eta=1.0000 DNorm=2.46230e-04 OBFNorm=4.45244e-02 ENorm=1.33372e-04 |gi|=2.0804e-01 dx=0.2
+  RS=17 SRF=1.0000 it= 3 eta=1.0000 DNorm=3.80198e-05 OBFNorm=1.57242e-02 ENorm=2.70418e-04 |gi|=7.3472e-02 dx=0.2
+  RS=17 SRF=1.0000 it= 4 eta=1.0000 DNorm=9.57931e-06 OBFNorm=8.02023e-03 ENorm=1.24976e-04 |gi|=3.7475e-02 dx=0.2
+  RS=18 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51134e-01 OBFNorm=1.39684e-01 ENorm=7.73129e-03 |gi|=6.5267e-01 dx=0.2
+  RS=18 SRF=1.0000 it= 2 eta=1.0000 DNorm=3.30269e-04 OBFNorm=4.85792e-02 ENorm=4.44994e-04 |gi|=2.2699e-01 dx=0.2
+  RS=18 SRF=1.0000 it= 3 eta=1.0000 DNorm=3.22797e-05 OBFNorm=3.09596e-02 ENorm=6.75268e-04 |gi|=1.4466e-01 dx=0.2
+  RS=18 SRF=1.0000 it= 4 eta=1.0000 DNorm=1.29414e-05 OBFNorm=5.96572e-03 ENorm=5.54199e-05 |gi|=2.7875e-02 dx=0.2
+  RS=19 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51131e-01 OBFNorm=1.49923e-01 ENorm=7.57691e-03 |gi|=7.0050e-01 dx=0.2
+  RS=19 SRF=1.0000 it= 2 eta=1.0000 DNorm=3.23397e-04 OBFNorm=7.91130e-02 ENorm=1.71619e-03 |gi|=3.6965e-01 dx=0.2
+  RS=19 SRF=1.0000 it= 3 eta=1.0000 DNorm=8.40603e-05 OBFNorm=2.41274e-02 ENorm=2.92967e-04 |gi|=1.1273e-01 dx=0.2
+  RS=19 SRF=1.0000 it= 4 eta=1.0000 DNorm=1.75176e-05 OBFNorm=7.62886e-03 ENorm=1.87347e-04 |gi|=3.5645e-02 dx=0.2
+  RS=20 SRF=1.0000 it= 1 eta=1.0000 DNorm=1.51160e-01 OBFNorm=8.68445e-02 ENorm=6.15274e-03 |gi|=4.0578e-01 dx=0.2
+  RS=20 SRF=1.0000 it= 2 eta=1.0000 DNorm=1.59718e-04 OBFNorm=3.78803e-02 ENorm=5.68520e-04 |gi|=1.7699e-01 dx=0.2
+  RS=20 SRF=1.0000 it= 3 eta=1.0000 DNorm=3.40735e-05 OBFNorm=1.83871e-02 ENorm=3.83367e-04 |gi|=8.5913e-02 dx=0.2
+  RS=20 SRF=1.0000 it= 4 eta=1.0000 DNorm=1.04334e-05 OBFNorm=5.39254e-03 ENorm=9.29066e-05 |gi|=2.5196e-02 dx=0.2
+    tensiones: 100 % de la carga en 19 pasos (1 relajaciones)
+    SRM rs00 paso=1.0000 SRF=1.0000 CONVERGE it=118
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 0.0000 mm
+  RS=1 SRF=1.1111 it= 1 eta=0.4285 DNorm=3.36673e-03 OBFNorm=6.31071e-02 ENorm=4.91396e-03 |gi|=5.8971e+00 dx=0.2
+  RS=1 SRF=1.1111 it= 2 eta=0.6748 DNorm=3.23542e-03 OBFNorm=4.38542e-02 ENorm=4.04518e-03 |gi|=4.0980e+00 dx=0.3
+  RS=1 SRF=1.1111 it= 3 eta=1.0000 DNorm=2.02216e-03 OBFNorm=7.81967e-03 ENorm=5.50151e-03 |gi|=7.3072e-01 dx=0.3
+    SRM rs01 paso=0.9000 SRF=1.1111 CONVERGE it=3
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 2.0222 mm
+  RS=2 SRF=1.2346 it= 1 eta=0.1000 DNorm=5.78278e-03 OBFNorm=1.42220e-01 ENorm=1.53880e-01 |gi|=1.3290e+01 dx=0.3
+  RS=2 SRF=1.2346 it= 2 eta=0.5226 DNorm=1.84511e-02 OBFNorm=1.31123e-01 ENorm=2.08008e-02 |gi|=1.2253e+01 dx=0.6
+  RS=2 SRF=1.2346 it= 3 eta=1.0000 DNorm=2.00266e-02 OBFNorm=5.31334e-02 ENorm=3.00270e-03 |gi|=4.9651e+00 dx=0.9
+  RS=2 SRF=1.2346 it= 4 eta=1.0000 DNorm=2.56318e-03 OBFNorm=3.64451e-02 ENorm=2.30838e-02 |gi|=3.4057e+00 dx=1.0
+  RS=2 SRF=1.2346 it= 5 eta=1.0000 DNorm=9.66006e-04 OBFNorm=1.38986e-02 ENorm=1.05085e-02 |gi|=1.2988e+00 dx=1.0
+  RS=2 SRF=1.2346 it= 6 eta=1.0000 DNorm=6.04292e-04 OBFNorm=3.73935e-03 ENorm=1.30769e-03 |gi|=3.4943e-01 dx=1.0
+    SRM rs02 paso=0.9000 SRF=1.2346 CONVERGE it=6
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 0.6043 mm
+  RS=3 SRF=1.3717 it= 1 eta=0.1000 DNorm=1.22590e-02 OBFNorm=4.31981e-01 ENorm=3.41757e-01 |gi|=4.0367e+01 dx=0.4
+  RS=3 SRF=1.3717 it= 2 eta=0.4539 DNorm=3.65970e-02 OBFNorm=5.84997e-01 ENorm=2.19442e-01 |gi|=5.4666e+01 dx=0.7
+  RS=3 SRF=1.3717 it= 3 eta=0.3573 DNorm=2.09768e-02 OBFNorm=6.84007e-01 ENorm=3.13984e-01 |gi|=6.3918e+01 dx=1.5
+    SRM rs03 paso=0.9000 SRF=1.3717 DIVERGE relax=1
+  RS=4 SRF=1.2995 it= 1 eta=0.1000 DNorm=1.00805e-02 OBFNorm=3.42409e-01 ENorm=4.21929e-01 |gi|=3.1997e+01 dx=0.6
+  RS=4 SRF=1.2995 it= 2 eta=0.6430 DNorm=2.19221e-02 OBFNorm=2.08599e-01 ENorm=3.88489e-02 |gi|=1.9493e+01 dx=0.5
+  RS=4 SRF=1.2995 it= 3 eta=1.0000 DNorm=3.18574e-02 OBFNorm=8.08811e-02 ENorm=2.04630e-02 |gi|=7.5580e+00 dx=1.1
+  RS=4 SRF=1.2995 it= 4 eta=1.0000 DNorm=3.03808e-03 OBFNorm=2.55451e-02 ENorm=9.89405e-03 |gi|=2.3871e+00 dx=1.1
+  RS=4 SRF=1.2995 it= 5 eta=0.5216 DNorm=2.49921e-04 OBFNorm=1.42149e-02 ENorm=3.16497e-03 |gi|=1.3283e+00 dx=1.1
+  RS=4 SRF=1.2995 it= 6 eta=1.0000 DNorm=4.61801e-04 OBFNorm=6.38891e-03 ENorm=2.74888e-03 |gi|=5.9702e-01 dx=1.1
+    SRM rs04 paso=0.9500 SRF=1.2995 CONVERGE it=6
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 0.4618 mm
+  RS=5 SRF=1.3679 it= 1 eta=0.9496 DNorm=3.74639e-02 OBFNorm=6.72148e-02 ENorm=3.05832e-03 |gi|=6.2810e+00 dx=0.5
+  RS=5 SRF=1.3679 it= 2 eta=1.0000 DNorm=4.52819e-03 OBFNorm=4.49092e-02 ENorm=2.50557e-02 |gi|=4.1966e+00 dx=0.5
+  RS=5 SRF=1.3679 it= 3 eta=1.0000 DNorm=2.31681e-03 OBFNorm=1.84738e-02 ENorm=8.28088e-03 |gi|=1.7263e+00 dx=0.5
+  RS=5 SRF=1.3679 it= 4 eta=0.1000 DNorm=8.58668e-05 OBFNorm=2.28011e-02 ENorm=2.80277e-03 |gi|=2.1307e+00 dx=0.5
+  RS=5 SRF=1.3679 it= 5 eta=1.0000 DNorm=6.12879e-04 OBFNorm=7.55809e-03 ENorm=2.74249e-03 |gi|=7.0628e-01 dx=0.5
+    SRM rs05 paso=0.9500 SRF=1.3679 CONVERGE it=5
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 0.6129 mm
+  RS=6 SRF=1.4399 it= 1 eta=0.1000 DNorm=1.66528e-02 OBFNorm=8.93168e-01 ENorm=7.88464e-01 |gi|=8.3463e+01 dx=1.0
+  RS=6 SRF=1.4399 it= 2 eta=0.1259 DNorm=2.05020e-02 OBFNorm=9.17412e-01 ENorm=6.49662e-01 |gi|=8.5729e+01 dx=1.7
+  RS=6 SRF=1.4399 it= 3 eta=0.3862 DNorm=4.70399e-02 OBFNorm=1.25435e+00 ENorm=6.23678e-01 |gi|=1.1721e+02 dx=3.3
+    SRM rs06 paso=0.9500 SRF=1.4399 DIVERGE relax=2
+  RS=7 SRF=1.4030 it= 1 eta=0.1116 DNorm=3.38638e-03 OBFNorm=4.15713e-02 ENorm=3.77266e-03 |gi|=3.8847e+00 dx=0.1
+  RS=7 SRF=1.4030 it= 2 eta=1.0000 DNorm=2.44485e-02 OBFNorm=1.41205e-02 ENorm=1.75101e-02 |gi|=1.3195e+00 dx=0.3
+  RS=7 SRF=1.4030 it= 3 eta=0.6037 DNorm=2.54716e-03 OBFNorm=1.41621e-02 ENorm=6.01115e-04 |gi|=1.3234e+00 dx=0.3
+  RS=7 SRF=1.4030 it= 4 eta=1.0000 DNorm=1.88966e-03 OBFNorm=5.17317e-03 ENorm=3.05388e-03 |gi|=4.8341e-01 dx=0.4
+    SRM rs07 paso=0.9750 SRF=1.4030 CONVERGE it=4
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 1.8897 mm
+  RS=8 SRF=1.4390 it= 1 eta=0.1000 DNorm=8.11346e-03 OBFNorm=3.62625e-01 ENorm=3.37671e-01 |gi|=3.3886e+01 dx=0.4
+  RS=8 SRF=1.4390 it= 2 eta=0.3266 DNorm=1.10120e-02 OBFNorm=4.36501e-01 ENorm=2.46212e-01 |gi|=4.0789e+01 dx=0.6
+  RS=8 SRF=1.4390 it= 3 eta=0.2889 DNorm=1.33584e-02 OBFNorm=5.15658e-01 ENorm=3.54761e-01 |gi|=4.8186e+01 dx=1.2
+    SRM rs08 paso=0.9750 SRF=1.4390 DIVERGE relax=3
+  RS=9 SRF=1.4208 it= 1 eta=0.1000 DNorm=5.26656e-03 OBFNorm=1.85819e-01 ENorm=2.20456e-01 |gi|=1.7364e+01 dx=0.3
+  RS=9 SRF=1.4208 it= 2 eta=1.0000 DNorm=1.45650e-02 OBFNorm=1.45778e-01 ENorm=1.79970e-01 |gi|=1.3622e+01 dx=0.2
+  RS=9 SRF=1.4208 it= 3 eta=1.0000 DNorm=1.15520e-02 OBFNorm=6.59217e-02 ENorm=4.55279e-02 |gi|=6.1601e+00 dx=0.5
+  RS=9 SRF=1.4208 it= 4 eta=1.0000 DNorm=2.99037e-03 OBFNorm=9.39345e-03 ENorm=4.80974e-03 |gi|=8.7778e-01 dx=0.5
+    SRM rs09 paso=0.9875 SRF=1.4208 CONVERGE it=4
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 2.9904 mm
+  RS=10 SRF=1.4388 it= 1 eta=0.4358 DNorm=3.37102e-03 OBFNorm=2.85358e-02 ENorm=3.24236e-03 |gi|=2.6666e+00 dx=0.0
+  RS=10 SRF=1.4388 it= 2 eta=1.0000 DNorm=5.36691e-03 OBFNorm=6.42526e-03 ENorm=6.94530e-03 |gi|=6.0042e-01 dx=0.1
+    SRM rs10 paso=0.9875 SRF=1.4388 CONVERGE it=2
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 5.3669 mm
+  RS=11 SRF=1.4570 it= 1 eta=0.3871 DNorm=3.88842e-03 OBFNorm=2.87240e-02 ENorm=3.30588e-03 |gi|=2.6841e+00 dx=0.1
+  RS=11 SRF=1.4570 it= 2 eta=1.0000 DNorm=5.83244e-03 OBFNorm=9.06780e-03 ENorm=6.62830e-03 |gi|=8.4735e-01 dx=0.2
+    SRM rs11 paso=0.9875 SRF=1.4570 CONVERGE it=2
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 5.8324 mm
+  RS=12 SRF=1.4754 it= 1 eta=0.1000 DNorm=4.50435e-03 OBFNorm=1.06634e-01 ENorm=6.47100e-02 |gi|=9.9645e+00 dx=0.3
+  RS=12 SRF=1.4754 it= 2 eta=0.2644 DNorm=2.39527e-03 OBFNorm=1.01902e-01 ENorm=1.88400e-02 |gi|=9.5223e+00 dx=0.2
+  RS=12 SRF=1.4754 it= 3 eta=1.0000 DNorm=8.42700e-03 OBFNorm=1.11558e-02 ENorm=9.89673e-03 |gi|=1.0425e+00 dx=0.3
+  RS=12 SRF=1.4754 it= 4 eta=1.0000 DNorm=1.15323e-03 OBFNorm=5.85755e-03 ENorm=5.85983e-04 |gi|=5.4737e-01 dx=0.3
+    SRM rs12 paso=0.9875 SRF=1.4754 CONVERGE it=4
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 1.1532 mm
+  RS=13 SRF=1.4941 it= 1 eta=0.6596 DNorm=9.77692e-03 OBFNorm=3.41573e-02 ENorm=2.13693e-03 |gi|=3.1919e+00 dx=0.1
+  RS=13 SRF=1.4941 it= 2 eta=1.0000 DNorm=5.26901e-03 OBFNorm=2.25121e-02 ENorm=2.14840e-02 |gi|=2.1037e+00 dx=0.2
+  RS=13 SRF=1.4941 it= 3 eta=1.0000 DNorm=1.52770e-03 OBFNorm=7.25323e-03 ENorm=5.53033e-03 |gi|=6.7779e-01 dx=0.2
+    SRM rs13 paso=0.9875 SRF=1.4941 CONVERGE it=3
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 1.5277 mm
+  RS=14 SRF=1.5130 it= 1 eta=0.7810 DNorm=1.09531e-02 OBFNorm=2.82216e-02 ENorm=2.33646e-03 |gi|=2.6372e+00 dx=0.1
+  RS=14 SRF=1.5130 it= 2 eta=1.0000 DNorm=3.66526e-03 OBFNorm=1.83975e-02 ENorm=1.88176e-02 |gi|=1.7192e+00 dx=0.2
+  RS=14 SRF=1.5130 it= 3 eta=1.0000 DNorm=1.35621e-03 OBFNorm=7.76677e-03 ENorm=6.22451e-03 |gi|=7.2577e-01 dx=0.2
+    SRM rs14 paso=0.9875 SRF=1.5130 CONVERGE it=3
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 1.3562 mm
+  RS=15 SRF=1.5322 it= 1 eta=0.8111 DNorm=1.17139e-02 OBFNorm=3.12885e-02 ENorm=2.26213e-03 |gi|=2.9238e+00 dx=0.1
+  RS=15 SRF=1.5322 it= 2 eta=0.4638 DNorm=1.47773e-03 OBFNorm=2.54893e-02 ENorm=1.91430e-03 |gi|=2.3819e+00 dx=0.1
+  RS=15 SRF=1.5322 it= 3 eta=1.0000 DNorm=3.07183e-03 OBFNorm=7.68289e-03 ENorm=1.18875e-03 |gi|=7.1794e-01 dx=0.2
+    SRM rs15 paso=0.9875 SRF=1.5322 CONVERGE it=3
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 3.0718 mm
+  RS=16 SRF=1.5516 it= 1 eta=0.1000 DNorm=8.19132e-03 OBFNorm=2.18128e-01 ENorm=2.07722e-01 |gi|=2.0383e+01 dx=0.6
+  RS=16 SRF=1.5516 it= 2 eta=0.3269 DNorm=3.97912e-03 OBFNorm=2.12178e-01 ENorm=5.48528e-02 |gi|=1.9827e+01 dx=0.4
+  RS=16 SRF=1.5516 it= 3 eta=1.0000 DNorm=2.06643e-02 OBFNorm=5.76446e-02 ENorm=3.35108e-02 |gi|=5.3867e+00 dx=0.6
+  RS=16 SRF=1.5516 it= 4 eta=0.3010 DNorm=4.85697e-04 OBFNorm=3.10209e-02 ENorm=5.87749e-03 |gi|=2.8988e+00 dx=0.6
+  RS=16 SRF=1.5516 it= 5 eta=1.0000 DNorm=1.38065e-03 OBFNorm=7.37932e-03 ENorm=6.85110e-03 |gi|=6.8957e-01 dx=0.6
+    SRM rs16 paso=0.9875 SRF=1.5516 CONVERGE it=5
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 1.3807 mm
+  RS=17 SRF=1.5712 it= 1 eta=0.8763 DNorm=9.19084e-03 OBFNorm=2.99104e-02 ENorm=2.63455e-03 |gi|=2.7950e+00 dx=0.2
+  RS=17 SRF=1.5712 it= 2 eta=1.0000 DNorm=1.60057e-03 OBFNorm=1.94520e-02 ENorm=1.38492e-02 |gi|=1.8177e+00 dx=0.2
+  RS=17 SRF=1.5712 it= 3 eta=0.6033 DNorm=3.17725e-04 OBFNorm=1.43281e-02 ENorm=6.42879e-03 |gi|=1.3389e+00 dx=0.2
+  RS=17 SRF=1.5712 it= 4 eta=0.4246 DNorm=1.59545e-04 OBFNorm=1.12389e-02 ENorm=5.62604e-03 |gi|=1.0502e+00 dx=0.2
+  RS=17 SRF=1.5712 it= 5 eta=1.0000 DNorm=1.99222e-04 OBFNorm=5.85632e-03 ENorm=5.08133e-03 |gi|=5.4725e-01 dx=0.2
+    SRM rs17 paso=0.9875 SRF=1.5712 CONVERGE it=5
+    D2/D3: incremento re-aplicado a sigma |eta*DDisp| = 0.1992 mm
+  RS=18 SRF=1.5911 it= 1 eta=0.7570 DNorm=1.16803e-02 OBFNorm=3.44309e-02 ENorm=8.48961e-03 |gi|=3.2174e+00 dx=0.2
+  RS=18 SRF=1.5911 it= 2 eta=0.6071 DNorm=2.55671e-03 OBFNorm=2.30869e-02 ENorm=1.88825e-02 |gi|=2.1574e+00 dx=0.3
+  RS=18 SRF=1.5911 it= 3 eta=0.4027 DNorm=1.35875e-03 OBFNorm=2.69195e-02 ENorm=3.23424e-02 |gi|=2.5155e+00 dx=0.4
+  RS=18 SRF=1.5911 it= 4 eta=0.4416 DNorm=1.25679e-03 OBFNorm=3.13183e-02 ENorm=3.07598e-02 |gi|=2.9266e+00 dx=0.3
+    SRM rs18 paso=0.9875 SRF=1.5911 DIVERGE relax=4
+    progresion dx(mm) por SRF: 1.111:4 1.235:5 1.300:6 1.368:7 1.403:7 1.421:7 1.439:7 1.457:7 1.475:7 1.494:8 1.513:8 1.532:8 1.552:8 1.571:8
+FS_FINAL 1.571192
