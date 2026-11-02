@@ -328,7 +328,11 @@ struct GeoFem {
     std::sort(ix, ix + 3, [&](int a, int b) { return pv[a] > pv[b]; });
     if (gDesempateZ) empateZ(pv, ix);
     in.t2 = std::atan2(2 * sig[3], sig[0] - sig[1]); for (int k = 0; k < 3; k++) in.ix[k] = ix[k];
+    // modo GEO5: empate EXACTO de las principales del plano → GEO5 pone y delante de x (ejes a 90°). Medido en la fase 4 del
+    // muro (registros/2026-11-02_geo5_residuo_iter1.md). = solver.ts
+    if (gEmpateXY && R_ <= 1e-14 * std::max(std::max(std::fabs(sig[0]), std::fabs(sig[1])), std::fabs(sig[2]))) in.t2 = 3.141592653589793;
   }
+  static inline bool gEmpateXY = false;
   static void mcArista(const double* ss, const double D[3][3], const double* n1, const double* g1, const double* n2, const double* g2, double ccos, double* out) {
     double Dg1[3], Dg2[3];
     for (int i = 0; i < 3; i++) { Dg1[i] = D[i][0] * g1[0] + D[i][1] * g1[1] + D[i][2] * g1[2]; Dg2[i] = D[i][0] * g2[0] + D[i][1] * g2[1] + D[i][2] * g2[2]; }
@@ -500,7 +504,7 @@ struct GeoFem {
       if ((int)mcp.size() < nmat + 1) mcp.resize(nmat + 1);
       mcp[mm + 1] = {phi, c, psi};
     }
-    int nf = nfree; const int* fr = free_.data();
+    int nf = nfree; const int* fr = free_.data(); gEmpateXY = modoG5;
     u.assign(ndof, 0.0);
     vector<double> CLoad(nf, 0.0), du(ndof, 0.0), Fi(ndof, 0.0), F1(ndof, 0.0), Rf(nf), R1(nf), duf(nf), drf(nf), ADDisp(nf, 0.0), DForce(nf);
     bool conv = false; int it = 0;
@@ -600,11 +604,14 @@ struct GeoFem {
   /** Modo GEO5 de una etapa: de Flast a Fk en pasos de 0.1; si uno no cierra, vuelve a su estado y lo parte a la mitad; > 2 relajaciones = no cierra. */
   bool pasosGeo5(const double* Fk, vector<double>& uOut, int& itOut) {
     const vector<double> F0 = Flast; vector<double> Fi(ndof), dui;
+    // Carga base de la fase = Σ Bᵀ·σ de arranque (no la nominal de la fase anterior): GEO5 tira el desequilibrio que dejó
+    // la fase anterior (registros/2026-11-02_geo5_residuo_iter1.md: it 1 de la fase 7 = GEO5 a 4 cifras). = solver.ts
+    vector<double> Fs(ndof, 0.0); fintSig(Fs.data());
     uOut.assign(ndof, 0.0); itOut = 0; double t = 0, dt = 0.1; int nrel = 0, k = 0;
     while (t < 1 - 1e-12) {
       const double tn = std::min(1.0, t + dt);
       const vector<double> s0 = SIG, e0 = EPL, d0 = DEP; const vector<unsigned char> h0 = hasDep;
-      for (int d = 0; d < ndof; d++) Fi[d] = F0[d] + (Fk[d] - F0[d]) * tn;
+      for (int d = 0; d < ndof; d++) Fi[d] = Fs[d] + (Fk[d] - F0[d]) * tn;
       int iti; bool ci = nrstep(1.0, Fi.data(), ++k, dui, iti, true); itOut += iti;
       if (ci) { for (int d = 0; d < ndof; d++) uOut[d] += dui[d]; t = tn; continue; }
       SIG = s0; EPL = e0; dt /= 2;

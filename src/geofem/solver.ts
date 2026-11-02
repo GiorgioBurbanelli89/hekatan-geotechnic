@@ -354,7 +354,13 @@ export class GeoFem {
     const pv = [c_ + R_, c_ - R_, sig[2]], ix = [0, 1, 2]; ix.sort((a, b) => (pv[a] > pv[b] ? -1 : pv[a] < pv[b] ? 1 : 0));
     if (GeoFem.gDesempateZ) GeoFem.empateZ(pv, ix);
     inf.t2 = Math.atan2(2 * sig[3], sig[0] - sig[1]); inf.ix = ix;
+    // modo GEO5: empate EXACTO de las principales del plano (σx = σy, τ ≈ 0; p. ej. arista que vuelve casi al ápice) → GEO5
+    // las ordena y antes que x (como el desempate con z: en empate va delante el índice mayor) = ejes girados 90°.
+    // Medido (registros/2026-11-02_geo5_residuo_iter1.md): fase 4 del muro, el. 138 PG 6 (bandera 0x205) a t 0.8; con
+    // 90° el log de los pasos 0.9 y 1.0 = GEO5 a 4 cifras y la fase 4 = Restart_Step a 4e-10 %; con 0°, ±45° no.
+    if (GeoFem.gEmpateXY && R_ <= 1e-14 * Math.max(Math.abs(sig[0]), Math.abs(sig[1]), Math.abs(sig[2]))) inf.t2 = Math.PI;
   }
+  private static gEmpateXY = false;
   private static mcArista(ss: number[], D: number[][], n1: number[], g1: number[], n2: number[], g2: number[], ccos: number): number[] {
     const Dg1 = [0, 1, 2].map((i) => D[i][0] * g1[0] + D[i][1] * g1[1] + D[i][2] * g1[2]), Dg2 = [0, 1, 2].map((i) => D[i][0] * g2[0] + D[i][1] * g2[1] + D[i][2] * g2[2]);
     const L11 = n1[0] * Dg1[0] + n1[1] * Dg1[1] + n1[2] * Dg1[2], L22 = n2[0] * Dg2[0] + n2[1] * Dg2[1] + n2[2] * Dg2[2];
@@ -504,7 +510,7 @@ export class GeoFem {
     const ADDisp = new Float64Array(nf), DForce = new Float64Array(nf);
     let conv = false, it = 0;
     if (!keep) this.resetState();   // keep = la etapa arranca del estado (σ, ε_pl) que dejó la anterior
-    GeoFem.gDesempateZ = this.desempateZ;
+    GeoFem.gDesempateZ = this.desempateZ; GeoFem.gEmpateXY = this.modoG5;
     // porPaso: el retorno de cada iteración sale del estado del INICIO del paso con el incremento ACUMULADO (como geofem.cpp).
     // U0 = incremento inicial (modo GEO5: η·Δu del último peldaño), solo en σ.
     const S0 = Float64Array.from(this.SIG), E0 = Float64Array.from(this.EPL), uT = new Float64Array(ndof), CLoad = new Float64Array(nf);
@@ -640,11 +646,15 @@ export class GeoFem {
    *  a la mitad (`time_step_relaxation_factor` 2); más de 2 relajaciones = no cierra. */
   private pasosGeo5(Fk: Float64Array): [boolean, Float64Array, number] {
     const ndof = this.ndof, F0 = Float64Array.from(this.Flast), u = new Float64Array(ndof), Fi = new Float64Array(ndof);
+    // Carga base de la fase = Σ Bᵀ·σ de arranque (no la carga nominal de la fase anterior): GEO5 tira el desequilibrio que
+    // dejó la fase anterior. Medido (registros/2026-11-02_geo5_residuo_iter1.md): con el Δu de GEO5 la σ de la it 1 = GEO5
+    // a 8e-12 kPa y |gi| = 0.52562 (GEO5 0.5256) solo sin ese desequilibrio; K·(Δu_GEO5 − Δu_motor) = −desequilibrio a 3e-8.
+    const Fs = new Float64Array(ndof); this.fintSig(Fs);
     let it = 0, t = 0, dt = 0.1, nrel = 0, k = 0;
     while (t < 1 - 1e-12) {
       const tn = Math.min(1, t + dt);
       const s0 = Float64Array.from(this.SIG), e0 = Float64Array.from(this.EPL), d0 = Float64Array.from(this.DEP), h0 = Uint8Array.from(this.hasDep);
-      for (let d = 0; d < ndof; d++) Fi[d] = F0[d] + (Fk[d] - F0[d]) * tn;
+      for (let d = 0; d < ndof; d++) Fi[d] = Fs[d] + (Fk[d] - F0[d]) * tn;
       const [ci, dui, iti] = this.nrstep(1.0, Fi, ++k, undefined, true); it += iti;
       if (ci) { for (let d = 0; d < ndof; d++) u[d] += dui[d]; t = tn; continue; }
       this.SIG.set(s0); this.EPL.set(e0); dt /= 2;
