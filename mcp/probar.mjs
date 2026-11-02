@@ -1,0 +1,23 @@
+// Prueba el MCP como cliente (stdio): recorre las herramientas. node probar.mjs <carpeta_PNG>
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { writeFileSync } from "fs";
+const t = new StdioClientTransport({ command: "node", args: ["server.mjs"], env: { ...process.env } });
+const c = new Client({ name: "prueba", version: "1" });
+await c.connect(t);
+console.log("herramientas:", (await c.listTools()).tools.map((x) => x.name).join(", "));
+const L = async (n, a = {}, largo = 500) => { const r = await c.callTool({ name: n, arguments: a });
+  const tx = r.content.find((x) => x.type === "text"); const im = r.content.find((x) => x.type === "image");
+  if (im) writeFileSync(process.argv[2] + `/mcp_geo_${n}.png`, Buffer.from(im.data, "base64"));
+  console.log(`[${n}]`, r.isError ? "ERROR" : "ok", tx ? tx.text.slice(-largo) : "(imagen)"); return r; };
+await L("abrir");
+await L("resultados", {}, 700);
+await L("fijar", { id: "sl_phi1", valor: 18 });
+await L("calcular", {}, 600);
+await L("resultados", {}, 300);
+await L("captura");
+await L("fijar", { id: "no_existe", valor: 1 });
+await L("fijar", { id: "x; alert(1)", valor: 1 }).catch((e) => console.log("[id inválido rechazado]", String(e.message || e).slice(0, 80)));
+await L("errores");
+await L("cerrar");
+await c.close();

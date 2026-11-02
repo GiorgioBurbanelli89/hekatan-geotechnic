@@ -1,0 +1,9 @@
+{
+  "name": "hekatan-geotechnic-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP de Hekatan Geotechnic: ver, cambiar parámetros, recalcular y leer resultados.",
+  "main": "server.mjs",
+  "dependencies": { "@modelcontextprotocol/sdk": "^1.12.0", "puppeteer": "*", "zod": "^3.23.8" }
+}
