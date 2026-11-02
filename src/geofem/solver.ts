@@ -576,6 +576,9 @@ export class GeoFem {
     for (let e = 0; e < ne; e++) if (this.act[e]) for (let k = 0; k < 12; k++) this.dormido[this.edof[e * 12 + k]] = 0;
     if (first) this.prevAct = null;
     else if (this.prevAct) this.desplazamientoInicialRegion(this.prevAct);
+    // MODO GEO5 (bit 32), medido contra Restart_Step de GEO5 (muro de Manabí con agua, 2-nov-2026): cada fase arranca con K ELÁSTICA
+    // (el Restart no guarda la tangente), tangente del ápice 0 y la carga en pasos de 0.1 (time_step) con relajación ×½ ≤ 2.
+    if (this.modoG5) this.hasDep.fill(0);
     const F = new Float64Array(ndof);
     for (let e = 0; e < ne; e++) {
       if (!this.act[e]) continue;
@@ -587,14 +590,14 @@ export class GeoFem {
     const sig0 = Float64Array.from(this.SIG), epl0 = Float64Array.from(this.EPL), dep0 = Float64Array.from(this.DEP), has0 = Uint8Array.from(this.hasDep);
     const u = new Float64Array(ndof), Fk = new Float64Array(ndof); let it = 0, c = false, nsub = 1;
     this.alcanzada = 1;
-    GeoFem.gApex = 0.1;   // construcción por etapas: tangente del ápice 0.1·De (como geofem.cpp); la SRM sigue con la de GEO5
+    GeoFem.gApex = this.modoG5 ? 0 : 0.1;   // construcción por etapas: tangente del ápice 0.1·De (como geofem.cpp); la SRM sigue con la de GEO5
     for (; nsub <= 16; nsub *= 2) {
       if (nsub > 1) { this.SIG.set(sig0); this.EPL.set(epl0); this.DEP.set(dep0); this.hasDep.set(has0); u.fill(0); }
       c = true;
       for (let j = 1; j <= nsub && c; j++) {
         const sj = Float64Array.from(this.SIG), ej = Float64Array.from(this.EPL), dj = Float64Array.from(this.DEP), hj = Uint8Array.from(this.hasDep);
         for (let d = 0; d < ndof; d++) Fk[d] = this.Flast[d] + (F[d] - this.Flast[d]) * j / nsub;
-        const [cj, du1, itj] = this.nrstep(1.0, Fk, j, undefined, true); c = cj; it += itj;
+        const [cj, du1, itj] = (this.modoG5 && j === 1) ? this.pasosGeo5(Fk) : this.nrstep(1.0, Fk, j, undefined, true); c = cj; it += itj;
         if (c) { let m = 0; for (let d = 0; d < ndof; d++) m = Math.max(m, Math.abs(du1[d])); if (!(m < 1.0)) c = false; }   // > 1 m = mecanismo, no equilibrio (como geofem.cpp)
         if (c) for (let d = 0; d < ndof; d++) u[d] += du1[d];
         else if (nsub === 16) {   // último intento: se queda en el incremento j−1
@@ -627,6 +630,24 @@ export class GeoFem {
     let sF = 0; for (let i = 0; i < this.nn; i++) sF += F[2 * i + 1];
     this.log(`    ETAPA ${first ? "inicial" : ""}: ${na} de ${ne} elementos activos, carga vertical ${sF.toFixed(3)} kN, ${c ? "CONVERGE" : "NO CONVERGE"} en ${it} iteraciones (${nsub} incremento(s))${c ? "" : ` · carga alcanzada ${(100 * this.alcanzada).toFixed(1)} %`}`);
     return { conv: c, alcanzada: this.alcanzada, u: Float64Array.from(this.Utot), sig1: Float64Array.from(this.SIG), epl1: Float64Array.from(this.EPL), eps1: Float64Array.from(this.EPSacc) };
+  }
+
+  /** Modo GEO5 de una etapa: de Flast a Fk en pasos de 0.1 (`time_step`); si uno no cierra, vuelve a su estado y lo parte
+   *  a la mitad (`time_step_relaxation_factor` 2); más de 2 relajaciones = no cierra. */
+  private pasosGeo5(Fk: Float64Array): [boolean, Float64Array, number] {
+    const ndof = this.ndof, F0 = Float64Array.from(this.Flast), u = new Float64Array(ndof), Fi = new Float64Array(ndof);
+    let it = 0, t = 0, dt = 0.1, nrel = 0, k = 0;
+    while (t < 1 - 1e-12) {
+      const tn = Math.min(1, t + dt);
+      const s0 = Float64Array.from(this.SIG), e0 = Float64Array.from(this.EPL), d0 = Float64Array.from(this.DEP), h0 = Uint8Array.from(this.hasDep);
+      for (let d = 0; d < ndof; d++) Fi[d] = F0[d] + (Fk[d] - F0[d]) * tn;
+      const [ci, dui, iti] = this.nrstep(1.0, Fi, ++k, undefined, true); it += iti;
+      if (ci) { for (let d = 0; d < ndof; d++) u[d] += dui[d]; t = tn; continue; }
+      this.SIG.set(s0); this.EPL.set(e0); this.DEP.set(d0); this.hasDep.set(h0); dt /= 2;
+      this.log(`    paso ${tn.toFixed(4)} no converge → ${dt}`);
+      if (++nrel > 2) return [false, u, it];
+    }
+    return [true, u, it];
   }
 
   /** DESPLAZAMIENTO INICIAL de los nudos de una región recién activada, como GEO5 (FRGeoFEM, region.cpp:

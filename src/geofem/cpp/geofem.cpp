@@ -596,6 +596,22 @@ struct GeoFem {
     for (int i = 0; i < nn; i++) if (enRegion[i] && !viejo[i]) for (int d = 2 * i; d <= 2 * i + 1; d++) { int r = map_[d]; if (r >= 0) Utot[d] = x[r]; }
   }
 
+  /** Modo GEO5 de una etapa: de Flast a Fk en pasos de 0.1; si uno no cierra, vuelve a su estado y lo parte a la mitad; > 2 relajaciones = no cierra. */
+  bool pasosGeo5(const double* Fk, vector<double>& uOut, int& itOut) {
+    const vector<double> F0 = Flast; vector<double> Fi(ndof), dui;
+    uOut.assign(ndof, 0.0); itOut = 0; double t = 0, dt = 0.1; int nrel = 0, k = 0;
+    while (t < 1 - 1e-12) {
+      const double tn = std::min(1.0, t + dt);
+      const vector<double> s0 = SIG, e0 = EPL, d0 = DEP; const vector<unsigned char> h0 = hasDep;
+      for (int d = 0; d < ndof; d++) Fi[d] = F0[d] + (Fk[d] - F0[d]) * tn;
+      int iti; bool ci = nrstep(1.0, Fi.data(), ++k, dui, iti, true); itOut += iti;
+      if (ci) { for (int d = 0; d < ndof; d++) uOut[d] += dui[d]; t = tn; continue; }
+      SIG = s0; EPL = e0; DEP = d0; hasDep = h0; dt /= 2;
+      if (++nrel > 2) return false;
+    }
+    return true;
+  }
+
   /** Una etapa de CONSTRUCCIÓN (análisis de tensiones de GEO5, SRF = 1): activa `a` (1 por elemento), carga = peso de
    *  los elementos activos + `Fextra`, y Newton desde el estado de la etapa anterior. En la PRIMERA etapa el estado se
    *  pone a cero y, al acabar, los desplazamientos también (GEO5: «la etapa 1 es el estado inicial»). */
@@ -605,6 +621,9 @@ struct GeoFem {
     for (int e = 0; e < ne; e++) if (act[e]) for (int k = 0; k < 12; k++) dormido[edof[e * 12 + k]] = 0;
     if (first) prevAct.clear();
     else if (!prevAct.empty()) desplazamientoInicialRegion();
+    // MODO GEO5 (bit 32), medido contra Restart_Step de GEO5 (muro de Manabí con agua): cada fase arranca con K ELÁSTICA
+    // (el Restart no guarda la tangente), tangente del ápice 0 y la carga en pasos de 0.1 con relajación x1/2 <= 2.
+    if (modoG5) std::fill(hasDep.begin(), hasDep.end(), 0);
     vector<double> F(ndof, 0.0);
     for (int e = 0; e < ne; e++) {
       if (!act[e]) continue;
@@ -624,14 +643,14 @@ struct GeoFem {
     // CONSTRUCCIÓN POR ETAPAS: tangente del ápice = 0.1·De (no la nula de GEO5). Cambia el camino de Newton, no el
     // equilibrio: muro de Manabí, etapa 6 en 11 iteraciones en vez de 192 (7 etapas: 28 s en vez de 168 s) y la
     // coronación a 16.387 mm (GEO5 tangente: 16.393; GeoFEM 16.38). La SRM sigue con la tangente de GEO5.
-    gApex = 0.1;
+    gApex = modoG5 ? 0.0 : 0.1;
     for (; nsub <= 16; nsub *= 2) {
       if (nsub > 1) { SIG = sig0; EPL = epl0; DEP = dep0; hasDep = has0; std::fill(u.begin(), u.end(), 0.0); }
       c = true;
       for (int j = 1; j <= nsub && c; j++) {
         const vector<double> sj = SIG, ej = EPL, dj = DEP; const vector<unsigned char> hj = hasDep;   // estado del último incremento bueno
         for (int d = 0; d < ndof; d++) Fk[d] = Flast[d] + (F[d] - Flast[d]) * j / nsub;
-        int itj; c = nrstep(1.0, Fk.data(), j, du1, itj, true); it += itj;
+        int itj; c = (modoG5 && j == 1) ? pasosGeo5(Fk.data(), du1, itj) : nrstep(1.0, Fk.data(), j, du1, itj, true); it += itj;
         // salvaguarda: un incremento que mueve algún nudo más de 1 m es un MECANISMO (el suelo colapsa), no un equilibrio,
         // aunque las normas relativas de Newton lo den por bueno (muro de Manabí, Mohr-Coulomb, malla de 1 m: 12 m en la capa 4)
         if (c) { double m = 0; for (int d = 0; d < ndof; d++) m = std::max(m, std::fabs(du1[d])); if (!(m < 1.0)) c = false; }
