@@ -15,7 +15,7 @@ GeoFEM abierto, maximizado, en modo topología. Pantalla 2560×1600.
 import os, sys, time, warnings
 warnings.filterwarnings("ignore")
 os.environ["G5_EXE"] = "GeoFEM_5_EN.exe"
-ESCUELA = r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\hekatan-school"
+ESCUELA = os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\hekatan-school"
 sys.path.insert(0, ESCUELA); sys.path.insert(0, os.path.join(ESCUELA, "serie_muro_manabi"))
 import grabar_gui as gg, g5
 from pywinauto.keyboard import send_keys

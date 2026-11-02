@@ -7,9 +7,9 @@ Modelo: el dinámico capturado del muro (ARENA_SP / ARENA_SPSM, 1159 nodos, Newm
   python exp_a0_geo5.py [TRUNC=0.30] [variantes,...]
 Resultado: máx |ux|, |uy| de «NODAL DISPLACEMENTS» (relativos al inicio de la etapa dinámica), por variante."""
 import os, re, shutil, subprocess, sys, time
-SRC = r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_capture\files_alpha"
-HR = r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_run"
-BASE = r"C:\Users\j-b-j\geo5_exp_a0"
+SRC = os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_capture\files_alpha"
+HR = os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_run"
+BASE = os.path.expanduser("~") + r"\geo5_exp_a0"
 TRUNC = float(sys.argv[1]) if len(sys.argv) > 1 else 0.30
 SEL = sys.argv[2].split(",") if len(sys.argv) > 2 else ["orig", "a0", "a0_ff"]
 src = open(os.path.join(SRC, "053904_InputFile.txt"), "rb").read().decode("mbcs")

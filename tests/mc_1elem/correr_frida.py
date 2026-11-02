@@ -2,7 +2,7 @@
 """Corre <dir>/Input.txt con el solver de GEO5 5.2022 (geofem_run/FRGeoFEM.exe, las direcciones del decompilado) y Frida
 con mc_dump.js -> <dir>/g5_mc.txt (cada llamada al retorno MC).   python correr_frida.py <dir>"""
 import sys, os, subprocess, time, frida, threading
-HR = r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_run"
+HR = os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_run"
 AQUI = os.path.dirname(os.path.abspath(__file__))
 d = os.path.abspath(sys.argv[1]); out = os.path.join(d, "Out22.txt"); dump = os.path.join(d, "g5_mc.txt")
 for f in (out, os.path.join(d, "Log_File.txt")):

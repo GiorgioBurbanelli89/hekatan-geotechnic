@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 const AQUI = dirname(fileURLToPath(import.meta.url)), RAIZ = join(AQUI, ".."), SH = join(AQUI, "shots", "dinamico");
 mkdirSync(SH, { recursive: true });

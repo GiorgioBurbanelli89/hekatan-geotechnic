@@ -2,7 +2,7 @@
 //   node tests/check_publico_manabi_geo5.mjs [url] [outdir]
 import { createRequire } from "node:module";
 import { readFileSync, mkdirSync } from "node:fs";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 const base = process.argv[2] || "https://giorgioburbanelli89.github.io/hekatan-geotechnic/", out = process.argv[3] || "tests/shots/pub_manabi"; mkdirSync(out, { recursive: true });
 const model = JSON.parse(readFileSync("examples/geofem_muro_manabi_malla.json", "utf-8")); model.srmContinua = 115;

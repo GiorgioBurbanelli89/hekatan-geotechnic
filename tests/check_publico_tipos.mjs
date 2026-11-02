@@ -1,7 +1,7 @@
 // Verifica el sitio PÚBLICO: carga, selector de tipo de talud, cambio de tipo redibuja, importar DXF.  node tests/check_publico_tipos.mjs [url] [outdir]
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 const url = (process.argv[2] || "https://giorgioburbanelli89.github.io/hekatan-geotechnic/") + "?v=" + Date.now(), out = process.argv[3] || "tests/shots/publico_tipos"; mkdirSync(out, { recursive: true });
 const browser = await puppeteer.launch({ headless: true, executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", args: ["--no-sandbox"] });

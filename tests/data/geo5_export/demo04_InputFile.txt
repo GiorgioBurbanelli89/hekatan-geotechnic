@@ -13,13 +13,13 @@ problem_description
   newtonraphson
   safetyfactor reduction_cphi
   gamma_w=1.000000E+01
-  log_file="C:\Users\j-b-j\AppData\Local\Temp\~Ge38177.tmp\Log_File.txt"
-  restart_step="C:\Users\j-b-j\AppData\Local\Temp\~Ge38177.tmp\Restart_Step.bin"
-  restart_interval="C:\Users\j-b-j\AppData\Local\Temp\~Ge38177.tmp\Restart_Interval.bin"
-  iter_file="C:\Users\j-b-j\AppData\Local\Temp\~Ge38177.tmp\Iter_File.bin"
-  error_file="C:\Users\j-b-j\AppData\Local\Temp\~Ge38177.tmp\Error_File.txt"
-  iter_file_geo="C:\Users\j-b-j\AppData\Local\Temp\~Ge38177.tmp\Iter_File_Geo.bin"
-  output_file_geo="C:\Users\j-b-j\AppData\Local\Temp\~Ge38177.tmp\Output_File_Geo.bin"
+  log_file="C:\Users\USUARIO\AppData\Local\Temp\~Ge38177.tmp\Log_File.txt"
+  restart_step="C:\Users\USUARIO\AppData\Local\Temp\~Ge38177.tmp\Restart_Step.bin"
+  restart_interval="C:\Users\USUARIO\AppData\Local\Temp\~Ge38177.tmp\Restart_Interval.bin"
+  iter_file="C:\Users\USUARIO\AppData\Local\Temp\~Ge38177.tmp\Iter_File.bin"
+  error_file="C:\Users\USUARIO\AppData\Local\Temp\~Ge38177.tmp\Error_File.txt"
+  iter_file_geo="C:\Users\USUARIO\AppData\Local\Temp\~Ge38177.tmp\Iter_File_Geo.bin"
+  output_file_geo="C:\Users\USUARIO\AppData\Local\Temp\~Ge38177.tmp\Output_File_Geo.bin"
 end
 
 debug_section

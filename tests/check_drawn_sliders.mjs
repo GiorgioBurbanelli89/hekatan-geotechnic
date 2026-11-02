@@ -1,6 +1,6 @@
 // Prueba: un talud DIBUJADO tiene sliders y moverlos remalla y recalcula (FS cambia). node tests/check_drawn_sliders.mjs
 import { createRequire } from "node:module"; import { readFileSync } from "node:fs";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] }); const page = await browser.newPage();
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

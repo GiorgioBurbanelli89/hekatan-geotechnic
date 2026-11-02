@@ -3,10 +3,10 @@
 //   node tests/frames_dibujo.mjs [url]  → hekatan-school/frames_dib_<beat>/f000.png… + hekatan-school/dibujo.hs
 import { createRequire } from "node:module";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 const url = process.argv[2] || "http://localhost:4700/?tema=oscuro";
-const SCHOOL = "C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-school";
+const SCHOOL = (process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-school";
 const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 2 });

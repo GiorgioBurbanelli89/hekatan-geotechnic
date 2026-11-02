@@ -5,7 +5,7 @@ Para el elemento EL (número de GEO5, 1-based) vuelca en <carpeta>/tg.txt: funci
 banderas del PG (+0x280 del registro), σ de entrada (*(p2+0x38)) y la D 6×6 de salida (param_3: 6 filas de 6 dobles).
 Corta al terminar el paso KMAX.   Uso: python fr14.py <carpeta> [EL=521] [KMAX=3]"""
 import sys, os, frida
-sys.path.insert(0, r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\tools")
+sys.path.insert(0, os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\tools")
 import geo5_solver as G
 d = os.path.abspath(sys.argv[1]); EL = int(sys.argv[2]) if len(sys.argv) > 2 else 521; KMAX = int(sys.argv[3]) if len(sys.argv) > 3 else 3
 JS = r"""

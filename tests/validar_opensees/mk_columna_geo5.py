@@ -3,9 +3,9 @@
 solver REAL (FRGeoFEM_2024.exe sin ventana). Elástico: Drucker-Prager con c = 1e6 (no plastifica). Lados sin ux, base empotrada.
   python mk_columna_geo5.py  ->  geo5_columna.json  (uy de los nudos vértice impresos)"""
 import os, re, shutil, subprocess, sys, time, json
-HR = r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_run"
+HR = os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_run"
 W, H, nx, ny, E, nu, gam = 2.0, 10.0, 2, 10, 20000.0, 0.3, 18.0
-w = r"C:\Users\j-b-j\geo5_exp_b\columna"; shutil.rmtree(w, ignore_errors=True); os.makedirs(w)
+w = os.path.expanduser("~") + r"\geo5_exp_b\columna"; shutil.rmtree(w, ignore_errors=True); os.makedirs(w)
 X, Y = [], []
 idn = lambda i, j: j * (2 * nx + 1) + i
 for j in range(2 * ny + 1):

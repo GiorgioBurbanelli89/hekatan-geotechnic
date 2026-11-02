@@ -3,7 +3,7 @@
 los vectores apuntados por nudo+0x18 (u) y nudo+0x1c (?) ; guarda cada estado distinto en cap/NNNNN.npz.
 Uso: python captura.py <carpeta> [evento_desde=1] [evento_hasta=99999]"""
 import sys, os, struct, numpy as np, hashlib
-sys.path.insert(0, r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\tools")
+sys.path.insert(0, os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\tools")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import geo5_solver as G, memg5
 d = os.path.abspath(sys.argv[1]); E0 = int(sys.argv[2]) if len(sys.argv) > 2 else 1; E1 = int(sys.argv[3]) if len(sys.argv) > 3 else 99999

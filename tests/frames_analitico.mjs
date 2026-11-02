@@ -2,10 +2,10 @@
 // sobre talud_4suelos. Salida: hekatan-school/frames_an_<escena>/fNNN.png   ·   node tests/frames_analitico.mjs [url]
 import { createRequire } from "node:module";
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 const url = (process.argv[2] || "https://giorgioburbanelli89.github.io/hekatan-geotechnic/?tema=oscuro") + (process.argv[2] ? "" : "&v=" + Date.now());
-const SCHOOL = "C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-school";
+const SCHOOL = (process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-school";
 const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage(); await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 2 });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

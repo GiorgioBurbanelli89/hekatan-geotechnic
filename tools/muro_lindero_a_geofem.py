@@ -29,8 +29,8 @@ ARENAS = [{"name": "ARENA_SP", "E": 25000, "nu": 0.28, "phi": 30.0, "c": 0.0, "g
           {"name": "ARENA_SPSM", "E": 15500, "nu": 0.30, "phi": 29.97, "c": 0.0, "gamma": 17.5, "modelo": 2}]
 GAMMA_HORMIGON = 23.0
 MALLA = 0.6
-TOPO = r"C:\Users\j-b-j\Documents\GEO5_Manabi\muro_lindero_fem_topo.gmk"
-SALIDA = r"C:\Users\j-b-j\Documents\GEO5_Manabi\muro_lindero_fem_etapas.gmk"
+TOPO = os.path.expanduser("~") + r"\Documents\GEO5_Manabi\muro_lindero_fem_topo.gmk"
+SALIDA = os.path.expanduser("~") + r"\Documents\GEO5_Manabi\muro_lindero_fem_etapas.gmk"
 SHOTS = os.path.join(AQUI, "..", "tests", "shots", "geo5", "muro_lindero")
 # regiones de GEO5 (numeradas por GEO5, captura de Assign) y un punto dentro de cada una
 REG = {1: (24.5, 2.95), 2: (24, 2.45), 3: (21, 1.75), 4: (18, 1.05), 5: (18, 0), 6: (18, -1.05), 7: (18, -1.75), 8: (18, -2.45), 9: (18, -3.15),

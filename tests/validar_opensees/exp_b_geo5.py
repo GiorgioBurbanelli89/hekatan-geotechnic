@@ -2,8 +2,8 @@
 """Experimento (b) · UN T6 con Drucker-Prager 'extension', c = 0, tensión impuesta: solver REAL de GEO5 (FRGeoFEM_2024.exe sin ventana) con el InputFile de mk_1elem.py.
   python exp_b_geo5.py q1,q2,...   (kPa de tracción horizontal en el lado izquierdo; 0 = solo gravedad)  ->  geo5_1elem_q<q>.json con los 6 desplazamientos nodales y las tensiones nodales."""
 import os, re, shutil, subprocess, sys, time, json
-HR = r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_run"
-BASE = r"C:\Users\j-b-j\geo5_exp_b"; os.makedirs(BASE, exist_ok=True)
+HR = os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_run"
+BASE = os.path.expanduser("~") + r"\geo5_exp_b"; os.makedirs(BASE, exist_ok=True)
 AQUI = os.path.dirname(os.path.abspath(__file__))
 cs = sys.argv[2].split(",") if len(sys.argv) > 2 else ["0"]
 for q, cc in [(float(x), c_) for x in (sys.argv[1] if len(sys.argv) > 1 else "0,20,40").split(",") for c_ in cs]:

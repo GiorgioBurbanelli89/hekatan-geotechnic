@@ -3,7 +3,7 @@
 (el solver espera a la GUI), copia los ficheros auxiliares que cambiaron: snaps/NNNN_<nombre>.
 Uso: python correr_g5.py <carpeta> [opts]"""
 import sys, os, hashlib, shutil, time
-sys.path.insert(0, r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\tools")
+sys.path.insert(0, os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\tools")
 import geo5_solver as G
 
 d = os.path.abspath(sys.argv[1]); opts = sys.argv[2] if len(sys.argv) > 2 else ""

@@ -36,7 +36,7 @@ ARENAS = [{"name": "ARENA_SP", "E": 25000, "nu": 0.28, "phi": 30.0, "c": 0.0, "g
           {"name": "ARENA_SPSM", "E": 15500, "nu": 0.30, "phi": 29.97, "c": 0.0, "gamma": 17.5, "modelo": 2}]
 GAMMA_HORMIGON = 23.0
 MALLA = 0.5
-SALIDA = r"C:\Users\j-b-j\Documents\GEO5_Manabi\muro_manabi_fem.gmk"
+SALIDA = os.path.expanduser("~") + r"\Documents\GEO5_Manabi\muro_manabi_fem.gmk"
 SHOTS = os.path.join(AQUI, "..", "tests", "shots", "geo5", "muro_manabi2")
 
 

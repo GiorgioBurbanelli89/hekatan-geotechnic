@@ -4,7 +4,7 @@
 import { createRequire } from "node:module";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 const url = process.argv[2] || "http://localhost:4700/", out = "tests/video";
 rmSync(out, { recursive: true, force: true }); mkdirSync(out + "/frames", { recursive: true });
@@ -52,6 +52,6 @@ const list = stamps.map((_, i) => `file 'frames/f${String(i).padStart(4, "0")}.p
 writeFileSync(`${out}/list.txt`, list);
 const total = stamps[stamps.length - 1] / 1000 + 0.6;
 console.log(`${stamps.length} fotogramas, ${total.toFixed(1)} s`);
-const ffmpeg = "C:/Users/j-b-j/AppData/Roaming/Python/Python312/site-packages/imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v7.1.exe";
+const ffmpeg = (process.env.USERPROFILE ?? "") + "/AppData/Roaming/Python/Python312/site-packages/imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v7.1.exe";
 execFileSync(ffmpeg, ["-y", "-f", "concat", "-safe", "0", "-i", "list.txt", "-vf", "scale=1280:800,fps=10,format=yuv420p", "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-movflags", "+faststart", "hekatan_geotechnic.mp4"], { cwd: out, stdio: "ignore" });
 console.log("MP4:", `${out}/hekatan_geotechnic.mp4`);

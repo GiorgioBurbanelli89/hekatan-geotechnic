@@ -2,7 +2,7 @@
 """Tanda 14: bandera de GEO5 por PG (Restart_Step) frente a la región del último commit del motor (p14_k*_reg.bin). Uso: python flags.py k1,k2"""
 import sys, os, numpy as np
 AQ = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(AQ, "..", "t9")); from rs_gp import lee
-FM = r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_capture\files_muro"
+FM = os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_capture\files_muro"
 RS = ["160230", "160235", "160239", "160243", "160246", "160249", "160252", "160255", "160259", "160302"]
 P = np.array([6, 2, 0, 1, 3, 4, 5]); pre = sys.argv[2] if len(sys.argv) > 2 else "p14"
 for k in map(int, sys.argv[1].split(",")):

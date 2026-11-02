@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const { build } = require("esbuild");
 const out = "tests/_lem_bundle.mjs";
 await build({ entryPoints: ["tests/_lem_entry.ts"], bundle: true, format: "esm", outfile: out, platform: "neutral", logLevel: "error" });

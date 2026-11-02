@@ -23,7 +23,7 @@ const AQUI = dirname(fileURLToPath(import.meta.url));
 const REPO = join(AQUI, "..", "..");
 const DATOS = join(REPO, "tests", "datos");
 const ABQ = join(REPO, "..", "hekatan-school", "VIDEOS", "serie_muro_manabi", "08_abaqus", "muro_lineal");
-const REGISTRO = process.env.MURO_REGISTRO ?? "C:\\Users\\j-b-j\\Downloads\\Registros sismicos\\Registros Sismicos 16A\\Portoviejo\\APO1_201604162359_N_100.txt";
+const REGISTRO = process.env.MURO_REGISTRO ?? (process.env.USERPROFILE ?? "") + "\\Downloads\\Registros sismicos\\Registros Sismicos 16A\\Portoviejo\\APO1_201604162359_N_100.txt";
 const G0 = 9.80665, DT = 0.01, T0 = 8, T1 = 30, H = 0.5;
 
 const rho = (g: number) => g / G0;

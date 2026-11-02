@@ -10,7 +10,7 @@ XY = np.array([[float(a), float(b)] for _, a, b in nod])
 el = txt.split("\n  elements")[1].split("\n  end")[0]
 E = [[POS[int(x)] for x in m.split(",")] for m in re.findall(r"nodes=\[([\d,]+)\]", el)]   # ÍNDICES (no IDs)
 suelo = set(i for e in E[23:] for i in e); rig = set(i for e in E[:23] for i in e)
-m = json.load(open(r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\hekatan-geotechnic\examples\geofem_muro_manabi_malla.json", encoding="utf-8"))
+m = json.load(open(os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\hekatan-geotechnic\examples\geofem_muro_manabi_malla.json", encoding="utf-8"))
 X = np.array(m["X"]); Y = np.array(m["Y"]); nn = len(X)
 t = cKDTree(XY); cands = t.query_ball_point(np.stack([X, Y], 1), 1e-9)
 IDX = np.array([(sorted([c for c in cs if c in suelo]) or sorted(cs))[0] for cs in cands])

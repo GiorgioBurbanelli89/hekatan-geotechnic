@@ -1,7 +1,7 @@
 // Casilla de agua: carga el ejemplo con GWT, calcula con y sin agua y fotografía.  node tests/shot_agua.mjs [url] [outdir]
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync } from "node:fs";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 const url = process.argv[2] || "http://localhost:4702/", out = process.argv[3] || "tests/shots/agua";
 mkdirSync(out, { recursive: true });

@@ -4,7 +4,7 @@ r"""Extrae los sigma NODALES (sx sy txy sz) de un Restart_In.bin de GEO5 (mismo 
 Escribe semilla.txt: una linea por nudo del modelo: sx sy sz txy flag   (orden de SIG de Geotechnic: xx yy zz xy)."""
 import struct, json, os, sys
 AQUI = os.path.dirname(os.path.abspath(__file__))
-rin = sys.argv[1] if len(sys.argv) > 1 else r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_capture\files_muro\160304_Restart_In.bin"
+rin = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_capture\files_muro\160304_Restart_In.bin"
 b = open(rin, "rb").read(); MARC = bytes.fromhex("0400000001000000")
 cnt = struct.unpack_from("<i", b, 12)[0]; o = 16; g5 = {}
 for k in range(cnt):

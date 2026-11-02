@@ -5,11 +5,11 @@
     Restart_Step anterior; en cada aviso se leen 4 KB alrededor de cada copia.
 Uso: python cap14.py <carpeta> [K=3] [E=520] [Q=2]   -> <carpeta>/cap/NNNNN.npz, captura.txt"""
 import sys, os, struct, numpy as np, hashlib, ctypes as C
-sys.path.insert(0, r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\tools")
+sys.path.insert(0, os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\tools")
 AQ = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(AQ, "..", "t11")); sys.path.insert(0, os.path.join(AQ, "..", "t9"))
 import geo5_solver as G, memg5
 from rs_gp import lee, H0, BLK, HDR, REC
-FM = r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_capture\files_muro"
+FM = os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_capture\files_muro"
 RS = ["160224", "160230", "160235", "160239", "160243", "160246", "160249", "160252", "160255", "160259", "160302"]
 d = os.path.abspath(sys.argv[1]); K = int(sys.argv[2]) if len(sys.argv) > 2 else 3; E = int(sys.argv[3]) if len(sys.argv) > 3 else 520; Q = int(sys.argv[4]) if len(sys.argv) > 4 else 2
 P = [6, 2, 0, 1, 3, 4, 5]; kk = E - 23; r = P[Q]

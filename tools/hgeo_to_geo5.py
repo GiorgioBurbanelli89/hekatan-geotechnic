@@ -342,9 +342,9 @@ class Geo5:
         print("   GEO5 dice:", " | ".join(ocr)); print("   FS GEO5 =", fs); return {"fs": fs, "texto": ocr}
     def save_as(self, path):
         """File → Save as (Shift+Ctrl+S). El diálogo es propio de GEO5 (TEnvOpenDialogForm): se teclea en el campo File name
-        una ruta SIN ESPACIOS (C:\\Users\\j-b-j\\geo5_out\\…; el control Delphi pierde los espacios) y luego se copia al destino."""
+        una ruta SIN ESPACIOS (C:\\Users\\USUARIO\\geo5_out\\…; el control Delphi pierde los espacios) y luego se copia al destino."""
         import shutil
-        tmpdir = r"C:\Users\j-b-j\geo5_out"; os.makedirs(tmpdir, exist_ok=True); tmp = os.path.join(tmpdir, os.path.basename(path).replace(" ", "_"))
+        tmpdir = os.path.expanduser("~") + r"\geo5_out"; os.makedirs(tmpdir, exist_ok=True); tmp = os.path.join(tmpdir, os.path.basename(path).replace(" ", "_"))
         if os.path.exists(tmp): os.remove(tmp)
         antes = set(w.handle for w in self.modals()); self.front(); send_keys("+^s"); time.sleep(2.0)
         dlg = None

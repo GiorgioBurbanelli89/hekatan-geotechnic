@@ -6,10 +6,10 @@
 // de verificación) · solido (los sólidos H8) · t1 (talud de 1 inclinación) · t2 (2 inclinaciones).
 import { createRequire } from "node:module";
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 const url = (process.argv[2] || "http://localhost:4700/?tema=oscuro") + "&v=" + Date.now();
-const SCHOOL = "C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-school";
+const SCHOOL = (process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-school";
 const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage(); await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 2 });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

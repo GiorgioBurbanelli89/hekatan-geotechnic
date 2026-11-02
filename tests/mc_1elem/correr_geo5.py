@@ -2,7 +2,7 @@
 """Corre <dir>/Input.txt con el solver REAL de GEO5 2024 (FRGeoFEM_2024.exe sin ventana, run_headless.py; mata solo SU hijo).
    python correr_geo5.py <dir> [<dir> ...]   ->  <dir>/Out.txt, <dir>/Log_File.txt, <dir>/Restart_Step.bin"""
 import os, sys, subprocess, time
-HR = r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_run"
+HR = os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_run"
 for d in sys.argv[1:]:
     d = os.path.abspath(d)
     for f in ("Out.txt", "Log_File.txt"):

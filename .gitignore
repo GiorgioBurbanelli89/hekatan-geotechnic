@@ -15,3 +15,6 @@ tests/video_estado/
 tools/variaciones_muro_manabi/*_malla.json
 tools/variaciones_muro_manabi/*.png
 tools/dinamico/muro_din_ts.json
+
+__pycache__/
+*.pyc

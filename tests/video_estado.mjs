@@ -5,7 +5,7 @@
 import { createRequire } from "node:module";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 const url = process.argv[2] || "http://localhost:4700/", out = "tests/video_estado";
 rmSync(out + "/frames", { recursive: true, force: true }); mkdirSync(out + "/frames", { recursive: true });   // solo los frames: la carpeta puede estar en uso
@@ -63,7 +63,7 @@ const dur = stamps.map((t, i) => ((i + 1 < stamps.length ? stamps[i + 1] : t + 5
 writeFileSync(`${out}/list.txt`, stamps.map((_, i) => `file 'frames/f${String(i).padStart(4, "0")}.jpg'\nduration ${dur[i].toFixed(3)}`).join("\n") + `\nfile 'frames/f${String(stamps.length - 1).padStart(4, "0")}.jpg'\n`);
 const total = (stamps[stamps.length - 1] + 500) / 1000;
 console.log(`${stamps.length} fotogramas · ${total.toFixed(1)} s reales`);
-const ffmpeg = "C:/Users/j-b-j/AppData/Roaming/Python/Python312/site-packages/imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v7.1.exe";
+const ffmpeg = (process.env.USERPROFILE ?? "") + "/AppData/Roaming/Python/Python312/site-packages/imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v7.1.exe";
 execFileSync(ffmpeg, ["-y", "-f", "concat", "-safe", "0", "-i", "list.txt", "-vsync", "vfr", "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-preset", "medium", "-crf", "20", "raw.mp4"], { cwd: out, stdio: "ignore" });
 // ---- guion de narración: «segundo | frase» por beat (≤ 224 palabras en total) ----
 const TXT = {

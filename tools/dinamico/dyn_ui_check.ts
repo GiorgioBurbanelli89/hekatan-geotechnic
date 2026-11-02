@@ -8,7 +8,7 @@ import { leerAcelerograma, ventana } from "../../src/dyn/acelerograma";
 import { correrDinamico, muroDe } from "../../src/dyn/dinamico";
 import { loadMalla, registro, caraElems } from "./muro_manabi_dinamico";
 
-const REG = process.env.MURO_REGISTRO ?? "C:\\Users\\j-b-j\\Downloads\\Registros sismicos\\Registros Sismicos 16A\\Portoviejo\\APO1_201604162359_N_100.txt";
+const REG = process.env.MURO_REGISTRO ?? (process.env.USERPROFILE ?? "") + "\\Downloads\\Registros sismicos\\Registros Sismicos 16A\\Portoviejo\\APO1_201604162359_N_100.txt";
 let fallos = 0; const ok = (c: boolean, t: string) => { console.log(`${c ? "OK   " : "FALLA"} ${t}`); if (!c) fallos++; };
 const a = ventana(leerAcelerograma(readFileSync(REG, "latin1"), "cm/s2", "APO1"), 8, 30), r = registro();
 let d = 0; for (let i = 0; i < r.length; i++) d = Math.max(d, Math.abs(a.pares[i] - r[i]));

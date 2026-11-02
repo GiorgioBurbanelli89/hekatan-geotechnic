@@ -9,6 +9,6 @@
 # Hekatan Geotechnic siga siendo autónomo. Eigen va en src/solid/cpp/eigen (solo cabeceras).
 set -e
 cd "$(dirname "$0")"
-EMCC="C:\Users\j-b-j\emsdk\upstream\emscripten\emcc.bat"
+EMCC="C:\Users\USUARIO\emsdk\upstream\emscripten\emcc.bat"
 cmd //c "$EMCC src/solid/cpp/hex8_wasm.cpp -o src/solid/built/hex8.js -O3 -s ALLOW_MEMORY_GROWTH -s MAXIMUM_MEMORY=2147483648 -fexceptions -s STACK_SIZE=2097152 -s MODULARIZE -s EXPORT_ES6 -s ENVIRONMENT=web,worker,node -s EXPORTED_FUNCTIONS=_malloc,_free,_hex8_solve,_hex8_stress -s EXPORTED_RUNTIME_METHODS=HEAPF64,HEAPU32,HEAPU8 -I src/solid/cpp/eigen/"
 ls -la src/solid/built/

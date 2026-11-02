@@ -1,7 +1,7 @@
 // Edición de los puntos del agua desde la interfaz (freático y isolíneas de poros): cambia el texto, «aplicar» recalcula.  node tests/shot_agua_editar.mjs [url]
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
 const puppeteer = require("puppeteer");
 mkdirSync("tests/shots/agua_editar", { recursive: true });
 const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });

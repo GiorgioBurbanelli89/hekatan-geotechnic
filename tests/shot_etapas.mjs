@@ -2,7 +2,7 @@
 //   node tests/shot_etapas.mjs [url] [outdir]
 import { createRequire } from "node:module";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-const require = createRequire("C:/Users/j-b-j/Documents/Hekatan Calc 1.0.0/hekatan-struct-limpio/package.json");
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct-limpio/package.json");
 const puppeteer = require("puppeteer");
 const url = process.argv[2] || "http://localhost:4700/", out = process.argv[3] || "tests/shots/etapas";
 mkdirSync(out, { recursive: true });

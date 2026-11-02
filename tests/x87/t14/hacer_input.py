@@ -3,7 +3,7 @@
 con la cabecera/solver de una fase 1 real de GEO5 (files_muro_agua/173729: first_stage, restart_out, time_step 0.10) y
 gravity rho = -γ por material (18.5 / 17.5 / 23 del .hgeo). Uso: python hacer_input.py <carpeta>"""
 import os, sys, re
-GC = r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_capture"
+GC = os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\geofem_capture"
 src = open(os.path.join(GC, "files_muro", "160304_InputFile.txt"), encoding="latin-1").read()
 ref = open(os.path.join(GC, "files_muro_agua", "173729_InputFile.txt"), encoding="latin-1").read()
 d = os.path.abspath(sys.argv[1]); os.makedirs(d, exist_ok=True)

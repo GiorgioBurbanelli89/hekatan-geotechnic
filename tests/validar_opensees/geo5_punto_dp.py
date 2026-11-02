@@ -3,7 +3,7 @@
 (Set_MJPMJPP, residuo y jacobiano a 0.0; el retorno a 1e-13; ver EXTRAIDO_GeoFEM_DP_returnmap.md)."""
 import sys, json, math, os
 import numpy as np
-sys.path.insert(0, r"C:\Users\j-b-j\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\Demo04_replica\talud_python_3etapas")
+sys.path.insert(0, os.path.expanduser("~") + r"\Documents\Hekatan Calc 1.0.0\ingenieria-inversa\hekatan-geo5-bridge\Demo04_replica\talud_python_3etapas")
 import geo5_returnmap as g
 d = json.load(open(sys.argv[1]))
 E, nu, phi, c = d["E"], d["nu"], math.radians(d["phi"]), d["c"]
