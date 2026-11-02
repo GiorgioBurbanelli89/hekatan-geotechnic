@@ -115,6 +115,7 @@ struct GeoFem {
   // SRF 1 (GEO5 pone ALoad = F_int al empezar la SRM) y arranque de cada peldaño con u0 = η·Δu de la ÚLTIMA iteración del último
   // peldaño convergido (0 tras un fallo), metido solo en σ (porPaso), no en u. Medido contra el solver real: los 10 primeros
   // peldaños del muro de Manabí iteración a iteración (η, |gi|) y FS = 1.362360 como GEO5.
+  vector<double> depFase; vector<unsigned char> hasFase;   // tangente al acabar la fase anterior (modo GEO5, reintento del 1.er paso)
   bool modoG5 = false, soloFint = false; vector<double> lastRaw, u0ext, ALoadV; double lastEta = 1;
   bool soloTangente = false, tangIni = false, energiaPrev = false, porPaso = false;   // assembleInc: guardar solo la tangente del retorno (inicio de un peldaño continuado)   // pasadas de la búsqueda lineal (GEO5 max_ls_iterations): 1 por defecto, 3 en el modo GEO5 del muro   // fracción de la carga NUEVA de la etapa que llegó al equilibrio (GEO5: «Attained loading»)
   vector<double> Flast;   // carga total en equilibrio al acabar la etapa anterior (para aplicar la nueva por incrementos)   // EPSacc: ε acumulada por punto de Gauss, SOLO mientras el elemento está activo
@@ -606,7 +607,10 @@ struct GeoFem {
       for (int d = 0; d < ndof; d++) Fi[d] = F0[d] + (Fk[d] - F0[d]) * tn;
       int iti; bool ci = nrstep(1.0, Fi.data(), ++k, dui, iti, true); itOut += iti;
       if (ci) { for (int d = 0; d < ndof; d++) uOut[d] += dui[d]; t = tn; continue; }
-      SIG = s0; EPL = e0; DEP = d0; hasDep = h0; dt /= 2;
+      SIG = s0; EPL = e0; dt /= 2;
+      // K del reintento = tangente del último paso bueno; en el 1.er paso de la fase, la del final de la fase anterior (GEO5
+      // relee el Restart_Step y arma K con los PG que ese paso CORRIGIÓ, bandera 4|1; medido con FRGeoFEM, fase 7 del muro)
+      if (t == 0 && !hasFase.empty()) { DEP = depFase; hasDep = hasFase; } else { DEP = d0; hasDep = h0; }
       if (++nrel > 2) return false;
     }
     return true;
@@ -623,7 +627,7 @@ struct GeoFem {
     else if (!prevAct.empty()) desplazamientoInicialRegion();
     // MODO GEO5 (bit 32), medido contra Restart_Step de GEO5 (muro de Manabí con agua): cada fase arranca con K ELÁSTICA
     // (el Restart no guarda la tangente), tangente del ápice 0 y la carga en pasos de 0.1 con relajación x1/2 <= 2.
-    if (modoG5) std::fill(hasDep.begin(), hasDep.end(), 0);
+    if (modoG5) { depFase = DEP; hasFase = hasDep; std::fill(hasDep.begin(), hasDep.end(), 0); }
     vector<double> F(ndof, 0.0);
     for (int e = 0; e < ne; e++) {
       if (!act[e]) continue;

@@ -322,6 +322,7 @@ export class GeoFem {
   private lsMax = 1;                // pasadas de la búsqueda lineal (GEO5 max_ls_iterations)
   private soloTangente = false; private tangIni = false; private energiaPrev = false; private porPaso = false;
   // MODO GEO5 DEL MURO (bit 32, como geofem.cpp; Tanda 12): ALoad = F_int de SRF 1 y u0 = η·Δu de la última it del último peldaño convergido
+  private depFase: Float64Array | null = null; private hasFase: Uint8Array | null = null;   // tangente al acabar la fase anterior (modo GEO5)
   private modoG5 = false; private soloFint = false; private lastRaw: Float64Array | null = null; private lastEta = 1; private u0ext: Float64Array | null = null; private ALoadV: Float64Array | null = null;
   private desempateZ = false;   // bit 64: principal del plano = σz (|Δ| ≤ 1e-14·max|σ|) → σz delante (medido, no del binario)
   private static gDesempateZ = false;
@@ -578,7 +579,10 @@ export class GeoFem {
     else if (this.prevAct) this.desplazamientoInicialRegion(this.prevAct);
     // MODO GEO5 (bit 32), medido contra Restart_Step de GEO5 (muro de Manabí con agua, 2-nov-2026): cada fase arranca con K ELÁSTICA
     // (el Restart no guarda la tangente), tangente del ápice 0 y la carga en pasos de 0.1 (time_step) con relajación ×½ ≤ 2.
-    if (this.modoG5) this.hasDep.fill(0);
+    // Reintento de un paso (relajación) en modo GEO5: GEO5 relee el Restart_Step y arma K con la tangente de los PG que el
+    // último paso bueno CORRIGIÓ (bandera 4|1), no la elástica. Medido con FRGeoFEM sin interfaz (fase 7 del muro, 2-nov-2026):
+    // con updatenone los reintentos = 1.er intento; con updatefull el reintento no depende de la it en que falló.
+    if (this.modoG5) { this.depFase = Float64Array.from(this.DEP); this.hasFase = Uint8Array.from(this.hasDep); this.hasDep.fill(0); }
     const F = new Float64Array(ndof);
     for (let e = 0; e < ne; e++) {
       if (!this.act[e]) continue;
@@ -643,7 +647,9 @@ export class GeoFem {
       for (let d = 0; d < ndof; d++) Fi[d] = F0[d] + (Fk[d] - F0[d]) * tn;
       const [ci, dui, iti] = this.nrstep(1.0, Fi, ++k, undefined, true); it += iti;
       if (ci) { for (let d = 0; d < ndof; d++) u[d] += dui[d]; t = tn; continue; }
-      this.SIG.set(s0); this.EPL.set(e0); this.DEP.set(d0); this.hasDep.set(h0); dt /= 2;
+      this.SIG.set(s0); this.EPL.set(e0); dt /= 2;
+      // K del reintento = tangente del último paso bueno; en el 1.er paso de la fase, la del final de la fase anterior
+      if (t === 0 && this.depFase && this.hasFase) { this.DEP.set(this.depFase); this.hasDep.set(this.hasFase); } else { this.DEP.set(d0); this.hasDep.set(h0); }
       this.log(`    paso ${tn.toFixed(4)} no converge → ${dt}`);
       if (++nrel > 2) return [false, u, it];
     }
