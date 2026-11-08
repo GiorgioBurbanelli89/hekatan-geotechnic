@@ -13,6 +13,10 @@ export type LemMethod = "fellenius" | "bishop";
 export type Circle = { cx: number; cy: number; R: number };
 export type Slice = { xm: number; b: number; alpha: number; W: number; c: number; phi: number; u: number; yb: number; yt: number };
 export type LemResult = { fs: number; method: LemMethod; circle: Circle; slices: Slice[]; x0: number; x1: number; iters?: number };
+/** Opcional (por defecto NO, para no cambiar lo ya validado): `agua` = freático `agua gwt` (γsat bajo él, u = γw·(z_gwt − z_base),
+ *  γw = 10 como GEO5); `cargas` = las sobrecargas de TODAS las etapas (verticales, q·ancho sobre la dovela). Lo usan los tipos de talud. */
+export type LemOpts = { agua?: boolean; cargas?: boolean };
+const GW_LEM = 10;
 
 const soilAt = (def: SlopeDef, x: number, y: number) => {
   for (const w of def.walls ?? []) if (pointInPolygon(x, y, wallPolygon(w.pm, wallGround(def, w)))) {   // dentro del muro manda el hormigón
@@ -35,20 +39,22 @@ function cortaMuro(def: SlopeDef, yBot: (x: number) => number, x0: number, x1: n
 }
 
 /** Peso de la columna vertical en x entre el círculo (yb) y el terreno (yt): Σ γ·Δh por capa que atraviesa. */
-function columnWeight(def: SlopeDef, spans: Pt[][], x: number, yb: number, yt: number): { W: number } {
+function columnWeight(def: SlopeDef, spans: Pt[][], x: number, yb: number, yt: number, zw?: number): { W: number } {
   if (yt <= yb) return { W: 0 };
-  // límites verticales = las interfaces en x, entre yb y yt, ordenados de arriba a abajo
-  const zs = [yt, ...spans.map((sp) => interfaceY(sp, x)).filter((z) => z > yb + 1e-6 && z < yt - 1e-6).sort((a, b) => b - a), yb];
+  // límites verticales = las interfaces en x (y el freático, si cuenta), entre yb y yt, ordenados de arriba a abajo
+  const cortes = spans.map((sp) => interfaceY(sp, x)); if (zw !== undefined) cortes.push(zw);
+  const zs = [yt, ...cortes.filter((z) => z > yb + 1e-6 && z < yt - 1e-6).sort((a, b) => b - a), yb];
   let W = 0;
   for (let i = 0; i + 1 < zs.length; i++) {
     const zmid = (zs[i] + zs[i + 1]) / 2, s = soilAt(def, x, zmid);
-    W += (s?.gamma ?? 18) * (zs[i] - zs[i + 1]);   // por unidad de ancho (se multiplica por b fuera)
+    const g = zw !== undefined && zmid < zw ? (s?.gsat ?? s?.gamma ?? 18) : (s?.gamma ?? 18);   // bajo el freático, γsat
+    W += g * (zs[i] - zs[i + 1]);   // por unidad de ancho (se multiplica por b fuera)
   }
   return { W };
 }
 
 /** Dovelas de un círculo: intersección con el terreno (entrada x0 y salida x1) y N columnas. Devuelve null si no corta bien. */
-export function sliceCircle(def: SlopeDef, cir: Circle, n = 40): { slices: Slice[]; x0: number; x1: number } | null {
+export function sliceCircle(def: SlopeDef, cir: Circle, n = 40, op: LemOpts = {}): { slices: Slice[]; x0: number; x1: number } | null {
   const m = def.margins!; const terr = effectiveTerrain(def);   // el terreno que ve el método analítico incluye el muro y su relleno
   const spans = def.interfaces.map((it, k) => (k === 0 ? terr : spanInterface(it, m.xmin, m.xmax)));
   // el círculo corta el terreno donde (yterr − cy)² + (x − cx)² = R²  →  buscamos los dos x de corte por barrido de signo
@@ -61,21 +67,25 @@ export function sliceCircle(def: SlopeDef, cir: Circle, n = 40): { slices: Slice
   const yBot = (x: number) => cir.cy - Math.sqrt(Math.max(0, cir.R * cir.R - (x - cir.cx) ** 2));   // rama INFERIOR del círculo
   if (cortaMuro(def, yBot, x0, x1)) return null;   // la rotura no puede cortar el hormigón del muro
   const slices: Slice[] = [];
+  const gwt = op.agua && def.gwt && def.gwt.length >= 2 ? spanInterface(def.gwt, m.xmin, m.xmax) : null;
+  const cargas = op.cargas ? def.stages.flatMap((st) => st.surcharges) : [];
   for (let i = 0; i < n; i++) {
     const xa = x0 + (x1 - x0) * i / n, xb = x0 + (x1 - x0) * (i + 1) / n, xm = (xa + xb) / 2, b = xb - xa;
     const yb = yBot(xm), yt = interfaceY(terr, xm); if (yt <= yb) continue;
     const dyb = yBot(xb) - yBot(xa); const alpha = Math.atan2(dyb, b);   // inclinación de la base
-    const { W } = columnWeight(def, spans, xm, yb, yt);
+    const zw = gwt ? interfaceY(gwt, xm) : undefined;
+    const { W } = columnWeight(def, spans, xm, yb, yt, zw);
     const s = soilAt(def, xm, yb + 1e-3);                                 // suelo en la BASE de la dovela
-    const u = 0;                                                          // sin agua (freático/Ru = siguiente entrega)
-    slices.push({ xm, b, alpha, W: W * b, c: s?.c ?? 0, phi: (s?.phi ?? 0) * Math.PI / 180, u, yb, yt });
+    const u = zw !== undefined ? GW_LEM * Math.max(0, zw - yb) : 0;       // sin `agua` en las opciones: u = 0 (lo de siempre)
+    let Q = 0; for (const sc of cargas) { const a = Math.min(sc.a[0], sc.b[0]), c2 = Math.max(sc.a[0], sc.b[0]); Q += sc.q * Math.max(0, Math.min(xb, c2) - Math.max(xa, a)); }
+    slices.push({ xm, b, alpha, W: W * b + Q, c: s?.c ?? 0, phi: (s?.phi ?? 0) * Math.PI / 180, u, yb, yt });
   }
   return slices.length >= 3 ? { slices, x0, x1 } : null;
 }
 
 /** FS de un círculo por Fellenius o Bishop. Bishop itera mα(FS); Fellenius es explícito. */
-export function fsCircle(def: SlopeDef, cir: Circle, method: LemMethod, n = 40): LemResult | null {
-  const cut = sliceCircle(def, cir, n); if (!cut) return null;
+export function fsCircle(def: SlopeDef, cir: Circle, method: LemMethod, n = 40, op: LemOpts = {}): LemResult | null {
+  const cut = sliceCircle(def, cir, n, op); if (!cut) return null;
   const { slices, x0, x1 } = cut;
   const driving = slices.reduce((s, sl) => s + sl.W * Math.sin(sl.alpha), 0);
   if (driving <= 1e-6) return null;   // masa que no desliza (círculo mal puesto)
@@ -93,7 +103,7 @@ export function fsCircle(def: SlopeDef, cir: Circle, method: LemMethod, n = 40):
 }
 
 /** BÚSQUEDA de la superficie crítica: barre una malla de centros (arriba del talud) y radios; devuelve el FS mínimo. */
-export function criticalCircle(def: SlopeDef, method: LemMethod, n = 40): LemResult | null {
+export function criticalCircle(def: SlopeDef, method: LemMethod, n = 40, op: LemOpts = {}): LemResult | null {
   const m = def.margins!; const terr = effectiveTerrain(def);
   const xmin = m.xmin, xmax = m.xmax, ytopMax = Math.max(...terr.map((p) => p[1])), ybotMin = m.bottom;
   const H = ytopMax - ybotMin, W = xmax - xmin;
@@ -103,7 +113,7 @@ export function criticalCircle(def: SlopeDef, method: LemMethod, n = 40): LemRes
     const cx = xmin + W * (0.2 + 0.6 * ix / NC), cy = ytopMax + H * (0.1 + 1.2 * iy / NC);
     for (let ir = 0; ir <= 14; ir++) {
       const R = H * (0.5 + 1.6 * ir / 14);
-      const r = fsCircle(def, { cx, cy, R }, method, n);
+      const r = fsCircle(def, { cx, cy, R }, method, n, op);
       if (r && r.fs > 0.2 && r.fs < 50 && (!best || r.fs < best.fs)) best = r;
     }
   }
@@ -112,7 +122,7 @@ export function criticalCircle(def: SlopeDef, method: LemMethod, n = 40): LemRes
   const c0 = best.circle; const dc = W * 0.06, dr = H * 0.12;
   for (let ix = -3; ix <= 3; ix++) for (let iy = -3; iy <= 3; iy++) for (let ir = -3; ir <= 3; ir++) {
     const cir = { cx: c0.cx + dc * ix / 3, cy: c0.cy + dc * iy / 3, R: c0.R + dr * ir / 3 };
-    const r = fsCircle(def, cir, method, n);
+    const r = fsCircle(def, cir, method, n, op);
     if (r && r.fs > 0.2 && r.fs < 50 && r.fs < best.fs) best = r;
   }
   return best;
