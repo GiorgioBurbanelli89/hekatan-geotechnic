@@ -82,6 +82,18 @@
     .mats b { color: var(--txt); }
     footer { padding: 8px 18px; color: #7d7259; font-size: 11px; border-top: 1px solid #2a2316; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+    #zapsec { grid-column: 1 / -1; }
+    .zlay { display: grid; grid-template-columns: 330px 1fr; gap: 14px; }
+    .zg { margin-bottom: 8px; } .zt { color: var(--oro); text-transform: uppercase; letter-spacing: 1px; font-size: 11.5px; margin: 6px 0 3px; }
+    .zc { display: grid; grid-template-columns: 1fr 92px 50px; gap: 6px; align-items: center; margin: 2px 0; font-size: 12.5px; color: var(--mut); }
+    .zc input { padding: 3px 6px; text-align: right; font: 12.5px Consolas, monospace; } .zc i { font-style: normal; font-size: 11px; }
+    .zres { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .zbig { background: #14110a; border: 1px solid #4a3f28; border-radius: 8px; padding: 6px 10px; } .zbig span { display: block; color: var(--mut); font-size: 12px; } .zbig b { font: 700 22px Consolas, monospace; color: #f3ead0; }
+    .zchip { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin: 2px 4px 2px 0; } .zchip.ok { background: #245a2c; color: #bfffc8; } .zchip.no { background: #7a1f1f; color: #ffd0d0; }
+    .ztab { width: 100%; border-collapse: collapse; font-size: 12.5px; } .ztab td, .ztab th { padding: 2px 6px; border-bottom: 1px solid #332b1b; text-align: left; } .ztab td.n { text-align: right; font-family: Consolas, monospace; }
+    .ztab .src { font-size: 11px; font-weight: 600; } .ztab .g5 { color: #7ee08a; } .ztab .lit { color: #f2a65a; } .mut { color: var(--mut); font-size: 12px; }
+    #zapPlanta, #zapCorte { width: 100%; height: auto; border-radius: 6px; display: block; background: #fff; }
+    @media (max-width: 900px) { .zlay { grid-template-columns: 1fr; } .zres { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
 <body>
@@ -104,7 +116,7 @@
         <input type="file" id="fFile" accept=".hgeo,.txt" hidden>
       </div>
       <label>Ejemplo</label>
-      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option><option value="manabi">Muro de Manabí · con Vs para el dinámico</option><option value="talud_gwt">Talud con agua (freático GWT o coeficiente Ru) · GEO5 FS 1.98 → 1.76</option><option value="talud_poros">Talud con presión de poros dada (isolíneas) · = freático GWT: GEO5 FS 1.76 / 1.74</option><option value="talud_ru">Talud con coeficiente Ru=0.3 · GEO5 FS 1.98 → 1.42</option><option value="manabi_muro">Muro de Manabí paramétrico · verificación GEO5 + abrir en Hekatan Struct</option><option value="manabi_etapas">Muro de Manabí por etapas · Mohr-Coulomb, 7 etapas (= GeoFEM)</option><option value="manabi_etapas_e">Muro de Manabí por etapas · E de las correlaciones del SPT (13 / 12.4 MPa)</option></select>
+      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option><option value="manabi">Muro de Manabí · con Vs para el dinámico</option><option value="talud_gwt">Talud con agua (freático GWT o coeficiente Ru) · GEO5 FS 1.98 → 1.76</option><option value="talud_poros">Talud con presión de poros dada (isolíneas) · = freático GWT: GEO5 FS 1.76 / 1.74</option><option value="talud_ru">Talud con coeficiente Ru=0.3 · GEO5 FS 1.98 → 1.42</option><option value="manabi_muro">Muro de Manabí paramétrico · verificación GEO5 + abrir en Hekatan Struct</option><option value="manabi_etapas">Muro de Manabí por etapas · Mohr-Coulomb, 7 etapas (= GeoFEM)</option><option value="manabi_etapas_e">Muro de Manabí por etapas · E de las correlaciones del SPT (13 / 12.4 MPa)</option><option value="zapata_guerra">Cimentaciones · zapata aislada de Guerra (GEO5 Spread Footing)</option></select>
       <div id="editor" hidden>
         <textarea id="hgeo" spellcheck="false" rows="11"></textarea>
         <div class="row"><button class="run" id="apply" style="margin-top:6px">✎ Aplicar (Ctrl+Enter)</button></div>
@@ -285,6 +297,29 @@
         <canvas id="dCvE" width="1180" height="230" style="width:100%;background:#0b0906;border-radius:6px;margin-top:6px"></canvas>
       </div>
       <div id="log">Pulsa «Calcular FS». El cálculo corre en tu navegador (Web Worker); el log es el mismo que imprime el driver de Hekatan Python y coincide iteración a iteración con GEO5.</div>
+    </section>
+    <section class="panel" id="zapsec" hidden>
+      <div class="zlay">
+        <div>
+          <h2>Cimentaciones · zapata aislada <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(GEO5: Spread Footing)</span></h2>
+          <div class="row" style="gap:6px;margin-bottom:6px"><button id="zapVolver" class="tb">← Taludes y muros</button><button id="zapReset" class="tb">↺ Guerra (ejemplo)</button></div>
+          <div class="mats" style="margin:0 0 6px">Ejemplo: Guerra, cap. 5, ej. 1 (3.45 × 3.45, h 0.45, P 121 t, M<sub>y</sub> 17 t·m, k<sub>s</sub> 2920 t/m³). El libro no da el suelo: <b>suelo EQUIVALENTE</b> (γ 1.8, φ 22.2°, c 0, Df 1.5) que da q<sub>adm</sub> ≈ 14 t/m² con FS 3 por Meyerhof; E<sub>def</sub> = k<sub>s</sub>·B·(1−ν²) (correlación, declarada).</div>
+          <div class="row">
+            <div><label>Método (drenado)</label><select id="zapMetodo" title="los de GEO5 2024 (fórmulas de su ayuda; verificados contra GEO5 corriendo)"><option value="meyerhof">Meyerhof (GEO5)</option><option value="estandar">Estándar · Brinch-Hansen (GEO5)</option><option value="vesic">Vesic (GEO5)</option></select></div>
+            <div><label>Condición</label><select id="zapDren"><option value="1">drenada (φ, c)</option><option value="0">no drenada (c_u)</option></select></div>
+            <div style="flex:0 0 70px"><label>Unidades</label><select id="zapUni"><option value="t">t·m</option><option value="kN">kN·m</option></select></div>
+          </div>
+          <div id="zapCampos"></div>
+        </div>
+        <div>
+          <div id="zapOut" class="mats" style="margin-top:0"></div>
+          <div class="row" style="margin-top:8px">
+            <div><canvas id="zapPlanta" width="620" height="560"></canvas></div>
+            <div><canvas id="zapCorte" width="620" height="560"></canvas></div>
+          </div>
+          <div class="mats">Fuente <b style="color:#7ee08a">GEO5</b> = fórmula de la ayuda de GEO5 2024 (extraída de su binario de ayuda) y comprobada contra GEO5 corriendo con el mismo caso. <b style="color:#f2a65a">literatura</b> = no es de GEO5 (distribución lineal de la zapata rígida, Winkler).</div>
+        </div>
+      </div>
     </section>
   </main>
   <footer>Hekatan Engineers · Portoviejo, Ecuador · Todo lo que hay aquí está EXTRAÍDO del solver de GEO5 (FRGeoFEM) o MEDIDO en su course of analysis, nada es de libro.</footer>
