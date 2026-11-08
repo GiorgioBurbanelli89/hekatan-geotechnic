@@ -25,6 +25,7 @@ import { actualizarMuro, engancharMuro } from "./wall/panel";
 import { engancharDinamico, actualizarDinamico, dinActivo, dibujar as dibujarDinamico } from "./dyn/panel";
 import { montarImportadorGeo5 } from "./import_geo5/visor";
 import { montarZapata, mostrarZapata } from "./footing/panel";
+import { montarTipos, elegir as elegirTipo, tipoFem, tipoLemOpts } from "./tipos/panel";
 
 type Stage = { name: string; fs: number; alcanzada?: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean; u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number };
 
@@ -564,7 +565,7 @@ function run(idx: number[]) {
     else if (m.type === "engine") appendLog(`(motor: ${m.engine === "wasm" ? "WASM · C++ compilado con emscripten" : "TypeScript"})`);
     else if (m.type === "stage") {
       stages[m.index] = { ...(m.result as Stage), stale: false };
-      calcStage();
+      calcStage(); tipoFem(m.index, (m.result as Stage).steps.length ? (m.result as Stage).fs : NaN);
       fsTable(); buildStageTabs(); if (m.index === visibleStage()) { fillStepSelect(); redraw(); }
     } else if (m.type === "done") { busy = false; calcDone(false); fsTable(); appendLog(`(navegador: ${m.seconds.toFixed(1)} s · ${((performance.now() - t0) / 1000).toFixed(1)} s con el render)`); }
     else if (m.type === "error") { busy = false; calcDone(true); fsTable(); appendLog("ERROR: " + m.message); }
@@ -600,7 +601,7 @@ function runLem() {
   }
   lemOut.textContent = "buscando la superficie crítica…";
   window.setTimeout(() => {
-    const t0 = performance.now(); const r = criticalCircle(def!, met as LemMethod, 40);
+    const t0 = performance.now(); const r = criticalCircle(def!, met as LemMethod, 40, tipoLemOpts());
     if (!r) { draw.lem = null; lemOut.textContent = "no se encontró superficie de falla (revisa el terreno y los suelos)"; draw.render(); return; }
     draw.lem = { circle: r.circle, slices: r.slices, fs: r.fs, method: r.method, x0: r.x0, x1: r.x1 };
     const avisoMuro = def!.walls?.length ? `<br><span style="color:var(--oro)">con muro: la superficie CIRCULAR no puede cortar el hormigón, así que este FS queda del lado ALTO (con el muro el mecanismo real baja por el trasdós y sigue la base: es una superficie POLIGONAL, pendiente). Fíate del FS de elementos finitos.</span>` : "";
@@ -725,6 +726,7 @@ draw.onChange = (d) => {
 btn.addEventListener("click", () => run(base!.stages.map((_, i) => i).slice(0, parseInt(selN.value))));
 selN.addEventListener("change", () => { const n = parseInt(selN.value); const falta = base!.stages.map((_, i) => i).slice(0, n).filter((i) => !stages[i] || stages[i]!.stale); if (falta.length) run(falta); });
 const EJEMPLOS_HGEO: Record<string, string> = { manabi_etapas: MANABI_ETAPAS_HGEO, manabi_etapas_e: MANABI_ETAPAS_E_HGEO, manabi_muro: MANABI_MURO_HGEO, talud_gwt: TALUD_GWT_HGEO, talud_ru: TALUD_RU_HGEO, talud_poros: TALUD_POROS_HGEO };
+montarTipos({ abrir: (t) => { mostrarZapata(false); selModel.value = "hgeo"; edText.value = t; applyHgeo(); } });   // lista «Tipo de talud» (plantillas)
 montarZapata(() => { selModel.value = "models/demo04.json"; selModel.dispatchEvent(new Event("change")); });
 selModel.addEventListener("change", () => {
   // CIMENTACIONES: otro módulo dentro de la misma app (GEO5 Spread Footing); no toca el talud
@@ -756,7 +758,8 @@ edText.value = DEMO04_HGEO;
 setTool("ver");
 // ?ejemplo=manabi_etapas (o cualquier valor de la lista «Ejemplo»): abre ese modelo directamente (enlace para compartir)
 {
-  const ej = new URLSearchParams(location.search).get("ejemplo");
-  if (ej && Array.from(selModel.options).some((o) => o.value === ej)) { selModel.value = ej; selModel.dispatchEvent(new Event("change")); }
+  const ej = new URLSearchParams(location.search).get("ejemplo"), tp = new URLSearchParams(location.search).get("tipo");
+  if (tp && ["corte", "terraplen", "berma", "estratos", "muro", "ladera"].includes(tp)) elegirTipo(tp);   // ?tipo=berma: abre ese tipo de talud
+  else if (ej && Array.from(selModel.options).some((o) => o.value === ej)) { selModel.value = ej; selModel.dispatchEvent(new Event("change")); }
   else loadFixture(selModel.value);
 }
