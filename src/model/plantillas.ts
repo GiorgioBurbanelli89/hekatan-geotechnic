@@ -97,7 +97,8 @@ export function hgeoPlantilla(id: string, dados: Record<string, number> = {}): s
   } else if (id === "muro") {
     const Hm = p.Hm, Ht = Hm + H, xw = Math.max(Ht * 0.6, 5), xc = xw + Ht * n, xmax = xc + Math.max(2 * Ht, 10), fondo = -Math.max(0.6 * Ht, 4);
     L1.push(`margenes xmin=0 xmax=${r(xmax)} fondo=${r(fondo)}`, `interfaz ${pts([[0, 0], [xw, 0], [xc, Ht], [xmax, Ht]])}`);
-    L1.push(suelo("SUELO", p.phi, p.c, p.gamma), "suelo HORMIGON E=30000000 nu=0.2 phi=45 c=1000 gamma=24"   // rígido (no se reduce); φ, c altos solo para que no salte el aviso de φ < 1°, `asignar SUELO en ${r(xc + 1)},${r(fondo / 2)}`);
+    L1.push(suelo("SUELO", p.phi, p.c, p.gamma), "suelo HORMIGON E=30000000 nu=0.2 phi=45 c=1000 gamma=24", `asignar SUELO en ${r(xc + 1)},${r(fondo / 2)}`);
+    // HORMIGON = Rigid body (no se reduce en la SRM); φ y c altos solo para que no salte el aviso «φ < 1°»
     L1.push(`muro HORMIGON x=${r(xw)} H=${r(Hm)}`, malla(Ht), ...etapas(p.q, xc + 1, Math.min(xc + 7, xmax - 1), Ht));
   } else if (id === "ladera") {
     const ta = Math.tan((p.alfa * Math.PI) / 180), xpie = Math.max(1.5 * H, 8), z0 = -xpie * ta, xc = xpie + L, xmax = xc + Math.max(2 * H, 10), fondo = z0 - Math.max(0.5 * H, 3);
