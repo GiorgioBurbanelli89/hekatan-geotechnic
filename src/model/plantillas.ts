@@ -11,6 +11,9 @@
 //   estratos   corte en DOS ESTRATOS: el de arriba de espesor e (desde la corona), el de abajo hasta el fondo
 //   muro       talud con MURO cantilever al pie (Rigid body) de altura Hm: el relleno retenido sigue hasta el talud de arriba
 //   ladera     talud NATURAL: el terreno del pie también baja, con pendiente α hacia afuera
+//   compuesto  una cara con QUIEBRE: 1:n abajo hasta hq y 1:n₂ arriba
+//   blando     corte con un ESTRATO BLANDO intermedio (espesor t a la profundidad d bajo la corona): la falla lo busca
+//   zapata     corte con una CARGA q de ancho Bz a la distancia dz del borde de la cara (zapata, edificio, tránsito)
 import type { Pt } from "./dsl";
 
 export type PDef = { key: string; label: string; unit: string; def: number; min: number; max: number; step: number };
@@ -46,6 +49,17 @@ export const PLANTILLAS: Plantilla[] = [
     P("phi", { def: 30 }), P("c", { def: 12 }), P("gamma"), P("q")] },
   { id: "ladera", nombre: "Talud natural (ladera con pendiente al pie)", descripcion: "el terreno delante del pie también baja con pendiente α (ladera); la corona es llana", params: [
     P("H"), P("n"), { key: "alfa", label: "pendiente del terreno al pie α", unit: "°", def: 10, min: 0, max: 25, step: 0.5 }, P("phi"), P("c"), P("gamma"), P("hw"), P("q")] },
+  { id: "compuesto", nombre: "Talud compuesto (dos pendientes)", descripcion: "una sola cara con quiebre: pendiente 1:n abajo hasta la altura hq y 1:n₂ arriba", params: [
+    P("H", { def: 12 }), P("n", { label: "pendiente inferior 1:n", def: 1 }), { key: "n2", label: "pendiente superior 1:n₂", unit: "", def: 2.5, min: 0.5, max: 5, step: 0.1 },
+    { key: "hq", label: "altura del quiebre sobre el pie hq", unit: "m", def: 5, min: 1, max: 24, step: 0.25 }, P("phi"), P("c", { def: 15 }), P("gamma"), P("hw"), P("q")] },
+  { id: "blando", nombre: "Estrato blando intermedio", descripcion: "corte en tres suelos: un estrato débil de espesor t a la profundidad d bajo la corona (la falla busca ese estrato)", params: [
+    P("H"), P("n"), { key: "d", label: "profundidad del techo del estrato blando d", unit: "m", def: 4, min: 0.5, max: 24, step: 0.25 },
+    { key: "t", label: "espesor del estrato blando t", unit: "m", def: 1.5, min: 0.25, max: 8, step: 0.25 },
+    P("phi", { label: "φ suelo", def: 30 }), P("c", { label: "c suelo", def: 20 }), { key: "phib", label: "φ estrato blando", unit: "°", def: 14, min: 0, max: 45, step: 0.5 },
+    { key: "cb", label: "c estrato blando", unit: "kPa", def: 3, min: 0, max: 80, step: 0.5 }, P("gamma"), P("hw")] },
+  { id: "zapata", nombre: "Carga en la corona (zapata)", descripcion: "corte con una carga q de ancho Bz a la distancia dz detrás del borde de la cara (zapata, edificio, tránsito)", params: [
+    P("H"), P("n"), P("phi"), P("c"), P("gamma"), P("hw"), P("q", { label: "carga q de la zapata", def: 100 }),
+    { key: "Bz", label: "ancho de la carga Bz", unit: "m", def: 3, min: 0.5, max: 12, step: 0.25 }, { key: "dz", label: "distancia al borde dz", unit: "m", def: 2, min: 0, max: 15, step: 0.25 }] },
 ];
 export const plantilla = (id: string) => { const t = PLANTILLAS.find((p) => p.id === id); if (!t) throw new Error(`tipo de talud desconocido «${id}» (hay: ${PLANTILLAS.map((p) => p.id).join(", ")})`); return t; };
 export function paramsPorDefecto(id: string): Record<string, number> { const o: Record<string, number> = {}; for (const q of plantilla(id).params) o[q.key] = q.def; return o; }
@@ -68,17 +82,34 @@ export function hgeoPlantilla(id: string, dados: Record<string, number> = {}): s
     if (!(p.hw > 0)) return [];
     const zc = Math.min(p.hw, H - 0.3); return [`agua gwt ${pts([[xmin, z0], [xpie, 0], [xc, zc], [xmax, zc]])}`];
   };
-  if (id === "corte" || id === "estratos") {
+  if (id === "compuesto") {
+    const hq = Math.min(Math.max(p.hq, 0.5), H - 0.5), xpie = Math.max(H, 5), x1 = xpie + hq * n, xc = x1 + (H - hq) * p.n2;
+    const xmax = xc + Math.max(2 * H, 10), fondo = -Math.max(0.5 * H, 3);
+    L1.push(`margenes xmin=0 xmax=${r(xmax)} fondo=${r(fondo)}`, `interfaz ${pts([[0, 0], [xpie, 0], [x1, hq], [xc, H], [xmax, H]])}`);
+    L1.push(suelo("SUELO", p.phi, p.c, p.gamma), `asignar SUELO en ${r(xc + 1)},${r(fondo / 2)}`);
+    if (p.hw > 0) { const zc = Math.min(p.hw, H - 0.3), zq = Math.min(zc, hq); L1.push(`agua gwt ${pts([[0, 0], [xpie, 0], [xpie + zq * n, zq], [xc, zc], [xmax, zc]])}`); }
+    L1.push(malla(H), ...etapas(p.q, xc + 1, Math.min(xc + 7, xmax - 1), H));
+  } else if (id === "blando") {
+    const xpie = Math.max(H, 5), xc = xpie + L, xmax = xc + Math.max(2 * H, 10), fondo = -Math.max(0.5 * H, 3);
+    const z1 = Math.max(H - p.d, fondo + 1.5), z2 = Math.max(z1 - p.t, fondo + 0.5);   // techo y base del estrato blando (cotas)
+    const cara = (zi: number) => (zi > 0 ? [[0, 0], [xpie, 0], [xpie + zi * n, zi], [xmax, zi]] : [[0, zi], [xmax, zi]]) as Pt[];
+    L1.push(`margenes xmin=0 xmax=${r(xmax)} fondo=${r(fondo)}`, `interfaz ${pts([[0, 0], [xpie, 0], [xc, H], [xmax, H]])}`, `interfaz ${pts(cara(z1))}`, `interfaz ${pts(cara(z2))}`);
+    L1.push(suelo("SUELO", p.phi, p.c, p.gamma), suelo("BLANDO", p.phib, p.cb, p.gamma - 1), suelo("BASE", p.phi, p.c, p.gamma));
+    L1.push(`asignar SUELO en ${r(xmax - 1)},${r((H + z1) / 2)}`, `asignar BLANDO en ${r(xmax - 1)},${r((z1 + z2) / 2)}`, `asignar BASE en ${r(xmax - 1)},${r((z2 + fondo) / 2)}`);
+    L1.push(...gwt(xpie, xc, 0, xmax), malla(H), ...etapas(0, 0, 0, H));
+  } else if (id === "corte" || id === "estratos" || id === "zapata") {
     const xpie = Math.max(H, 5), xc = xpie + L, xmax = xc + Math.max(2 * H, 10), fondo = -Math.max(0.5 * H, 3);
     L1.push(`margenes xmin=0 xmax=${r(xmax)} fondo=${r(fondo)}`, `interfaz ${pts([[0, 0], [xpie, 0], [xc, H], [xmax, H]])}`);
-    if (id === "corte") { L1.push(suelo("SUELO", p.phi, p.c, p.gamma), `asignar SUELO en ${r(xc + 1)},${r(fondo / 2)}`); }
+    if (id !== "estratos") { L1.push(suelo("SUELO", p.phi, p.c, p.gamma), `asignar SUELO en ${r(xc + 1)},${r(fondo / 2)}`); }
     else {
       const zi = H - Math.min(p.e, H - fondo - 0.5), xi = xpie + Math.max(zi, 0) * n;
       L1.push(`interfaz ${pts(zi > 0 ? [[0, 0], [xpie, 0], [xi, zi], [xmax, zi]] : [[0, zi], [xmax, zi]])}`);
       L1.push(suelo("ESTRATO_1", p.phi, p.c, p.gamma), suelo("ESTRATO_2", p.phi2, p.c2, p.gamma + 1));
       L1.push(`asignar ESTRATO_1 en ${r(xmax - 1)},${r((H + zi) / 2)}`, `asignar ESTRATO_2 en ${r(xmax - 1)},${r((zi + fondo) / 2)}`);
     }
-    L1.push(...gwt(xpie, xc, 0, xmax), malla(H), ...etapas(p.q, xc + 1, Math.min(xc + 1 + 6, xmax - 1), H));
+    // zapata: carga q sobre [xc + dz, xc + dz + Bz] (la corona termina 2H más allá); los demás tipos: 6 m desde 1 m del borde
+    const qa = id === "zapata" ? xc + p.dz : xc + 1, qb = id === "zapata" ? Math.min(xc + p.dz + p.Bz, xmax - 1) : Math.min(xc + 1 + 6, xmax - 1);
+    L1.push(...gwt(xpie, xc, 0, xmax), malla(H), ...etapas(p.q, qa, qb, H));
   } else if (id === "berma") {
     const hb = Math.min(Math.max(p.hb, 0.5), H - 0.5), xpie = Math.max(H, 5), x1 = xpie + hb * n, x2 = x1 + p.b, xc = x2 + (H - hb) * n;
     const xmax = xc + Math.max(2 * H, 10), fondo = -Math.max(0.5 * H, 3);

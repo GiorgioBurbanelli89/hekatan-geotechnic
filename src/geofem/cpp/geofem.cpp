@@ -322,17 +322,28 @@ struct GeoFem {
     double m = std::max(std::max(std::fabs(v[0]), std::fabs(v[1])), std::fabs(v[2])), tol = 1e-14 * m;
     for (int k = 0; k < 2; k++) if (ix[k + 1] == 2 && std::fabs(v[ix[k]] - v[ix[k + 1]]) <= tol) std::swap(ix[k], ix[k + 1]);
   }
+  static inline bool gEmpateXY = false;
+  // MODO GEO5: principales del plano como invariant.cpp de FRGeoFEM 2024 (FUN_005c4750, la llama la tangente MC FUN_00561b60
+  // con la σ guardada). θ = ½·atan(2τ/(σx−σy)); |τ| < 1e-10 → θ = 0; |σx−σy| < 1e-10 → θ = π/2 (sin ½); σ1 = σx c² + σy s² + 2cs·τ,
+  // σ2 = c²σy + σx s² − 2cs·τ, σ3 = σz; orden por SELECCIÓN (intercambio si v[j] > v[i], no estable). Empate σx = σy < σz →
+  // z, y, x = los «90°» medidos en la fase 4 del muro (registros/2026-11-02_geo5_residuo_iter1.md). = solver.ts
+  static void princInvariantG5(const double* sig, McInfo& in) {
+    double sx = sig[0], sy = sig[1], txy = sig[3], th = 0;
+    if (std::fabs(txy) >= 1e-10) th = std::fabs(sx - sy) >= 1e-10 ? std::atan((txy + txy) / (sx - sy)) * 0.5 : 1.5707963267948966;
+    double c = std::cos(th), s = std::sin(th), cc = c * c, ss = s * s, d = (c + c) * s * txy;
+    double v0[3] = {sx * cc + sy * ss + d, cc * sy + sx * ss - d, sig[2]}, v[3] = {v0[0], v0[1], v0[2]}; int ix[3] = {0, 1, 2};
+    for (int i = 0; i < 3; i++) for (int j = i; j < 3; j++) if (v[j] > v[i]) { std::swap(v[i], v[j]); std::swap(ix[i], ix[j]); }
+    if (gDesempateZ) empateZ(v0, ix);
+    in.t2 = 2 * th; for (int k = 0; k < 3; k++) in.ix[k] = ix[k];
+  }
   static void mcPrincDevuelta(const double* sig, McInfo& in) {
+    if (gEmpateXY) { princInvariantG5(sig, in); return; }
     double c_ = (sig[0] + sig[1]) / 2, R_ = std::sqrt((sig[0] - sig[1]) * (sig[0] - sig[1]) / 4 + sig[3] * sig[3]);
     double pv[3] = {c_ + R_, c_ - R_, sig[2]}; int ix[3] = {0, 1, 2};
     std::sort(ix, ix + 3, [&](int a, int b) { return pv[a] > pv[b]; });
     if (gDesempateZ) empateZ(pv, ix);
     in.t2 = std::atan2(2 * sig[3], sig[0] - sig[1]); for (int k = 0; k < 3; k++) in.ix[k] = ix[k];
-    // modo GEO5: empate EXACTO de las principales del plano → GEO5 pone y delante de x (ejes a 90°). Medido en la fase 4 del
-    // muro (registros/2026-11-02_geo5_residuo_iter1.md). = solver.ts
-    if (gEmpateXY && R_ <= 1e-14 * std::max(std::max(std::fabs(sig[0]), std::fabs(sig[1])), std::fabs(sig[2]))) in.t2 = 3.141592653589793;
   }
-  static inline bool gEmpateXY = false;
   static void mcArista(const double* ss, const double D[3][3], const double* n1, const double* g1, const double* n2, const double* g2, double ccos, double* out) {
     double Dg1[3], Dg2[3];
     for (int i = 0; i < 3; i++) { Dg1[i] = D[i][0] * g1[0] + D[i][1] * g1[1] + D[i][2] * g1[2]; Dg2[i] = D[i][0] * g2[0] + D[i][1] * g2[1] + D[i][2] * g2[2]; }
@@ -557,13 +568,15 @@ struct GeoFem {
       lastRaw = du; lastEta = al;   // DDisp crudo y η de la última iteración (arranque del peldaño siguiente en modo GEO5)
       for (int k = 0; k < nf; k++) drf[k] = al * duf[k];
       for (int d = 0; d < ndof; d++) du[d] *= al;
-      if (energiaPrev) CLoad = Rf;   // GEO5 FUN_005eb0a0: √(DDisp·CLoad) con CLoad = residuo ANTES de la iteración
+      // ENERGÍA de GEO5 2024 (FUN_0059c800, llamada @0x4f82b8 con ecx = DLoad, edx = CLoad): √|DDisp·CLoad| / máx(√|ADDisp·DForce|, 1);
+      // CLoad = DForce en la 1.ª it (memcpy @0x4f821f), luego el residuo de la it anterior. Modo GEO5: esa. = solver.ts
+      if (modoG5) CLoad = (it == 1 ? DForce : Rf); else if (energiaPrev) CLoad = Rf;   // bit 8: residuo ANTES de la iteración
       evalInc(du.data(), true, Fi.data());
       for (int d = 0; d < ndof; d++) u[d] += du[d];
       for (int k = 0; k < nf; k++) Rf[k] = Fext[fr[k]] - Fi[fr[k]];
       for (int k = 0; k < nf; k++) ADDisp[k] += drf[k];
       double nDD = vnorm(drf.data(), nf), dA = vnorm(ADDisp.data(), nf), nDL = vnorm(Rf.data(), nf), dF = vnorm(DForce.data(), nf);
-      double nEN = std::sqrt(std::fabs(vdot(drf.data(), (energiaPrev ? CLoad : Rf).data(), nf))), dE = std::sqrt(std::fabs(vdot(ADDisp.data(), DForce.data(), nf)));
+      double nEN = std::sqrt(std::fabs(vdot(drf.data(), (modoG5 || energiaPrev ? CLoad : Rf).data(), nf))), dE = std::sqrt(std::fabs(vdot(ADDisp.data(), DForce.data(), nf)));
       double eu = dA > 1 ? nDD / dA : nDD, ef = dF > 1 ? nDL / dF : nDL, ee = dE > 1 ? nEN / dE : nEN;
       double dxmax = 0; for (int i = 0; i < nn; i++) dxmax = std::max(dxmax, std::fabs(u[2 * i]));
       LOG(fmt("  RS=%d SRF=%.4f it=%2d eta=%.4f DNorm=%.5e OBFNorm=%.5e ENorm=%.5e |gi|=%.4e dx=%.1f", rstep, SRF, it, al, eu, ef, ee, nDL, dxmax * 1e3));
@@ -826,6 +839,181 @@ struct GeoFem {
     std::memcpy(outU, ulo.data(), sizeof(double) * ndof);
     return fs;
   }
+
+  // ======================================================================================================================
+  // DINÁMICO NO LINEAL (Mohr-Coulomb de GEO5) = GeoFem.dynamicNL de solver.ts. Reglas de FRGeoFEM 2024 comprobadas contra el
+  // solver corriendo (malla de 8 T6, 2 suelos MC, error relativo en u 3.9e-7; registros/2026-10-28_geo5_dinamico_captura_inputfile.md):
+  //  · HHT-α con γ = ½ − α, β = (1−α)²/4 ((1+α) pesa K, C y la carga); u relativo a la base, V de la base por Newmark SIN pesar, a₀ = 0.
+  //  · Rayleigh POR MATERIAL C = Σ(a·M + b·K elástica Edyn); la parte de masa actúa sobre la velocidad TOTAL: fuerza extra −C·r·V.
+  //  · Edyn en K, M, retorno y tangente; tangente ELÁSTICA al empezar cada paso y rehecha en cada iteración; σ por iteración.
+  //  · Búsqueda lineal (FUN_00403da0): g_LS con la inercia y el amortiguamiento CONGELADOS en η=0; si |g(η)|/|g(0)| > ls_tol:
+  //    η ← η·e0/(e0−e1) (e = g·du) recortado a [η_min, η_max]; UNA actualización por llamada.
+  // ======================================================================================================================
+  static void bandMul(const Band& M, const double* x, double* y) {
+    for (int i = 0; i < M.n; i++) {
+      const double* rowI = &M.a[(size_t)i * M.w + (M.b - i)];
+      int j0 = std::max(0, i - M.b), j1 = std::min(M.n - 1, i + M.b); double s = 0;
+      for (int j = j0; j <= j1; j++) s += rowI[j] * x[j];
+      y[i] = s;
+    }
+  }
+  static void inv4x4(const double* D, double* out) {
+    double A[4][8];
+    for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) { A[i][j] = D[i * 4 + j]; A[i][4 + j] = (i == j) ? 1.0 : 0.0; }
+    for (int c = 0; c < 4; c++) {
+      int piv = c; for (int r = c + 1; r < 4; r++) if (std::fabs(A[r][c]) > std::fabs(A[piv][c])) piv = r;
+      for (int j = 0; j < 8; j++) std::swap(A[c][j], A[piv][j]);
+      double d = A[c][c]; for (int j = 0; j < 8; j++) A[c][j] /= d;
+      for (int r = 0; r < 4; r++) if (r != c) { double f = A[r][c]; for (int j = 0; j < 8; j++) A[r][j] -= f * A[c][j]; }
+    }
+    for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) out[i * 4 + j] = A[i][4 + j];
+  }
+  /** Masa consistente en banda (mismo `map_` que K) y la fila completa de M·1 en x e y (con los gdl fijos). rho = densidad por material. */
+  void massMatrix(const vector<double>& rho, Band& M, vector<double>& m1x, vector<double>& m1y) {
+    M.init(nfree, band); m1x.assign(nfree, 0.0); m1y.assign(nfree, 0.0);
+    double Nq[NG][6];
+    for (int q = 0; q < NG; q++) { double d1[6], d2[6]; t6(GP[q][0], GP[q][1], Nq[q], d1, d2); }
+    for (int e = 0; e < ne; e++) {
+      double Me[36]; std::memset(Me, 0, sizeof Me); double r = rho[EMAT[e] - 1];
+      for (int q = 0; q < NG; q++) { double w = r * dJw[(size_t)e * NG + q]; for (int a = 0; a < 6; a++) for (int b = 0; b < 6; b++) Me[a * 6 + b] += Nq[q][a] * Nq[q][b] * w; }
+      const int* nd = &ELE[e * 6];
+      for (int a = 0; a < 6; a++) {
+        double row = 0; for (int b = 0; b < 6; b++) row += Me[a * 6 + b];
+        for (int c = 0; c < 2; c++) {
+          int ia = map_[2 * nd[a] + c]; if (ia < 0) continue;
+          if (c == 0) m1x[ia] += row; else m1y[ia] += row;
+          for (int b = 0; b < 6; b++) { int ib = map_[2 * nd[b] + c]; if (ib >= 0) M.add(ia, ib, Me[a * 6 + b]); }
+        }
+      }
+    }
+  }
+  /** par: [0]α [1]β [2]γ [3]tolN [4]maxit [5]búsqueda lineal (0/1) [6]ls_tol [7]η_min [8]η_max [9]dir y (0 = x) [10]g.
+   *  edyn/rho: por material (o nullptr); rayMat: (α_c, β_c) por material (o nullptr); times/acc: nst+1 valores (acc[0] se toma 0);
+   *  sig0in: σ inicial por punto de Gauss (ngp·4) o nullptr (gravedad elástica con E estático). watchDof: gdl completos a guardar.
+   *  Salidas: outHist[(nst+1)·nwatch] (u relativo), outU[ndof] (final), outIters[nst+1], outEtaMin[nst+1] (η mínimo del paso). */
+  bool dynamicNL(const double* par, const double* edyn, const double* rho, const double* rayMat, const double* times, const double* acc, int nst,
+                 const double* sig0in, const int* watchDof, int nwatch, double* outHist, double* outU, int* outIters, double* outEtaMin) {
+    const double alpha = par[0], beta = par[1], gamma = par[2], tolN = par[3]; const int maxit = (int)par[4];
+    const bool lsOn = par[5] != 0; const double lsTol = par[6], etaMin = par[7], etaMax = par[8]; const bool dirY = par[9] != 0; const double gAcc = par[10];
+    const int n = nfree; const double PI = 3.14159265358979323846;
+    vector<double> accv(acc, acc + nst + 1), V(nst + 1, 0.0); accv[0] = 0.0;
+    { double ug = 0, vg = 0, ag = 0;
+      for (int k = 1; k <= nst; k++) { double dt = times[k] - times[k - 1]; double ut = ug + dt * vg + dt * dt * (0.5 - beta) * ag, vt = vg + dt * (1 - gamma) * ag; ag = accv[k]; ug = ut + beta * dt * dt * ag; vg = vt + gamma * dt * ag; V[k] = vg; } }
+    // σ inicial: gravedad elástica con el E ESTÁTICO (antes de cambiar a Edyn)
+    vector<double> sig0((size_t)ne * NG * 4);
+    if (sig0in) sig0.assign(sig0in, sig0in + sig0.size());
+    else {
+      vector<double> rhs(n), u0(n), uf(ndof, 0.0);
+      for (int i = 0; i < n; i++) rhs[i] = Fg2[free_[i]];
+      Kel.solve(rhs.data(), u0.data()); for (int i = 0; i < n; i++) uf[free_[i]] = u0[i];
+      for (int e = 0; e < ne; e++) { const double* De = &D4[(size_t)EMAT[e] * 16];
+        for (int q = 0; q < NG; q++) { size_t kk = (size_t)e * NG + q; const double* B = &Bc[kk * 36]; double e0 = 0, e1 = 0, e2 = 0;
+          for (int c = 0; c < 12; c++) { double v = uf[edof[e * 12 + c]]; e0 += B[c] * v; e1 += B[12 + c] * v; e2 += B[24 + c] * v; }
+          double de[4] = {e0, e1, 0, e2};
+          for (int i = 0; i < 4; i++) { double s = 0; for (int j = 0; j < 4; j++) s += De[i * 4 + j] * de[j]; sig0[kk * 4 + i] = s; } } }
+    }
+    // estado a restaurar al final
+    vector<double> D4s = D4, Dinvs = Dinv, SIGs = SIG, EPLs = EPL, DEPs = DEP; vector<unsigned char> hs = hasDep; auto mcps = mcp;
+    const bool gz = gDesempateZ, gxy = gEmpateXY;
+    // constitutivo dinámico (Edyn) y parámetros MC (sin reducción SRF)
+    if ((int)mcp.size() < nmat + 1) mcp.resize(nmat + 1);
+    for (int mm = 0; mm < nmat; mm++) {
+      double E = edyn ? edyn[mm] : MAT[mm * 6], nu = MAT[mm * 6 + 1], f = E / ((1 + nu) * (1 - 2 * nu));
+      double* D = &D4[(size_t)(mm + 1) * 16]; for (int i = 0; i < 16; i++) D[i] = 0;
+      D[0] = f * (1 - nu); D[1] = f * nu; D[2] = f * nu; D[4] = f * nu; D[5] = f * (1 - nu); D[6] = f * nu; D[8] = f * nu; D[9] = f * nu; D[10] = f * (1 - nu); D[15] = f * (1 - 2 * nu) / 2;
+      inv4x4(D, &Dinv[(size_t)(mm + 1) * 16]);
+      double phi = MAT[mm * 6 + 2] * PI / 180, psi = MAT[mm * 6 + 5] * PI / 180;
+      mcp[mm + 1] = {phi, MAT[mm * 6 + 3], std::min(psi, phi)};
+    }
+    std::vector<std::array<double, 2>> ab(nmat + 1, std::array<double, 2>{0.0, 1e30});   // sin Drucker-Prager: solo MC (model=1) o elástico
+    gDesempateZ = false; gEmpateXY = true;
+    // masa, Rayleigh por material
+    vector<double> rhoV(nmat); for (int j = 0; j < nmat; j++) rhoV[j] = rho ? rho[j] : MAT[j * 6 + 4] / gAcc;
+    Band M; vector<double> m1x, m1y; massMatrix(rhoV, M, m1x, m1y);
+    const vector<double>& r = dirY ? m1y : m1x;
+    Band C; C.init(n, band); vector<double> Cr(n, 0.0); bool hasC = false;
+    if (rayMat) for (int mm = 0; mm < nmat; mm++) if (rayMat[2 * mm] != 0 || rayMat[2 * mm + 1] != 0) hasC = true;
+    if (hasC) for (int mm = 0; mm < nmat; mm++) {
+      double am = rayMat[2 * mm], bm = rayMat[2 * mm + 1]; if (am == 0 && bm == 0) continue;
+      vector<double> rm(nmat, 0.0); rm[mm] = rhoV[mm]; Band Mm; vector<double> a1, a2; massMatrix(rm, Mm, a1, a2);
+      vector<double> saved = D4; for (int j = 0; j < nmat; j++) if (j != mm) for (int i = 0; i < 16; i++) D4[(size_t)(j + 1) * 16 + i] = 0;
+      Band Km; Km.init(n, band); assembleK(Km, true); D4 = saved;
+      for (size_t q = 0; q < C.a.size(); q++) C.a[q] += am * Mm.a[q] + bm * Km.a[q];
+      const vector<double>& rr = dirY ? a2 : a1; for (int i = 0; i < n; i++) Cr[i] += am * rr[i];
+    }
+    // estado inicial
+    for (size_t i = 0; i < SIG.size(); i++) SIG[i] = sig0[i];
+    std::fill(EPL.begin(), EPL.end(), 0.0); std::fill(hasDep.begin(), hasDep.end(), 0);
+    vector<double> Fi(ndof, 0.0), du_f(ndof, 0.0), tmp(n), f0(n), fde(n, 0.0);
+    auto fintFree = [&](double* out) { fintSig(Fi.data()); for (int i = 0; i < n; i++) out[i] = Fi[free_[i]]; };
+    fintFree(f0.data());
+    vector<double> u(n, 0.0), v(n, 0.0), a(n, 0.0), ut(n), vt(n), rhs(n), uk(n), Rr(n), du(n), w1(n), w2(n), w3(n), gt(n), Mdu(n), uTry(n);
+    Band Kef; Kef.init(n, band);
+    auto Fk = [&](int k, int i) { return -r[i] * accv[k] - Cr[i] * V[k]; };   // F = −M·1·a_g − C·1·V (K·1 = 0)
+    auto record = [&](int k) {
+      for (int j = 0; j < nwatch; j++) { int d = watchDof[j]; outHist[(size_t)k * nwatch + j] = (d >= 0 && map_[d] >= 0) ? u[map_[d]] : 0.0; }
+    };
+    if (outIters) outIters[0] = 0; if (outEtaMin) outEtaMin[0] = 1.0; record(0);
+    bool todoOk = true; int totIt = 0;
+    for (int k = 1; k <= nst; k++) {
+      const double dt = times[k] - times[k - 1], b1 = 1 / (beta * dt * dt), b4 = gamma / (beta * dt);
+      for (int i = 0; i < n; i++) { ut[i] = u[i] + dt * v[i] + dt * dt * (0.5 - beta) * a[i]; vt[i] = v[i] + dt * (1 - gamma) * a[i]; }
+      if (hasC) bandMul(C, v.data(), w1.data()); else std::fill(w1.begin(), w1.end(), 0.0);
+      double rmax = 0;
+      for (int i = 0; i < n; i++) { rhs[i] = (1 + alpha) * Fk(k, i) - alpha * Fk(k - 1, i) + alpha * (w1[i] + fde[i]); rmax = std::max(rmax, std::fabs(rhs[i])); }
+      for (int i = 0; i < n; i++) uk[i] = u[i];
+      std::fill(hasDep.begin(), hasDep.end(), 0);                      // flags limpios: la tangente de la 1.ª iteración es elástica
+      // R = M·an + (1+α)(C·vn + fde) − rhs, con an = (uk−ut)·b1 y vn = vt + γ·dt·an
+      auto residuo = [&](const double* ukv, const double* fdev, double* out) {
+        for (int i = 0; i < n; i++) w1[i] = (ukv[i] - ut[i]) * b1;
+        bandMul(M, w1.data(), w2.data());
+        if (hasC) { for (int i = 0; i < n; i++) w1[i] = vt[i] + gamma * dt * w1[i]; bandMul(C, w1.data(), w3.data()); } else std::fill(w3.begin(), w3.end(), 0.0);
+        for (int i = 0; i < n; i++) out[i] = w2[i] + (1 + alpha) * (w3[i] + fdev[i]) - rhs[i];
+      };
+      int it = 0; double etaMinStep = 1.0;
+      for (; it < maxit; it++) {
+        residuo(uk.data(), fde.data(), Rr.data());
+        double mx = 0; for (int i = 0; i < n; i++) mx = std::max(mx, std::fabs(Rr[i]));
+        if (mx < tolN * std::max(1.0, rmax)) break;
+        assembleK(Kt, false);
+        for (size_t q = 0; q < Kef.a.size(); q++) Kef.a[q] = b1 * M.a[q] + (1 + alpha) * ((hasC ? b4 * C.a[q] : 0.0) + Kt.a[q]);
+        if (!Kef.factor()) { LOG(fmt("  dynamicNL: K efectiva singular en el paso %d", k)); todoOk = false; break; }
+        Kef.solve(Rr.data(), du.data()); for (int i = 0; i < n; i++) du[i] = -du[i];
+        double eta = 1;
+        if (lsOn) {
+          double gn0 = 0, s0 = 0; for (int i = 0; i < n; i++) { gn0 += Rr[i] * Rr[i]; s0 += du[i] * Rr[i]; } gn0 = std::sqrt(gn0);
+          // la parte de R que varía con η por la inercia y el amortiguamiento viscoso se resta: queda CONGELADA en η = 0
+          bandMul(M, du.data(), w1.data()); if (hasC) bandMul(C, du.data(), w2.data());
+          for (int i = 0; i < n; i++) Mdu[i] = b1 * w1[i] + (hasC ? (1 + alpha) * b4 * w2[i] : 0.0);
+          for (int i = 0; i < n; i++) uTry[i] = uk[i] + du[i];            // η = 1
+          std::fill(du_f.begin(), du_f.end(), 0.0); for (int i = 0; i < n; i++) du_f[free_[i]] = du[i];
+          assembleInc(du_f.data(), ab, false, Fi.data()); for (int i = 0; i < n; i++) tmp[i] = Fi[free_[i]] - f0[i];
+          residuo(uTry.data(), tmp.data(), gt.data());
+          double gn1 = 0, s1 = 0; for (int i = 0; i < n; i++) { gt[i] -= Mdu[i]; gn1 += gt[i] * gt[i]; s1 += du[i] * gt[i]; } gn1 = std::sqrt(gn1);
+          if (gn1 / gn0 > lsTol && gn0 > 1e-12 && std::fabs(s0 - s1) > 1e-12) {
+            double en = s0 / (s0 - s1);
+            eta = en < etaMin ? etaMin : (en >= etaMax ? etaMax : en);
+          }
+        }
+        etaMinStep = std::min(etaMinStep, eta);
+        std::fill(du_f.begin(), du_f.end(), 0.0); for (int i = 0; i < n; i++) du_f[free_[i]] = eta * du[i];
+        assembleInc(du_f.data(), ab, true, Fi.data());                    // σ guardada ← retorno(σ + De·B·η·du); DEP de esta iteración
+        fintFree(tmp.data()); for (int i = 0; i < n; i++) fde[i] = tmp[i] - f0[i];
+        for (int i = 0; i < n; i++) uk[i] += eta * du[i];
+      }
+      if (it >= maxit) { LOG(fmt("  dynamicNL: paso %d no converge en %d iteraciones", k, maxit)); todoOk = false; }
+      totIt += it;
+      if (outIters) outIters[k] = it; if (outEtaMin) outEtaMin[k] = etaMinStep;
+      for (int i = 0; i < n; i++) { double an = (uk[i] - ut[i]) * b1; v[i] = vt[i] + gamma * dt * an; a[i] = an; u[i] = uk[i]; }
+      record(k);
+      if (!todoOk) break;
+    }
+    if (outU) { std::fill(outU, outU + ndof, 0.0); for (int i = 0; i < n; i++) outU[free_[i]] = u[i]; }
+    LOG(fmt("DINAMICO no lineal (MC GEO5, C++): HHT beta=%g gamma=%g alpha=%g, %d pasos, %d iteraciones", beta, gamma, alpha, nst, totIt));
+    // restaurar
+    D4 = D4s; Dinv = Dinvs; mcp = mcps; SIG = SIGs; EPL = EPLs; DEP = DEPs; hasDep = hs; gDesempateZ = gz; gEmpateXY = gxy;
+    return todoOk;
+  }
 };
 
 static vector<GeoFem*> handles;
@@ -867,6 +1055,11 @@ double geofem_run_stage(int h, const double* F, double* outU, double* outUel, do
 }
 EMSCRIPTEN_KEEPALIVE int geofem_run_staged(int h, const int* act, const double* F, int first, double* outU) { return handles[h]->runStaged(act, F, first != 0, outU) ? 1 : 0; }
 EMSCRIPTEN_KEEPALIVE double geofem_alcanzada(int h) { return handles[h]->alcanzada; }
+// dinámico no lineal (MC de GEO5): ver GeoFem::dynamicNL
+EMSCRIPTEN_KEEPALIVE int geofem_dynamic_nl(int h, const double* par, const double* edyn, const double* rho, const double* rayMat, const double* times, const double* acc, int nst,
+                                             const double* sig0, const int* watchDof, int nwatch, double* outHist, double* outU, int* outIters, double* outEtaMin) {
+  return handles[h]->dynamicNL(par, edyn, rho, rayMat, times, acc, nst, sig0, watchDof, nwatch, outHist, outU, outIters, outEtaMin) ? 1 : 0;
+}
 EMSCRIPTEN_KEEPALIVE void geofem_destroy(int h) { delete handles[h]; handles[h] = nullptr; }
 EMSCRIPTEN_KEEPALIVE double* geofem_alloc(int n) { return (double*)malloc(sizeof(double) * n); }
 EMSCRIPTEN_KEEPALIVE int* geofem_alloc_i(int n) { return (int*)malloc(sizeof(int) * n); }

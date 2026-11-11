@@ -69,6 +69,19 @@ export type DynResult = {
   stressMax?: Float64Array;             // envolvente max|σ| (ngp·4), de `stressEnvelope`
 };
 
+/** Dinámico NO LINEAL con Mohr-Coulomb, réplica de FRGeoFEM 2024 (T6sD). Cada regla está verificada contra el solver de GEO5
+ *  corriendo (malla de 8 T6, 2 materiales, 16 pasos a 6 Hz: error relativo 3.9e-7 en u). Ver registros/2026-10-28_geo5_dinamico_captura_inputfile.md. */
+export type DynNLOptions = DynOptions & {
+  edyn?: number[];          // E dinámico por material (kPa): K, M, retorno y tangente del dinámico lo usan (el estático usa E). Por defecto E
+  rho?: number[];           // densidad por material (t/m³); por defecto γ/g
+  rayleighMat?: [number, number][];   // [alpha_c, beta_c] por material (como el InputFile de GEO5); si falta se usa `rayleigh` para todos
+  sig0?: Float64Array;      // σ inicial por punto de Gauss (ngp·4: xx yy zz xy). Por defecto: gravedad elástica con E estático
+  t0?: number;              // tiempo del estado inicial. GEO5 arranca en 1e-6 (su paso 1 es trivial); 0 = uniforme
+  tolN?: number; maxit?: number;
+  ls?: { tol?: number; etaMin?: number; etaMax?: number; on?: boolean };   // ls_tolerance 0.8, eta_min 0.1, eta_max 1 (InputFile de GEO5)
+};
+export type DynNLResult = DynResult & { iters: number[]; etas: number[][]; etaMin: Float64Array; sig: Float64Array };   // etaMin[k] = η mínimo del paso k (1 = la búsqueda lineal no actuó)
+
 export type ModesResult = {
   f: number[]; omega: number[];
   phi: Float64Array[];       // formas (gdl completos), normalizadas a M (φᵀMφ = 1)
@@ -350,15 +363,26 @@ export class GeoFem {
   static ysTol = 0.001;   // ys_tolerance de GEO5 (kPa, ABSOLUTA)
   // tangente con las principales de la σ DEVUELTA (FUN_005a8680), no de la de prueba
   private static mcPrincDevuelta(sig: ArrayLike<number>, inf: { t2: number; ix: number[]; reg: number }): void {
+    if (GeoFem.gEmpateXY) { GeoFem.princInvariantG5(sig, inf); return; }
     const c_ = (sig[0] + sig[1]) / 2, R_ = Math.sqrt((sig[0] - sig[1]) * (sig[0] - sig[1]) / 4 + sig[3] * sig[3]);
     const pv = [c_ + R_, c_ - R_, sig[2]], ix = [0, 1, 2]; ix.sort((a, b) => (pv[a] > pv[b] ? -1 : pv[a] < pv[b] ? 1 : 0));
     if (GeoFem.gDesempateZ) GeoFem.empateZ(pv, ix);
     inf.t2 = Math.atan2(2 * sig[3], sig[0] - sig[1]); inf.ix = ix;
-    // modo GEO5: empate EXACTO de las principales del plano (σx = σy, τ ≈ 0; p. ej. arista que vuelve casi al ápice) → GEO5
-    // las ordena y antes que x (como el desempate con z: en empate va delante el índice mayor) = ejes girados 90°.
-    // Medido (registros/2026-11-02_geo5_residuo_iter1.md): fase 4 del muro, el. 138 PG 6 (bandera 0x205) a t 0.8; con
-    // 90° el log de los pasos 0.9 y 1.0 = GEO5 a 4 cifras y la fase 4 = Restart_Step a 4e-10 %; con 0°, ±45° no.
-    if (GeoFem.gEmpateXY && R_ <= 1e-14 * Math.max(Math.abs(sig[0]), Math.abs(sig[1]), Math.abs(sig[2]))) inf.t2 = Math.PI;
+  }
+  /** MODO GEO5: principales del plano como invariant.cpp de FRGeoFEM 2024 (FUN_005c4750, la llama la tangente MC
+   *  FUN_00561b60 con la σ guardada). θ = ½·atan(2τ/(σx−σy)); |τ| < 1e-10 → θ = 0; |σx−σy| < 1e-10 → θ = π/2 (sin ½);
+   *  σ1 = σx c² + σy s² + 2cs·τ, σ2 = c²σy + σx s² − 2cs·τ, σ3 = σz con ejes (c,s), (−s,c), z; orden por SELECCIÓN con
+   *  intercambio si v[j] > v[i] (no estable). En el empate σx = σy < σz deja z, y, x = los «90°» medidos en la fase 4
+   *  (registros/2026-11-02_geo5_residuo_iter1.md). Constantes 1e-10, π/2, ½ leídas en 0x613ea8, 0x6140e8, 0x613ff8. */
+  private static princInvariantG5(sig: ArrayLike<number>, inf: { t2: number; ix: number[]; reg: number }): void {
+    const sx = sig[0], sy = sig[1], txy = sig[3];
+    let th = 0;
+    if (Math.abs(txy) >= 1e-10) th = Math.abs(sx - sy) >= 1e-10 ? Math.atan((txy + txy) / (sx - sy)) * 0.5 : Math.PI / 2;
+    const c = Math.cos(th), s = Math.sin(th), cc = c * c, ss = s * s, d = (c + c) * s * txy;
+    const v0 = [sx * cc + sy * ss + d, cc * sy + sx * ss - d, sig[2]], v = v0.slice(), ix = [0, 1, 2];
+    for (let i = 0; i < 3; i++) for (let j = i; j < 3; j++) if (v[j] > v[i]) { const t = v[i]; v[i] = v[j]; v[j] = t; const k = ix[i]; ix[i] = ix[j]; ix[j] = k; }
+    if (GeoFem.gDesempateZ) GeoFem.empateZ(v0, ix);
+    inf.t2 = 2 * th; inf.ix = ix;
   }
   private static gEmpateXY = false;
   private static mcArista(ss: number[], D: number[][], n1: number[], g1: number[], n2: number[], g2: number[], ccos: number): number[] {
@@ -553,14 +577,18 @@ export class GeoFem {
       this.lastRaw = Float64Array.from(du); this.lastEta = al;   // DDisp crudo y η de la última it (arranque del peldaño siguiente, modo GEO5)
       for (let k = 0; k < nf; k++) drf[k] = al * duf[k];
       for (let d = 0; d < ndof; d++) du[d] *= al;
-      if (this.energiaPrev) CLoad.set(Rf);                        // residuo ANTES de la iteración (bit 8)
+      // ENERGÍA de GEO5 2024 (FUN_0059c800, llamada en FUN_004f7ea0 @0x4f82b8 con ecx = DLoad, edx = CLoad):
+      // √|DDisp·CLoad| / máx(√|ADDisp·DForce|, 1); CLoad = DForce en la 1.ª it (memcpy @0x4f821f), luego el residuo de la
+      // it anterior (CLoad ← DLoad tras las normas). Modo GEO5: esa; bit 8: el residuo previo también en la 1.ª.
+      const enG5 = this.modoG5;
+      if (enG5) CLoad.set(it === 1 ? DForce : Rf); else if (this.energiaPrev) CLoad.set(Rf);   // residuo ANTES de la iteración (bit 8)
       evalInc(du, true, Fi);                                     // COMMIT: σ_i y tangente
       for (let d = 0; d < ndof; d++) u[d] += du[d];
       this.gather(Fext, Fi, Rf);
       if (trace) trace.push({ u: Float64Array.from(u) });
       for (let k = 0; k < nf; k++) ADDisp[k] += drf[k];
       const nDD = norm(drf), dA = norm(ADDisp), nDL = norm(Rf), dF = norm(DForce);
-      const nEN = Math.sqrt(Math.abs(dot(drf, this.energiaPrev ? CLoad : Rf))), dE = Math.sqrt(Math.abs(dot(ADDisp, DForce)));
+      const nEN = Math.sqrt(Math.abs(dot(drf, enG5 || this.energiaPrev ? CLoad : Rf))), dE = Math.sqrt(Math.abs(dot(ADDisp, DForce)));
       const eu = dA > 1 ? nDD / dA : nDD, ef = dF > 1 ? nDL / dF : nDL, ee = dE > 1 ? nEN / dE : nEN;
       let dxmax = 0; for (let i = 0; i < this.nn; i++) dxmax = Math.max(dxmax, Math.abs(u[2 * i]));
       this.log(`  RS=${rstep} SRF=${f4(SRF)} it=${pad2(it)} eta=${f4(al)} DNorm=${e5(eu)} OBFNorm=${e5(ef)} ENorm=${e5(ee)} |gi|=${e4(nDL)} dx=${(dxmax * 1e3).toFixed(1)}`);
@@ -832,13 +860,13 @@ export class GeoFem {
 
   /** Masa consistente en banda (mismo `map` que K, así respeta fijos y ataduras) y la fila completa de M·1
    *  en x e y (Σ_b M_ab, también con los gdl fijos: es la carga −M·1·a_g del movimiento de la base). */
-  massMatrix(g = 9.80665): { M: BandMatrix; m1x: Float64Array; m1y: Float64Array; massTotal: number } {
+  massMatrix(g = 9.80665, rhoMat?: number[]): { M: BandMatrix; m1x: Float64Array; m1y: Float64Array; massTotal: number } {
     const M = bandCreate(this.nfree, this.band);
     const m1x = new Float64Array(this.nfree), m1y = new Float64Array(this.nfree);
     const Me = new Float64Array(36);
     let massTotal = 0;
     for (let e = 0; e < this.ne; e++) {
-      const rho = this.MAT[this.EMAT[e] - 1][4] / g;
+      const rho = rhoMat ? rhoMat[this.EMAT[e] - 1] : this.MAT[this.EMAT[e] - 1][4] / g;
       Me.fill(0);
       for (let q = 0; q < NG; q++) {
         const N = NSH[q], w = rho * this.dJw[e * NG + q];
@@ -986,6 +1014,139 @@ export class GeoFem {
       ...(stressSet.size ? { stress } : {}), ...(stressMax ? { stressMax } : {}) };
   }
 
+  /** Respuesta en el tiempo NO LINEAL (Mohr-Coulomb) al movimiento de la base. Reglas de FRGeoFEM 2024, todas comprobadas
+   *  contra el solver corriendo (Frida + comparación de u por nudo):
+   *   · HHT-α con γ = ½ − α, β = (1−α)²/4 (α sale de alpha_dyn; el β/γ del GUI el solver los IGNORA); (1+α) pesa K, C y la carga.
+   *   · u relativo a la base; la base lleva aceleración impuesta, velocidad V por Newmark SIN pesar y a₀ = 0.
+   *   · Rayleigh C = a·M + b·K elástica(Edyn) y la parte de masa actúa sobre la velocidad TOTAL: fuerza extra −C·r·V (r = M·1).
+   *   · Edyn en K, M, retorno y tangente del dinámico (el estático usa E).
+   *   · Retorno MC multisuperficie con ys_tolerance ABSOLUTA (GeoFem.ysTol) y tangente de GEO5 (principales de la σ DEVUELTA),
+   *     que arranca ELÁSTICA en cada paso (flags limpios) y se rehace en cada iteración; σ se actualiza por iteración.
+   *   · Búsqueda lineal (FUN_00403da0): g_LS = F_ext − F_int(u+η·du) con la inercia y el amortiguamiento CONGELADOS en η=0;
+   *     si |g(η)|/|g(0)| > ls_tol: η ← η·e0/(e0−e1) (e = g·du), recortado a [η_min, η_max]; UNA actualización por llamada. */
+  dynamicNL(o: DynNLOptions): DynNLResult {
+    const t0c = performance.now();
+    const alpha = o.alpha ?? 0;
+    const beta = o.beta ?? (1 - alpha) ** 2 / 4, gamma = o.gamma ?? 0.5 - alpha;
+    const dtN = o.dt, ndof = this.ndof, n = this.nfree;
+    const nst = Math.round(o.tEnd / dtN);
+    const times = new Float64Array(nst + 1); times[0] = o.t0 ?? 0; for (let k = 1; k <= nst; k++) times[k] = k * dtN;
+    const ag = typeof o.accel === "function" ? o.accel : historyFn(o.accel);
+    const acc = new Float64Array(nst + 1); for (let k = 1; k <= nst; k++) acc[k] = ag(times[k]);   // acc[0] = 0 (a₀ = 0, como GEO5)
+    const V = new Float64Array(nst + 1);                                                              // velocidad de la base (Newmark sin pesar)
+    { let ug = 0, vg = 0, ag_ = 0; for (let k = 1; k <= nst; k++) { const dt = times[k] - times[k - 1]; const ut = ug + dt * vg + dt * dt * (0.5 - beta) * ag_, vt = vg + dt * (1 - gamma) * ag_; ag_ = acc[k]; ug = ut + beta * dt * dt * ag_; vg = vt + gamma * dt * ag_; V[k] = vg; } }
+    const sig0 = o.sig0 ?? this.elasticStress(this.elasticSolve(this.Fg2));   // ANTES de cambiar a Edyn
+    // constitutivo dinámico (Edyn)
+    const D4s = this.D4.slice(), Dis = this.Dinv.slice(), mcps = this.mcp.slice(), SIGs = Float64Array.from(this.SIG), EPLs = Float64Array.from(this.EPL), DEPs = Float64Array.from(this.DEP), hs = Uint8Array.from(this.hasDep);
+    const gz = GeoFem.gDesempateZ, gxy = GeoFem.gEmpateXY;
+    try {
+      for (let mm = 0; mm < this.MAT.length; mm++) {
+        const E = o.edyn?.[mm] ?? this.MAT[mm][0], nu = this.MAT[mm][1], f = E / ((1 + nu) * (1 - 2 * nu)), D = new Float64Array(16);
+        D[0] = f * (1 - nu); D[1] = f * nu; D[2] = f * nu; D[4] = f * nu; D[5] = f * (1 - nu); D[6] = f * nu; D[8] = f * nu; D[9] = f * nu; D[10] = f * (1 - nu); D[15] = f * (1 - 2 * nu) / 2;
+        this.D4[mm + 1] = D; this.Dinv[mm + 1] = inv4(D);
+        const phi = this.MAT[mm][2] * Math.PI / 180;
+        this.mcp[mm + 1] = [phi, this.MAT[mm][3], Math.min(this.MAT[mm][5] * Math.PI / 180, phi)];
+      }
+      const ab: [number, number][] = []; for (let mm = 0; mm < this.MAT.length; mm++) ab[mm + 1] = [0, 1e30];   // sin Drucker-Prager: solo MC (MODEL=1) o elástico
+      GeoFem.gDesempateZ = false; GeoFem.gEmpateXY = true;
+      const { M, m1x, m1y } = this.massMatrix(o.g, o.rho);
+      const r = o.dir === "y" ? m1y : m1x;
+      // Rayleigh POR MATERIAL (alpha_c, beta_c del InputFile): C = Σ_e (a_m·M_e + b_m·K_e,elástica Edyn). Cr = Σ a_m·(M_m·1): fila completa (con los fijos)
+      const rayMat = o.rayleighMat ?? (o.rayleigh ? this.MAT.map(() => o.rayleigh as [number, number]) : null);
+      const hasC = !!rayMat && rayMat.some(([x, y]) => x !== 0 || y !== 0);
+      const C = bandCreate(n, this.band), Cr = new Float64Array(n);
+      if (hasC) {
+        const rhoB = this.MAT.map((m, j) => o.rho?.[j] ?? m[4] / (o.g ?? 9.80665));
+        for (let mm = 0; mm < this.MAT.length; mm++) {
+          const [am, bm] = rayMat![mm]; if (am === 0 && bm === 0) continue;
+          const mats = this.massMatrix(o.g, rhoB.map((x, j) => (j === mm ? x : 0)));
+          const saved = this.D4.slice(); for (let j = 0; j < this.MAT.length; j++) if (j !== mm) this.D4[j + 1] = new Float64Array(16);
+          const Km = bandCreate(n, this.band); this.assembleK(Km, true); for (let j = 0; j < saved.length; j++) this.D4[j] = saved[j];
+          for (let q = 0; q < C.a.length; q++) C.a[q] += am * mats.M.a[q] + bm * Km.a[q];
+          const rm = o.dir === "y" ? mats.m1y : mats.m1x; for (let i = 0; i < n; i++) Cr[i] += am * rm[i];
+        }
+      }
+      const lsOn = o.ls?.on ?? true, lsTol = o.ls?.tol ?? 0.8, etaMin = o.ls?.etaMin ?? 0.1, etaMax = o.ls?.etaMax ?? 1;
+      const tolN = o.tolN ?? 1e-11, maxit = o.maxit ?? 100;
+      this.SIG.set(sig0); this.EPL.fill(0); this.hasDep.fill(0);
+      const Fi = new Float64Array(ndof), du_f = new Float64Array(ndof), tmp = new Float64Array(n);
+      const fintFree = (out: Float64Array): void => { this.fintSig(Fi); this.gather(Fi, null, out); };
+      const f0 = new Float64Array(n); fintFree(f0);
+      const fde = new Float64Array(n);                                 // F_int(σ guardada) − F_int(σ₀)
+      const u = new Float64Array(n), v = new Float64Array(n), a = new Float64Array(n);
+      const Fk = (k: number, i: number) => -r[i] * acc[k] - Cr[i] * V[k];   // F = −M·1·a_g − C·1·V  (K·1 = 0)
+      const Kef = bandCreate(n, this.band);
+      const iters: number[] = [0], etas: number[][] = [[]];
+      const watch = (o.watch ?? []).map((node) => ({ node, ux: new Float64Array(nst + 1), uy: new Float64Array(nst + 1), ax: new Float64Array(nst + 1), ay: new Float64Array(nst + 1) }));
+      const umaxAbs = new Float64Array(ndof);
+      const rec = (s: number) => {
+        for (const h of watch) { const kx = this.map[2 * h.node], ky = this.map[2 * h.node + 1]; h.ux[s] = kx >= 0 ? u[kx] : 0; h.uy[s] = ky >= 0 ? u[ky] : 0; h.ax[s] = kx >= 0 ? a[kx] : 0; h.ay[s] = ky >= 0 ? a[ky] : 0; }
+        for (let d = 0; d < ndof; d++) { const k = this.map[d]; if (k >= 0 && Math.abs(u[k]) > umaxAbs[d]) umaxAbs[d] = Math.abs(u[k]); }
+        if (o.onStep) o.onStep(s, times[s], this.scatter(u), this.scatter(v));
+      };
+      rec(0);
+      const ut = new Float64Array(n), vt = new Float64Array(n), rhs = new Float64Array(n), uk = new Float64Array(n), Rr = new Float64Array(n), du = new Float64Array(n);
+      const w1 = new Float64Array(n), w2 = new Float64Array(n), w3 = new Float64Array(n), gt = new Float64Array(n), Mdu = new Float64Array(n);
+      for (let k = 1; k <= nst; k++) {
+        const dt = times[k] - times[k - 1], b1 = 1 / (beta * dt * dt), b4 = gamma / (beta * dt);
+        for (let i = 0; i < n; i++) { ut[i] = u[i] + dt * v[i] + dt * dt * (0.5 - beta) * a[i]; vt[i] = v[i] + dt * (1 - gamma) * a[i]; }
+        // rhs_c = (1+α)F(k) − αF(k−1) + α(C v + F_int,n)
+        if (hasC) bandMul(C, v, w1); else w1.fill(0);
+        let rmax = 0;
+        for (let i = 0; i < n; i++) { rhs[i] = (1 + alpha) * Fk(k, i) - alpha * Fk(k - 1, i) + alpha * (w1[i] + fde[i]); rmax = Math.max(rmax, Math.abs(rhs[i])); }
+        uk.set(u); this.hasDep.fill(0);                               // flags limpios: la tangente de la 1.ª iteración es elástica
+        // R = M·an + (1+α)(C·vn + fde) − rhs, con an = (uk−ut)·b1 y vn = vt + γ·dt·an
+        const residuo = (ukv: Float64Array, fdev: Float64Array, out: Float64Array): void => {
+          for (let i = 0; i < n; i++) w1[i] = (ukv[i] - ut[i]) * b1;
+          bandMul(M, w1, w2);
+          if (hasC) { for (let i = 0; i < n; i++) w1[i] = vt[i] + gamma * dt * w1[i]; bandMul(C, w1, w3); } else w3.fill(0);
+          for (let i = 0; i < n; i++) out[i] = w2[i] + (1 + alpha) * (w3[i] + fdev[i]) - rhs[i];
+        };
+        const etaK: number[] = []; let it = 0;
+        for (; it < maxit; it++) {
+          residuo(uk, fde, Rr);
+          let mx = 0; for (let i = 0; i < n; i++) mx = Math.max(mx, Math.abs(Rr[i]));
+          if (mx < tolN * Math.max(1, rmax)) break;
+          this.assembleK(this.Kt, false);
+          for (let q = 0; q < Kef.a.length; q++) Kef.a[q] = b1 * M.a[q] + (1 + alpha) * ((hasC ? b4 * C.a[q] : 0) + this.Kt.a[q]);
+          Kef.factored = false; if (!bandFactor(Kef)) throw new Error("K efectiva singular en el paso " + k);
+          bandSolve(Kef, Rr, du); for (let i = 0; i < n; i++) du[i] = -du[i];
+          let eta = 1;
+          if (lsOn) {
+            let gn0 = 0, s0 = 0; for (let i = 0; i < n; i++) { gn0 += Rr[i] * Rr[i]; s0 += du[i] * Rr[i]; } gn0 = Math.sqrt(gn0);
+            // parte de R que varía con η por la inercia y el amortiguamiento: se resta (queda CONGELADA en η=0)
+            bandMul(M, du, w1); if (hasC) bandMul(C, du, w2);
+            for (let i = 0; i < n; i++) Mdu[i] = b1 * w1[i] + (hasC ? (1 + alpha) * b4 * w2[i] : 0);
+            for (let i = 0; i < n; i++) w1[i] = uk[i] + du[i];            // η = 1
+            this.scatter(du, du_f); this.assembleInc(du_f, ab, false, Fi); this.gather(Fi, null, tmp);
+            for (let i = 0; i < n; i++) tmp[i] -= f0[i];
+            residuo(w1, tmp, gt); let gn1 = 0, s1 = 0; for (let i = 0; i < n; i++) { gt[i] -= Mdu[i]; gn1 += gt[i] * gt[i]; s1 += du[i] * gt[i]; } gn1 = Math.sqrt(gn1);
+            if (gn1 / gn0 > lsTol && gn0 > 1e-12 && Math.abs(s0 - s1) > 1e-12) {
+              const en = s0 / (s0 - s1);
+              eta = en < etaMin ? etaMin : en >= etaMax ? etaMax : en;
+            }
+          }
+          etaK.push(eta);
+          for (let i = 0; i < n; i++) w1[i] = eta * du[i];
+          this.scatter(w1, du_f); this.assembleInc(du_f, ab, true, Fi);   // σ guardada ← retorno(σ + De·B·η·du); DEP de esta iteración
+          fintFree(tmp); for (let i = 0; i < n; i++) fde[i] = tmp[i] - f0[i];
+          for (let i = 0; i < n; i++) uk[i] += w1[i];
+        }
+        if (it >= maxit) this.log(`  dynamicNL: paso ${k} no converge en ${maxit} iteraciones`);
+        iters.push(it); etas.push(etaK);
+        for (let i = 0; i < n; i++) { const an = (uk[i] - ut[i]) * b1; v[i] = vt[i] + gamma * dt * an; a[i] = an; u[i] = uk[i]; }
+        rec(k);
+      }
+      const sec = (performance.now() - t0c) / 1000;
+      this.log(`DINÁMICO no lineal (MC GEO5): HHT β=${beta} γ=${gamma} α=${alpha}, ${nst} pasos, ${iters.reduce((x, y) => x + y, 0)} iteraciones [${sec.toFixed(2)} s]`);
+      return { t: times, coef: { b1: 1 / (beta * dtN * dtN), b2: 1 / (beta * dtN), b3: 0, b4: gamma / (beta * dtN), b5: 0, b6: 0, beta, gamma, alpha }, hist: watch, u: this.scatter(u), umaxAbs, seconds: sec, iters, etas, etaMin: Float64Array.from(etas.map((e) => e.reduce((m, x) => Math.min(m, x), 1))), sig: Float64Array.from(this.SIG) };
+    } finally {
+      for (let i = 0; i < D4s.length; i++) { this.D4[i] = D4s[i]; this.Dinv[i] = Dis[i]; }
+      this.mcp = mcps; this.SIG.set(SIGs); this.EPL.set(EPLs); this.DEP.set(DEPs); this.hasDep.set(hs);
+      GeoFem.gDesempateZ = gz; GeoFem.gEmpateXY = gxy;
+    }
+  }
+
   /** σ ELÁSTICA por punto de Gauss (ngp·4: xx yy zz xy) para u en gdl completos: σ = De·B·u con las MISMAS B y De que el
    *  estático (es el retorno de assembleInc cuando no hay plasticidad, desde σ₀ = 0). */
   elasticStress(u: ArrayLike<number>): Float64Array {
@@ -1070,7 +1231,7 @@ export function rayleighCoef(xi: number, wa: number, wb: number): [number, numbe
 }
 
 /** a_g(t) desde pares [t0,a0,t1,a1,…] (el `history` de GEO5), interpolación lineal; 0 fuera del registro. */
-function historyFn(h: number[]): (t: number) => number {
+export function historyFn(h: number[]): (t: number) => number {
   if (h.length % 2) throw new Error("acelerograma: solo número par de valores (pares t, a)");
   const n = h.length / 2;
   return (t) => {

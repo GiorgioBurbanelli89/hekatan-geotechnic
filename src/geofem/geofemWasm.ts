@@ -1,8 +1,8 @@
 // Motor WASM (C++ compilado con emscripten, src/geofem/cpp/geofem.cpp). Misma interfaz de resultados
 // que GeoFem (solver.ts); el log llega línea a línea por Module.geoLog.
 import { fgConAgua, extraAguaEtapa } from "./agua";
-import type { GeoModel, StageResult, Log } from "./solver";
-import { GEO5_SRM, RIGID_E, RIGID_NU, srmBits } from "./solver";
+import type { GeoModel, StageResult, Log, DynNLOptions, DynNLResult } from "./solver";
+import { GEO5_SRM, RIGID_E, RIGID_NU, srmBits, historyFn } from "./solver";
 // @ts-ignore — módulo generado por emcc (build_wasm.sh)
 import createModule from "./built/geofem.js";
 
@@ -20,6 +20,7 @@ type Mod = {
   _geofem_run_stage: (h: number, F: number, u: number, uel: number, srf: number, stepsU: number, maxSteps: number) => number;
   _geofem_run_staged: (h: number, act: number, F: number, first: number, u: number) => number;
   _geofem_alcanzada: (h: number) => number;
+  _geofem_dynamic_nl: (h: number, par: number, edyn: number, rho: number, rayMat: number, times: number, acc: number, nst: number, sig0: number, watchDof: number, nwatch: number, outHist: number, outU: number, outIters: number, outEtaMin: number) => number;
   _geofem_destroy: (h: number) => void;
   _geofem_alloc: (n: number) => number; _geofem_alloc_i: (n: number) => number; _geofem_free: (p: number) => void;
 };
@@ -70,6 +71,39 @@ export class GeoFemWasm {
   }
 
   setLog(log: Log): void { this.log = log; this.mod.geoLog = log; }
+
+  /** Dinámico NO LINEAL (Mohr-Coulomb de GEO5) en el motor C++: mismas opciones y resultado que GeoFem.dynamicNL (solver.ts);
+   *  validado contra FRGeoFEM 2024 (tests/dinamico_nl_geo5.ts). Las historias de aceleración `ax`/`ay` no se calculan (0). */
+  dynamicNL(o: DynNLOptions): DynNLResult {
+    const mod = this.mod, ndof = this.ndof, nmat = this.m.MAT.length, nst = Math.round(o.tEnd / o.dt);
+    const alpha = o.alpha ?? 0, beta = o.beta ?? (1 - alpha) ** 2 / 4, gamma = o.gamma ?? 0.5 - alpha;
+    const ag = typeof o.accel === "function" ? o.accel : historyFn(o.accel);
+    const times = new Float64Array(nst + 1), acc = new Float64Array(nst + 1);
+    times[0] = o.t0 ?? 0; for (let k = 1; k <= nst; k++) { times[k] = k * o.dt; acc[k] = ag(times[k]); }
+    const par = [alpha, beta, gamma, o.tolN ?? 1e-11, o.maxit ?? 100, (o.ls?.on ?? true) ? 1 : 0, o.ls?.tol ?? 0.8, o.ls?.etaMin ?? 0.1, o.ls?.etaMax ?? 1, o.dir === "y" ? 1 : 0, o.g ?? 9.80665];
+    const ray = o.rayleighMat ?? (o.rayleigh ? this.m.MAT.map(() => o.rayleigh as [number, number]) : null);
+    const watch = o.watch ?? [], wd = watch.flatMap((nd) => [2 * nd, 2 * nd + 1]), nw = wd.length;
+    const put = (a: ArrayLike<number> | null): number => { if (!a) return 0; const p = mod._geofem_alloc(a.length); mod.HEAPF64.set(a, p >> 3); return p; };
+    const pMat = put(this.m.MAT.flat()); mod._geofem_set_mat(this.h, pMat);
+    const pPar = put(par), pEd = put(o.edyn ?? null), pRho = put(o.rho ?? null), pRay = put(ray ? ray.flat() : null), pT = put(times), pA = put(acc), pS = put(o.sig0 ?? null);
+    const pW = mod._geofem_alloc_i(Math.max(nw, 1)); if (nw) mod.HEAP32.set(wd, pW >> 2);
+    const pH = mod._geofem_alloc(Math.max((nst + 1) * nw, 1)), pU = mod._geofem_alloc(ndof), pI = mod._geofem_alloc_i(nst + 1), pE = mod._geofem_alloc(nst + 1);
+    const t0 = performance.now();
+    mod.geoLog = this.log;
+    const ok = mod._geofem_dynamic_nl(this.h, pPar, pEd, pRho, pRay, pT, pA, nst, pS, pW, nw, pH, pU, pI, pE);
+    const sec = (performance.now() - t0) / 1000;
+    const H = mod.HEAPF64, hist = watch.map((node, j) => {
+      const ux = new Float64Array(nst + 1), uy = new Float64Array(nst + 1);
+      for (let k = 0; k <= nst; k++) { ux[k] = H[(pH >> 3) + k * nw + 2 * j]; uy[k] = H[(pH >> 3) + k * nw + 2 * j + 1]; }
+      return { node, ux, uy, ax: new Float64Array(nst + 1), ay: new Float64Array(nst + 1) };
+    });
+    const u = Float64Array.from(H.subarray(pU >> 3, (pU >> 3) + ndof)), iters = Array.from(mod.HEAP32.subarray(pI >> 2, (pI >> 2) + nst + 1)), etaMin = Float64Array.from(H.subarray(pE >> 3, (pE >> 3) + nst + 1));
+    for (const p of [pMat, pPar, pEd, pRho, pRay, pT, pA, pS, pW, pH, pU, pI, pE]) if (p) mod._geofem_free(p);
+    if (!ok) this.log("  dynamicNL (WASM): algún paso no convergió");
+    const umaxAbs = new Float64Array(ndof);
+    return { t: times, coef: { b1: 1 / (beta * o.dt * o.dt), b2: 1 / (beta * o.dt), b3: 0, b4: gamma / (beta * o.dt), b5: 0, b6: 0, beta, gamma, alpha }, hist, u, umaxAbs, seconds: sec, iters,
+      etas: Array.from(etaMin, (e) => (e < 1 ? [e] : [])), etaMin, sig: new Float64Array(0) };
+  }
 
   /** CONSTRUCCIÓN POR ETAPAS (Activity de GEO5): TODAS las etapas en orden, cada una desde el estado de la anterior.
    *  Análisis de tensiones (SRF = 1): no hay factor de seguridad (fs = NaN). El peso lo pone el motor (solo elementos activos). */

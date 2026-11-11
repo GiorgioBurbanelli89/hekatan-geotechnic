@@ -46,8 +46,11 @@ function icono(id: string): string {
   const P: Record<string, string> = {
     corte: "2,28 22,28 52,8 78,8", terraplen: "2,28 18,28 34,10 50,10 66,28 78,28", berma: "2,28 20,28 34,19 46,19 60,8 78,8",
     estratos: "2,28 22,28 52,8 78,8", muro: "2,28 24,28 24,18 34,18 56,6 78,6", ladera: "2,32 24,24 52,8 78,8",
+    compuesto: "2,28 20,28 32,14 62,6 78,6", blando: "2,28 22,28 52,8 78,8", zapata: "2,28 22,28 52,8 78,8",
   };
   const extra = id === "estratos" ? `<polyline points="37,18 78,18" stroke="#6aa3d8" stroke-width="1.5" fill="none" stroke-dasharray="3 2"/>`
+    : id === "blando" ? `<polyline points="40,18 78,18" stroke="#c25b5b" stroke-width="3.5" fill="none" opacity=".85"/>`
+    : id === "zapata" ? `<rect x="58" y="2" width="12" height="3" fill="#cfcfcf"/><path d="M60 5 V7.5 M64 5 V7.5 M68 5 V7.5" stroke="#cfcfcf" stroke-width="1.2" fill="none"/>`
     : id === "terraplen" ? `<polyline points="2,28 78,28" stroke="#6aa3d8" stroke-width="1" fill="none" stroke-dasharray="3 2"/>`
     : id === "muro" ? `<rect x="22" y="17" width="3" height="13" fill="#9a9a9a"/>` : "";
   return `<svg viewBox="0 0 80 36"><polygon points="${P[id]} 78,35 2,35" fill="rgba(208,138,62,.35)" stroke="#d08a3e" stroke-width="1.5"/>${extra}</svg>`;
