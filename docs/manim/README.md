@@ -3,7 +3,7 @@
 Cuando el usuario pida *«explícame … con Manim»* (o «en Manim») sobre taludes, SRM, T6, Drucker-Prager, etapas, muros:
 
 1. Lee `docs/ALGORITMOS_GEOFEM.md` (qué es y dónde está) y esta carpeta.
-2. Copia `escena_srm_talud.py`, cambia `TITULO`, `PASOS` (nombre + ecuación LaTeX) y el dibujo.
+2. Copia `escena_srm_talud.py`, cambia `TITULO`, `PASOS` (nombre + ecuación en texto Unicode) y el dibujo.
 3. Entrega **el `.py` completo** en un bloque de código + el comando de render.
 4. Explica corto, en español simple, el porqué de cada paso (estilo y = m·x + b).
 
