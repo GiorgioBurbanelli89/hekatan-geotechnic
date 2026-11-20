@@ -42,6 +42,15 @@ export type MuroG5 = {
 };
 export type SismoG5 = { kh: number; kv: number };
 
+/** α de la cara virtual (desde la vertical) como lo halla GEO5: NO usa 45° − φ/2 exacto, lo busca por BISECCIÓN en
+ *  [0°, 90°] y se queda con el PUNTO MEDIO número 15 = centro de la celda de ancho 90°/2^14 que contiene el exacto.
+ *  Medido con Frida en CantileverWall_5.dll (20-nov-2026) con φ = 27, 30, 33, 34.5 y 36: K y fuerzas iguales a 1e-14.
+ *  Con φ = 30° da 30.000915527…° (con 30° exactos Fz del empuje se desvía 0.0013 kN/m y el incremento sísmico 0.004). */
+export function alfaBiseccionGeo5(alfaExactoDeg: number): number {
+  let lo = 0, hi = 90, mid = 45;
+  for (let i = 0; i < 15; i++) { mid = (lo + hi) / 2; if (mid < alfaExactoDeg) lo = mid; else hi = mid; }
+  return mid;
+}
 /** Coulomb (rama de GEO5): K = cos²(φ−α)/(cos²α·cos(α+δ)·(1+√R)²), R = max(0, sin(φ+δ)sin(φ−β)/(cos(α+δ)cos(α−β))). Ángulos en rad. */
 export function kCoulomb(phi: number, d: number, a: number, b = 0): number {
   const R = Math.max(Math.sin(phi + d) * Math.sin(phi - b) / (Math.cos(a + d) * Math.cos(a - b)), 0);
@@ -111,7 +120,8 @@ export function muroGeo5(m: MuroG5, perfil: SueloG5[], sismo: SismoG5, alfaVirtu
   const xm = (Wz * z.cx + Wf * f.cx) / Wm, ym = (Wz * z.cy + Wf * f.cy) / Wm;
 
   const sup = perfil[0];
-  const th = rad(45) + rad(sup.phi) / 2;                 // ángulo de la cara virtual sobre la horizontal
+  const alfaV = alfaVirtualDeg ?? alfaBiseccionGeo5(45 - sup.phi / 2);          // α de la cara virtual (bisección de GEO5)
+  const th = rad(90 - alfaV);                            // ángulo de la cara virtual sobre la horizontal: el MISMO α para la cuña y para K (20-nov-2026: con θ exacto en la cuña y α de bisección en K, M_res daba 388.968 y GEO5 muestra 388.96)
   const xv = B - h / Math.tan(th);
   const cuna: P[] = [[xt, xx], [B, xx], [xv, Hter], [xt, Hter]];
   // peso de la cuña por bandas de suelo (profundidad desde el terreno; la cuña llega hasta la profundidad h)
@@ -128,7 +138,6 @@ export function muroGeo5(m: MuroG5, perfil: SueloG5[], sismo: SismoG5, alfaVirtu
   // capas de la cara de empuje, de arriba abajo
   const abajo = m.dent ? -dk : 0;                        // cota del fondo de la cara del talón
   const profTotal = Hter - abajo;
-  const alfaV = alfaVirtualDeg ?? (90 - deg(th));
   const capas: CapaG5[] = [];
   let z0 = 0;
   const cortes = [h, ...perfil.map((s) => s.hasta).filter((hh) => hh > h && hh < profTotal), profTotal];
