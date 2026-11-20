@@ -105,7 +105,9 @@ export class SlopePlot {
     ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
     // extremos de la barra = nudos ESQUINA
     let vmin = Infinity, vmax = -Infinity;
-    for (const el of ELE) for (let k = 0; k < 3; k++) { const v = o.vals[el[k]]; if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
+    const esRig = (e: number) => !!this.m.RIGID?.[EMAT[e] - 1];          // Rigid body (muro): no entra en la escala de colores
+    this.m.ELE.forEach((el, e) => { if ((o.active && !o.active[e]) || esRig(e)) return; for (let k = 0; k < 3; k++) { const v = o.vals[el[k]]; if (v < vmin) vmin = v; if (v > vmax) vmax = v; } });
+    if (!(vmax >= vmin)) for (const el of ELE) for (let k = 0; k < 3; k++) { const v = o.vals[el[k]]; if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
     const flat = !(vmax - vmin > 1e-9);                 // sin campo (vista inicial): solo geometría
     const lv = flat ? [0, 1] : geo5Levels(vmin, vmax), cmap = geo5Cmap(lv.length - 1);
     const grid = gridField(X, Y, ELE, o.vals);
@@ -189,6 +191,13 @@ export class SlopePlot {
     const rig = this.m.RIGID;
     if (rig?.some((r) => r)) {
       const esMuro = (mm: number) => !!rig[mm - 1];
+      // 20-nov-2026: el Rigid body NO lleva colores de resultados (GEO5 lo dibuja gris y rayado): se tapa el mapa con gris + achurado
+      ctx.save(); ctx.beginPath();
+      this.m.ELE.forEach((el, e) => { if ((o.active && !o.active[e]) || !esMuro(EMAT[e])) return; const [a0, b0] = tf(X[el[0]], Y[el[0]]); ctx.moveTo(a0, b0); for (let q = 1; q < 3; q++) { const [a1, b1] = tf(X[el[q]], Y[el[q]]); ctx.lineTo(a1, b1); } ctx.closePath(); });
+      ctx.fillStyle = this.dark ? "#8c8c8c" : "#c8c8c8"; ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.8 * k; ctx.fill(); ctx.stroke(); ctx.clip();
+      ctx.beginPath(); ctx.strokeStyle = this.dark ? "#555" : "#777"; ctx.lineWidth = 1 * k;
+      for (let t = -H; t < W + H; t += 7 * k) { ctx.moveTo(t, H); ctx.lineTo(t + H, 0); }
+      ctx.stroke(); ctx.restore();
       ctx.beginPath(); ctx.strokeStyle = this.dark ? "#cfcfcf" : "#3a3a3a"; ctx.lineWidth = 2.4 * k;
       for (const e of this.edges) { const M = [...e.mats]; if (M.some(esMuro) && (e.count === 1 || M.some((mm) => !esMuro(mm)))) line(e.a, e.b); }
       ctx.stroke();
