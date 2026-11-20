@@ -10,7 +10,7 @@ import { verificarMuro, type TeoriaEmpuje, type VerifResult } from "./verify";
 import { mallaMuroSolido, type MuroSolidoParams } from "../solid/muroMalla";
 import { resolverMuro2DUI } from "./panel2d";
 import { muroGeo5, alfaBiseccionGeo5 } from "./geo5Cantilever";
-import { dibujarMuro, MURO_PORTOVIEJO } from "./cantilever";
+import { dibujarMuro, MURO_PORTOVIEJO, avisoCara } from "./cantilever";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const n3 = (v: number) => (Math.round(v * 1000) / 1000).toString();
@@ -69,7 +69,7 @@ function bloqueGeo5(def: SlopeDef, w: Wall, r: VerifResult): string {
   const cv = $<HTMLCanvasElement>("g5Cv");
   if (cv) dibujarMuro(cv, { ...MURO_PORTOVIEJO, k, h, xx: pm.zapata, v1: pm.dedo, v2: pm.talon, s1: s1 > 0 ? s1 : 0, dk: 0, z1: r.geom.Htot, kh, kv }, g);
   const sv = $<HTMLDivElement>("g5Res");
-  if (sv) sv.innerHTML = `FS vuelco <b>${g.fsVuelco.toFixed(2)}</b> · FS deslizamiento <b>${g.fsDeslizamiento.toFixed(2)}</b> <span style="color:var(--mut)">(como GEO5${kh ? `, sismo k<sub>h</sub> ${kh}` : ""})</span>`;
+  if (sv) sv.innerHTML = `FS vuelco <b>${g.fsVuelco.toFixed(2)}</b> · FS deslizamiento <b>${g.fsDeslizamiento.toFixed(2)}</b> <span style="color:var(--mut)">(como GEO5${kh ? `, sismo k<sub>h</sub> ${kh}` : ""})</span>` + avisoCara(g, pm.dedo + k + (s1 > 0 ? h / s1 : 0));
   const f2 = (v: number) => v.toFixed(2), f6 = (v: number) => v.toPrecision(10);
   const filas = g.fuerzas.map((q) => `<tr><td>${q.nombre}</td><td style="text-align:right">${f2(-q.Fx)}</td><td style="text-align:right">${f2(q.Fz)}</td><td style="text-align:right">${f2(q.x)}</td><td style="text-align:right">${f2(-q.z)}</td></tr>`).join("");
   return `<div style="margin:4px 0">α cara virtual = <b>${alfaBiseccionGeo5(45 - rel.phi / 2).toFixed(12)}°</b> (bisección de GEO5) · B = ${g.B.toFixed(3)} m · k = ${k.toFixed(4)} m</div>

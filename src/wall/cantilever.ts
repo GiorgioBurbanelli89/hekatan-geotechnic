@@ -59,6 +59,11 @@ function construir() {
 function refrescaCampos() { document.querySelectorAll<HTMLInputElement>("#cwCampos input[data-k]").forEach((i) => { if (document.activeElement !== i) i.value = String((datos as Record<string, number>)[i.dataset.k!]); }); }
 
 const f2 = (v: number) => v.toFixed(2);
+/** Talón corto: la cara virtual (desde el extremo del talón a 45°+φ/2) choca con el fuste antes de llegar al terreno.
+ *  Ese caso de GEO5 NO está medido en el binario: no se inventa la regla, se avisa que el resultado no vale. */
+export function avisoCara(r: ResultadoG5, xt: number): string {
+  return r.xv < xt - 1e-9 ? `<div style="color:#e5382b;font-weight:600">⚠ La cara virtual choca con el fuste (talón corto para esta altura): este caso de GEO5 aún no está medido en su binario, el FS de aquí NO vale. Alarga el talón a ${(r.B - r.xv).toFixed(2)} m o más para que la cuña llegue al terreno.</div>` : "";
+}
 function calcular() {
   const out = $<HTMLDivElement>("cwOut");
   try {
@@ -68,7 +73,7 @@ function calcular() {
     const filas = r.fuerzas.map((q, i) => `<tr><td>${i + 1}</td><td>${q.nombre}</td><td>${f2(-q.Fx)}</td><td>${f2(q.Fz)}</td><td>${f2(q.x)}</td><td>${f2(-q.z)}</td></tr>`).join("");
     out.innerHTML = `<div style="margin:0 0 6px;font-size:13.5px"><b>Vuelco</b>: M<sub>res</sub> = ${r.Mres.toFixed(2)} · M<sub>ovr</sub> = ${r.Movr.toFixed(2)} kN·m/m → FS = <b style="color:${col(okV)}">${r.fsVuelco.toFixed(2)}</b> ${okV ? "≥" : "&lt;"} ${datos.fsV.toFixed(2)} · <span style="color:${col(okV)}">${okV ? "SATISFACTORY" : "NOT SATISFACTORY"}</span><br>
       <b>Deslizamiento</b>: H<sub>res</sub> = ${r.Hres.toFixed(2)} · H<sub>act</sub> = ${r.Hact.toFixed(2)} kN/m → FS = <b style="color:${col(okD)}">${r.fsDeslizamiento.toFixed(2)}</b> ${okD ? "≥" : "&lt;"} ${datos.fsD.toFixed(2)} · <span style="color:${col(okD)}">${okD ? "SATISFACTORY" : "NOT SATISFACTORY"}</span><br>
-      <span style="color:var(--mut)">B = ${r.B.toFixed(3)} m · α cara virtual = ${alfaBiseccionGeo5(45 - datos.f1 / 2).toFixed(9)}° (bisección de GEO5)${r.epsBase ? ` · base inclinada ${r.epsBase.toFixed(2)}°` : ""} · mismas columnas y signos que «Verification» de GEO5</span></div>
+      ${avisoCara(r, datos.v1 + datos.k + (datos.s1 > 0 ? datos.h / datos.s1 : 0))}<span style="color:var(--mut)">B = ${r.B.toFixed(3)} m · α cara virtual = ${alfaBiseccionGeo5(45 - datos.f1 / 2).toFixed(9)}° (bisección de GEO5)${r.epsBase ? ` · base inclinada ${r.epsBase.toFixed(2)}°` : ""} · mismas columnas y signos que «Verification» de GEO5</span></div>
       <table class="cwt"><tr><th>No.</th><th>Force</th><th>F<sub>x</sub> [kN/m]</th><th>F<sub>z</sub> [kN/m]</th><th>x [m]</th><th>z [m]</th></tr>${filas}</table>`;
     dibujar(r);
   } catch (e) { out.innerHTML = `<span style="color:#e5382b">✖ ${(e as Error).message}</span>`; }
@@ -92,8 +97,14 @@ export function dibujarMuro(cv: HTMLCanvasElement, d: DatosMuro, r: ResultadoG5,
   if (d.z1 < Ht + dk) { c.setLineDash([6, 4]); c.beginPath(); c.moveTo(X(B), Y(Ht - d.z1)); c.lineTo(X(xmax), Y(Ht - d.z1)); c.stroke(); c.setLineDash([]); }
   // cuña de tierra (cara virtual con el α de GEO5)
   const xv = r.xv;
-  poli([[xt, d.xx], [B, d.xx], [xv + 1e-5, Ht], [xt, Ht]], "rgba(120,170,90,0.25)", "#6a9a4a", 1);
-  c.setLineDash([5, 4]); c.strokeStyle = "#c0392b"; c.beginPath(); c.moveTo(X(B), Y(d.xx)); c.lineTo(X(xv), Y(Ht)); c.stroke(); c.setLineDash([]);
+  if (xv >= xt) {
+    poli([[xt, d.xx], [B, d.xx], [xv + 1e-5, Ht], [xt, Ht]], "rgba(120,170,90,0.25)", "#6a9a4a", 1);
+    c.setLineDash([5, 4]); c.strokeStyle = "#c0392b"; c.beginPath(); c.moveTo(X(B), Y(d.xx)); c.lineTo(X(xv), Y(Ht)); c.stroke(); c.setLineDash([]);
+  } else {   // talón corto: la cara virtual choca con el fuste antes de llegar al terreno → la cuña es solo el triángulo de abajo (no se cruza el muro)
+    const yh = d.xx + (B - xt) * (Ht - d.xx) / (B - xv);
+    poli([[xt, d.xx], [B, d.xx], [xt, yh]], "rgba(120,170,90,0.25)", "#6a9a4a", 1);
+    c.setLineDash([5, 4]); c.strokeStyle = "#c0392b"; c.beginPath(); c.moveTo(X(B), Y(d.xx)); c.lineTo(X(xt), Y(yh)); c.stroke(); c.setLineDash([]);
+  }
   // hormigón (con dentellón)
   const zap = dk > 0 ? [[0, 0], [B - d.dw, 0], [B - d.dw, -dk], [B, -dk], [B, d.xx], [0, d.xx]] : [[0, 0], [B, 0], [B, d.xx], [0, d.xx]];
   poli(zap, "#d4d4d4", "#7b2d7b", 2); poli([[d.v1, d.xx], [xt, d.xx], [xt, Ht], [xt - d.k, Ht]], "#d4d4d4", "#7b2d7b", 2);
