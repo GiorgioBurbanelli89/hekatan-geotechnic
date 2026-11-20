@@ -580,7 +580,7 @@ export class GeoFem {
       // ENERGÍA de GEO5 2024 (FUN_0059c800, llamada en FUN_004f7ea0 @0x4f82b8 con ecx = DLoad, edx = CLoad):
       // √|DDisp·CLoad| / máx(√|ADDisp·DForce|, 1); CLoad = DForce en la 1.ª it (memcpy @0x4f821f), luego el residuo de la
       // it anterior (CLoad ← DLoad tras las normas). Modo GEO5: esa; bit 8: el residuo previo también en la 1.ª.
-      const enG5 = this.modoG5;
+      const enG5 = false;          // 20-nov-2026: esa regla de energía es la del DINÁMICO de GEO5; en el SRM estático rompía el muro de Manabí (FS 2.12 en vez de 1.362360 = GEO5, bisección de commits: 9a1caf5). Se deja la de antes (bit 8)
       if (enG5) CLoad.set(it === 1 ? DForce : Rf); else if (this.energiaPrev) CLoad.set(Rf);   // residuo ANTES de la iteración (bit 8)
       evalInc(du, true, Fi);                                     // COMMIT: σ_i y tangente
       for (let d = 0; d < ndof; d++) u[d] += du[d];

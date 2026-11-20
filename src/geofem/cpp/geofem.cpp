@@ -570,13 +570,13 @@ struct GeoFem {
       for (int d = 0; d < ndof; d++) du[d] *= al;
       // ENERGÍA de GEO5 2024 (FUN_0059c800, llamada @0x4f82b8 con ecx = DLoad, edx = CLoad): √|DDisp·CLoad| / máx(√|ADDisp·DForce|, 1);
       // CLoad = DForce en la 1.ª it (memcpy @0x4f821f), luego el residuo de la it anterior. Modo GEO5: esa. = solver.ts
-      if (modoG5) CLoad = (it == 1 ? DForce : Rf); else if (energiaPrev) CLoad = Rf;   // bit 8: residuo ANTES de la iteración
+      if (energiaPrev) CLoad = Rf;   // bit 8: residuo ANTES de la iteración. 20-nov-2026: la regla «CLoad = DForce en la 1.ª it» (modo GEO5) es la del dinámico; en el SRM estático daba FS 2.15 en el muro de Manabí (GEO5 1.362360) → fuera, como solver.ts
       evalInc(du.data(), true, Fi.data());
       for (int d = 0; d < ndof; d++) u[d] += du[d];
       for (int k = 0; k < nf; k++) Rf[k] = Fext[fr[k]] - Fi[fr[k]];
       for (int k = 0; k < nf; k++) ADDisp[k] += drf[k];
       double nDD = vnorm(drf.data(), nf), dA = vnorm(ADDisp.data(), nf), nDL = vnorm(Rf.data(), nf), dF = vnorm(DForce.data(), nf);
-      double nEN = std::sqrt(std::fabs(vdot(drf.data(), (modoG5 || energiaPrev ? CLoad : Rf).data(), nf))), dE = std::sqrt(std::fabs(vdot(ADDisp.data(), DForce.data(), nf)));
+      double nEN = std::sqrt(std::fabs(vdot(drf.data(), (energiaPrev ? CLoad : Rf).data(), nf))), dE = std::sqrt(std::fabs(vdot(ADDisp.data(), DForce.data(), nf)));
       double eu = dA > 1 ? nDD / dA : nDD, ef = dF > 1 ? nDL / dF : nDL, ee = dE > 1 ? nEN / dE : nEN;
       double dxmax = 0; for (int i = 0; i < nn; i++) dxmax = std::max(dxmax, std::fabs(u[2 * i]));
       LOG(fmt("  RS=%d SRF=%.4f it=%2d eta=%.4f DNorm=%.5e OBFNorm=%.5e ENorm=%.5e |gi|=%.4e dx=%.1f", rstep, SRF, it, al, eu, ef, ee, nDL, dxmax * 1e3));
