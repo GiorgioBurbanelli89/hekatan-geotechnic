@@ -268,6 +268,8 @@
     <aside class="panel" id="ladoMuro">          <!-- 20-nov-2026: el muro de contención AL LADO de la gráfica (antes al fondo de la barra izquierda) -->
       <div id="murowrap" hidden>
         <h2 style="margin-top:14px">Muro de contención <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(GEO5: Cantilever Wall)</span></h2>
+        <canvas id="g5Cv" width="360" height="380" style="width:100%;background:#fff;border-radius:4px;display:block" title="azul: peso y empuje · rojo: sismo (k_h) · verde: cuña de tierra que va con el muro"></canvas>
+        <div id="g5Res" style="margin:4px 0 8px;font-size:13px"></div>
         <div class="row">
           <div><label>Teoría del empuje</label><select id="wTeoria" title="las que calcula GEO5 (extraído de CantileverWall_5.dll)"><option value="coulomb">Coulomb (activo)</option><option value="mazindrani">Mazindrani (Rankine con talud)</option><option value="reposo">en reposo · Jáky K0</option></select></div>
           <div><label>δ trasdós [°]</label><input id="wDelta" type="text" value="auto" title="fricción en el plano ficticio del talón; «auto» = φ del relleno (suelo contra suelo)" /></div>
@@ -282,7 +284,7 @@
         </div>
         <label><input type="checkbox" id="wPasivo" style="width:auto" /> contar el empuje pasivo delante de la puntera</label>
         <div id="wout" class="mats"></div>
-        <h2 style="margin-top:12px;font-size:12px">Como GEO5 Cantilever Wall <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(cara virtual, Mononobe-Okabe, bit a bit con el binario)</span></h2>
+        <h2 style="margin-top:12px;font-size:12px">Como GEO5 Cantilever Wall <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(bit a bit con el binario)</span></h2>
         <div class="row">
           <div><label>k_h</label><input id="g5Kh" type="number" value="0" step="0.01" title="coeficiente sísmico horizontal; NEC-SE-GC: 0.6·Z·Fa (Manabí 0.336)" /></div>
           <div><label>k_v</label><input id="g5Kv" type="number" value="0" step="0.01" title="coeficiente sísmico vertical; positivo = hacia abajo, levanta el muro (GEO5)" /></div>

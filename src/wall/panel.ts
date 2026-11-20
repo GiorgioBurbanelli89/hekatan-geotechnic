@@ -10,6 +10,7 @@ import { verificarMuro, type TeoriaEmpuje, type VerifResult } from "./verify";
 import { mallaMuroSolido, type MuroSolidoParams } from "../solid/muroMalla";
 import { resolverMuro2DUI } from "./panel2d";
 import { muroGeo5, alfaBiseccionGeo5 } from "./geo5Cantilever";
+import { dibujarMuro, MURO_PORTOVIEJO } from "./cantilever";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const n3 = (v: number) => (Math.round(v * 1000) / 1000).toString();
@@ -48,7 +49,7 @@ function tabla(r: VerifResult): string {
     <details style="margin-top:4px"><summary>fuerzas [kN/m] · N = ${r.N.toFixed(2)} · H = ${r.Hd.toFixed(2)} · σ = ${r.sigma.min.toFixed(1)}…${r.sigma.max.toFixed(1)} kPa (${r.sigma.reparto})</summary>
     <table><tr><th></th><th>H</th><th>V</th></tr>${fz}</table>
     <div style="margin-top:3px">ΣM estabilizadores ${r.Mest.toFixed(2)} · ΣM de vuelco ${r.Mdes.toFixed(2)} kN·m/m · e = ${n3(r.e)} m</div></details>
-    ${r.avisos.map((a) => `<div style="color:var(--oro)">· ${a}</div>`).join("")}`;
+    ${r.avisos.length ? `<details style="margin-top:4px"><summary>notas (${r.avisos.length})</summary>${r.avisos.map((a) => `<div style="color:var(--oro)">· ${a}</div>`).join("")}</details>` : ""}`;
 }
 
 /** El muro del modelo calculado EXACTAMENTE como GEO5 Cantilever Wall (muroGeo5): cara virtual con el α de la bisección
@@ -64,6 +65,11 @@ function bloqueGeo5(def: SlopeDef, w: Wall, r: VerifResult): string {
   const g = muroGeo5({ k, h, xx: pm.zapata, v1: pm.dedo, v2: pm.talon, s1: s1 > 0 ? s1 : 0, gammaC: hormigon?.gamma ?? 24 },
     [{ nombre: rel.name, gamma: rel.gamma, phi: rel.phi, deltaPared: dp(rel), hasta: r.geom.Htot }, { nombre: bas.name, gamma: bas.gamma, phi: bas.phi, deltaPared: dp(bas), hasta: Infinity }],
     { kh, kv });
+  // el corte del muro con la cuña y las fuerzas (el mismo dibujo del módulo «Muro cantilever»), arriba del panel
+  const cv = $<HTMLCanvasElement>("g5Cv");
+  if (cv) dibujarMuro(cv, { ...MURO_PORTOVIEJO, k, h, xx: pm.zapata, v1: pm.dedo, v2: pm.talon, s1: s1 > 0 ? s1 : 0, dk: 0, z1: r.geom.Htot, kh, kv }, g);
+  const sv = $<HTMLDivElement>("g5Res");
+  if (sv) sv.innerHTML = `FS vuelco <b>${g.fsVuelco.toFixed(2)}</b> · FS deslizamiento <b>${g.fsDeslizamiento.toFixed(2)}</b> <span style="color:var(--mut)">(como GEO5${kh ? `, sismo k<sub>h</sub> ${kh}` : ""})</span>`;
   const f2 = (v: number) => v.toFixed(2), f6 = (v: number) => v.toPrecision(10);
   const filas = g.fuerzas.map((q) => `<tr><td>${q.nombre}</td><td style="text-align:right">${f2(-q.Fx)}</td><td style="text-align:right">${f2(q.Fz)}</td><td style="text-align:right">${f2(q.x)}</td><td style="text-align:right">${f2(-q.z)}</td></tr>`).join("");
   return `<div style="margin:4px 0">α cara virtual = <b>${alfaBiseccionGeo5(45 - rel.phi / 2).toFixed(12)}°</b> (bisección de GEO5) · B = ${g.B.toFixed(3)} m · k = ${k.toFixed(4)} m</div>

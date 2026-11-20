@@ -76,8 +76,12 @@ function calcular() {
 
 /** Corte del muro a escala (x desde la punta de la puntera, y desde el fondo de la zapata): hormigón, cuña, terreno,
  *  cotas editables y las fuerzas de la tabla como flechas con su valor (el dibujo de GEO5). */
-function dibujar(r: ResultadoG5) {
-  const cv = $<HTMLCanvasElement>("cwCv"), c = cv.getContext("2d")!, W = cv.width, H = cv.height, d = datos;
+function dibujar(r: ResultadoG5) { cotas = dibujarMuro($<HTMLCanvasElement>("cwCv"), datos, r, true); }
+
+/** El dibujo solo (sin estado): lo usa este módulo y el panel del muro de la página del talud (panel.ts).
+ *  Devuelve dónde quedaron las cotas (para editarlas con clic). `ayuda` escribe la línea de arriba. */
+export function dibujarMuro(cv: HTMLCanvasElement, d: DatosMuro, r: ResultadoG5, ayuda = false): typeof cotas {
+  const c = cv.getContext("2d")!, W = cv.width, H = cv.height, cotas: { x: number; y: number; w: number; h: number; k: keyof DatosMuro }[] = [];
   c.fillStyle = "#fff"; c.fillRect(0, 0, W, H);
   const kb = d.k + (d.s1 > 0 ? d.h / d.s1 : 0), xt = d.v1 + kb, B = r.B, Ht = d.xx + d.h, dk = d.dk > 0 ? d.dk : 0;
   const xmin = -1.2, xmax = B + 1.4, ymin = -dk - 0.9, ymax = Ht + 0.9, sc = Math.min((W - 40) / (xmax - xmin), (H - 40) / (ymax - ymin));
@@ -94,7 +98,6 @@ function dibujar(r: ResultadoG5) {
   const zap = dk > 0 ? [[0, 0], [B - d.dw, 0], [B - d.dw, -dk], [B, -dk], [B, d.xx], [0, d.xx]] : [[0, 0], [B, 0], [B, d.xx], [0, d.xx]];
   poli(zap, "#d4d4d4", "#7b2d7b", 2); poli([[d.v1, d.xx], [xt, d.xx], [xt, Ht], [xt - d.k, Ht]], "#d4d4d4", "#7b2d7b", 2);
   // cotas editables
-  cotas = [];
   const cota = (x1: number, y1: number, x2: number, y2: number, off: number, k: keyof DatosMuro, valor: number) => {
     const hz = Math.abs(y2 - y1) < 1e-9, ox = hz ? 0 : off, oy = hz ? off : 0;
     const a = [X(x1 + ox), Y(y1 + oy)], b = [X(x2 + ox), Y(y2 + oy)];
@@ -125,8 +128,9 @@ function dibujar(r: ResultadoG5) {
     // GEO5 dibuja la resultante de cada fuerza; la del empuje va hacia el muro (Fx hacia −x) y hacia abajo
     flecha(q.x, q.z, -q.Fx, -q.Fz, Math.hypot(q.Fx, q.Fz).toFixed(2), col);
   }
-  c.fillStyle = "#555"; c.font = "12px Segoe UI, Arial"; c.textAlign = "left"; c.textBaseline = "top";
-  c.fillText("clic en una cota amarilla para cambiarla · azul: peso y empuje · rojo: sismo (k_h)", 10, 6);
+  if (ayuda) { c.fillStyle = "#555"; c.font = "12px Segoe UI, Arial"; c.textAlign = "left"; c.textBaseline = "top";
+    c.fillText("clic en una cota amarilla para cambiarla · azul: peso y empuje · rojo: sismo (k_h)", 10, 6); }
+  return cotas;
 }
 
 /** Clic en una cota → un campo encima del número; Enter (o salir) la cambia y recalcula. */
