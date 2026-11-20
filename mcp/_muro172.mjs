@@ -10,4 +10,5 @@ const L = async (n, a = {}, largo = 4000) => { const r = await c.callTool({ name
   if (im) writeFileSync(`${OUT}/geo_${a.tag || n}.png`, Buffer.from(im.data, "base64"));
   console.log(`[${n}${a.id ? " " + a.id : ""}]`, r.isError ? "ERROR" : "ok", tx ? tx.text.slice(0, largo) : "(imagen)"); return r; };
 for (const [n, a, largo] of pasos) await L(n, a || {}, largo);
+if (process.env.QUEDA_MIN) { console.log("ventana abierta", process.env.QUEDA_MIN, "min"); await new Promise((r) => setTimeout(r, Number(process.env.QUEDA_MIN) * 60000)); }          // QUEDA_MIN: deja el navegador a la vista
 await c.close();

@@ -40,6 +40,8 @@ export type MeshStats = { nodes: number; corners: number; elements: number; minA
  *  idénticas) y el resultado deja de ser reproducible. */
 /** E del cuerpo rígido relativo al suelo más rígido (GEO5 lo trata como rígido: sin flexión). */
 export const E_RIGIDO_REL = 1e6;
+/** «Rigid body» de GEO5: el solver le pone E = Eur = 1e9 kPa y ν = 0.2 (Geo5Solver_decomp.c:73262), igual que RIGID_E/RIGID_NU de solver.ts. */
+export const E_RIGIDO_GEO5 = 1e9, NU_RIGIDO_GEO5 = 0.2;
 export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: number } = {}): { model: GeoModel; stats: MeshStats } {
   const h = def.h;
   // el contorno DERIVA de las interfaces: si un slider o el ratón cambió el terreno, se rehace aquí
@@ -364,7 +366,9 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     // Aquí es una región elástica; para que no se flecte se le sube E hasta E_REL veces el del suelo más rígido
     // (medido el 5-oct-2026: con E = 21.5 GPa el fuste de 3.5 m del muro de lindero se flecta ~3 mm y la coronación da d_x 11.5 mm; con
     // el rígido da 8.6 contra 8.2 de GEO5).
-    MAT: def.soils.map((s) => [s.rigido ? Math.max(s.E, E_RIGIDO_REL * Math.max(...def.soils.filter((q) => !q.rigido).map((q) => q.E), 0)) : s.E, s.nu, s.phi, s.c, s.gamma, s.psi]), recomputeGravity: true, loads, stages,
+    // 20-nov-2026: SIEMPRE el «rigidbody» del solver de GEO5 (E = 1e9 kPa, ν = 0.2, Geo5Solver_decomp.c:73262), no «E del muro» ni
+    // «1e6 × el suelo más rígido» (daba E = 2.5e10 kPa, «25000000 MPa» en el rótulo). Antes solo se usaba en el modo GEO5 (bit 32).
+    MAT: def.soils.map((s) => [s.rigido ? E_RIGIDO_GEO5 : s.E, s.rigido ? NU_RIGIDO_GEO5 : s.nu, s.phi, s.c, s.gamma, s.psi]), recomputeGravity: true, loads, stages,
     MATNAMES: def.soils.map((s) => s.name),
     RIGID: def.soils.map((s) => !!s.rigido),
     ...(def.poros?.length ? { agua: { gwt: [], poros: def.poros.map((q) => ({ pts: q.pts as [number, number][], u: q.u })), gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : def.gwt?.length ? { agua: { gwt: def.gwt, gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : def.ru !== undefined ? { agua: { gwt: [], ru: def.ru, terreno: spanInterface(def.interfaces[0], def.margins!.xmin, def.margins!.xmax).map((q) => [q[0], q[1]] as [number, number]), gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : {}),

@@ -81,6 +81,9 @@
     .mats { font-size: 12px; color: var(--mut); margin-top: 8px; line-height: 1.5; }
     .mats b { color: var(--txt); }
     footer { padding: 8px 18px; color: #7d7259; font-size: 11px; border-top: 1px solid #2a2316; }
+    main:has(#murowrap:not([hidden])) { grid-template-columns: 300px minmax(0, 1fr) 340px; }          /* con muro: tercera columna a la derecha de la gráfica */
+    #ladoMuro:not(:has(#murowrap:not([hidden]))) { display: none; }
+    #ladoMuro h2:first-of-type { margin-top: 0 !important; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
     #zapsec { grid-column: 1 / -1; }
     .zlay { display: grid; grid-template-columns: 330px 1fr; gap: 14px; }
@@ -134,60 +137,6 @@
       <label><input type="checkbox" id="auto" checked style="width:auto" /> recalcular al mover</label>
       <button class="run" id="run">⟳ Recalcular todas las etapas</button>
       <div class="fs" id="fs"></div>
-      <div id="murowrap" hidden>
-        <h2 style="margin-top:14px">Muro de contención <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(GEO5: Cantilever Wall)</span></h2>
-        <div class="row">
-          <div><label>Teoría del empuje</label><select id="wTeoria" title="las que calcula GEO5 (extraído de CantileverWall_5.dll)"><option value="coulomb">Coulomb (activo)</option><option value="mazindrani">Mazindrani (Rankine con talud)</option><option value="reposo">en reposo · Jáky K0</option></select></div>
-          <div><label>δ trasdós [°]</label><input id="wDelta" type="text" value="auto" title="fricción en el plano ficticio del talón; «auto» = φ del relleno (suelo contra suelo)" /></div>
-        </div>
-        <div class="row">
-          <div><label>β relleno [°]</label><input id="wBeta" type="number" value="0" step="1" /></div>
-          <div><label>R_d terreno [kPa]</label><input id="wRd" type="number" value="0" step="25" title="capacidad portante de cálculo del apoyo; 0 = no se verifica (aquí no se calcula)" /></div>
-        </div>
-        <div class="row">
-          <div><label>SF vuelco</label><input id="wSfV" type="number" value="1.5" step="0.1" /></div>
-          <div><label>SF deslizamiento</label><input id="wSfS" type="number" value="1.5" step="0.1" /></div>
-        </div>
-        <label><input type="checkbox" id="wPasivo" style="width:auto" /> contar el empuje pasivo delante de la puntera</label>
-        <div id="wout" class="mats"></div>
-        <h2 style="margin-top:12px;font-size:12px">Como GEO5 Cantilever Wall <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(cara virtual, Mononobe-Okabe, bit a bit con el binario)</span></h2>
-        <div class="row">
-          <div><label>k_h</label><input id="g5Kh" type="number" value="0" step="0.01" title="coeficiente sísmico horizontal; NEC-SE-GC: 0.6·Z·Fa (Manabí 0.336)" /></div>
-          <div><label>k_v</label><input id="g5Kv" type="number" value="0" step="0.01" title="coeficiente sísmico vertical; positivo = hacia abajo, levanta el muro (GEO5)" /></div>
-        </div>
-        <div class="row">
-          <div><label>talud cara vista s1 (1:s1)</label><input id="g5S1" type="number" value="0" step="0.5" title="0 = fuste vertical; el espesor del fuste del modelo es el de ABAJO, arriba queda fuste − h/s1" /></div>
-          <div><label>δ pared [°]</label><input id="g5Dp" type="text" value="auto" title="fricción suelo-hormigón en la cara del talón; «auto» = 2/3·φ" /></div>
-        </div>
-        <div class="row">
-          <div><label>k coronación [m]</label><input id="g5K" type="text" value="auto" title="espesor del fuste ARRIBA, como lo pide GEO5 (Geometry k); «auto» = fuste del modelo − h/s1" /></div>
-        </div>
-        <div id="g5out" class="mats"></div>
-        <div class="row">
-          <div><label>malla del sólido [m]</label><input id="wMs" type="number" value="0.2" step="0.05" min="0.05" title="tamaño de elemento del hexaedro; el fuste y la zapata tienen que caber en un número entero de elementos" /></div>
-          <div><label>longitud del muro [m]</label><input id="wL" type="number" value="1" step="0.5" min="0.5" title="longitud en la dirección y; 1 m = el muro por metro lineal, que es lo que calcula la verificación 2D" /></div>
-        </div>
-        <button class="run" id="wSolido" style="margin-top:6px" title="el mismo muro mallado con SÓLIDOS H8 (el motor de Hekatan Struct, verificado nudo a nudo contra SAP2000; sus modos incompatibles = C3D8I de Abaqus)">▣ resolver el muro en sólidos H8 (3D)</button>
-        <button class="run" id="wStruct" style="margin-top:6px" title="abre ESTE muro en Hekatan Struct (membrana · cáscara · sólido, verificado contra SAP2000): misma geometría, el relleno (γ, φ, δ) y el terreno de delante, con suelo lateral (muelles de Barkan y Terzaghi)">🏗 abrir este muro en Hekatan Struct</button>
-        <div id="wsolout" class="mats"></div>
-        <h2 style="margin-top:12px;font-size:12px">Muro en 2D <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(una sola área · deformación plana · Q4 = Plane de SAP2000)</span></h2>
-        <div class="row">
-          <div><label>corona [m]</label><input id="w2Corona" type="number" value="0.25" step="0.05" min="0.05" title="espesor del fuste en la coronación: el trasdós es vertical y la cara vista se inclina" /></div>
-          <div><label>malla [m]</label><input id="w2Ms" type="number" value="0.1" step="0.025" min="0.025" /></div>
-        </div>
-        <div class="row">
-          <div><label>dentellón ancho [m]</label><input id="w2Bd" type="number" value="0.35" step="0.05" min="0" title="0 = sin dentellón (entonces el deslizamiento lo toma toda la base)" /></div>
-          <div><label>dentellón prof. [m]</label><input id="w2Hd" type="number" value="0.4" step="0.05" min="0" /></div>
-        </div>
-        <div class="row">
-          <div><label>dentellón x [m]</label><input id="w2Xd" type="text" value="auto" title="eje del dentellón; «auto» = bajo el fuste" /></div>
-          <div><label>k_s base [kN/m³]</label><input id="w2Ks" type="number" value="30000" step="5000" /></div>
-        </div>
-        <label><input type="checkbox" id="w2Inc" checked style="width:auto" /> modos incompatibles (Plane de SAP2000 por defecto)</label>
-        <button class="run" id="w2Run" style="margin-top:6px" title="la sección del muro como UNA sola área mallada con Q4 en deformación plana; empuje, rellenos y Winkler iguales a los del sólido">▭ resolver el muro en 2D (área)</button>
-        <canvas id="w2Cv" width="340" height="460" style="width:100%;margin-top:6px;background:#0b1220;border-radius:6px;display:none"></canvas>
-        <div id="w2out" class="mats"></div>
-      </div>
       <div id="dinwrap">
         <h2 style="margin-top:14px">Dinámico <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(sismo en la base · Newmark de GEO5)</span></h2>
         <div id="dinLineal" class="mats" style="color:var(--oro)">El dinámico es LINEAL: el suelo se trata como elástico (sin plasticidad) y el muro va pegado al terreno (sin deslizamiento ni despegue).</div>
@@ -311,6 +260,62 @@
       </div>
       <div id="log">Pulsa «Calcular FS». El cálculo corre en tu navegador (Web Worker); el log es el mismo que imprime el driver de Hekatan Python y coincide iteración a iteración con GEO5.</div>
     </section>
+    <aside class="panel" id="ladoMuro">          <!-- 20-nov-2026: el muro de contención AL LADO de la gráfica (antes al fondo de la barra izquierda) -->
+      <div id="murowrap" hidden>
+        <h2 style="margin-top:14px">Muro de contención <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(GEO5: Cantilever Wall)</span></h2>
+        <div class="row">
+          <div><label>Teoría del empuje</label><select id="wTeoria" title="las que calcula GEO5 (extraído de CantileverWall_5.dll)"><option value="coulomb">Coulomb (activo)</option><option value="mazindrani">Mazindrani (Rankine con talud)</option><option value="reposo">en reposo · Jáky K0</option></select></div>
+          <div><label>δ trasdós [°]</label><input id="wDelta" type="text" value="auto" title="fricción en el plano ficticio del talón; «auto» = φ del relleno (suelo contra suelo)" /></div>
+        </div>
+        <div class="row">
+          <div><label>β relleno [°]</label><input id="wBeta" type="number" value="0" step="1" /></div>
+          <div><label>R_d terreno [kPa]</label><input id="wRd" type="number" value="0" step="25" title="capacidad portante de cálculo del apoyo; 0 = no se verifica (aquí no se calcula)" /></div>
+        </div>
+        <div class="row">
+          <div><label>SF vuelco</label><input id="wSfV" type="number" value="1.5" step="0.1" /></div>
+          <div><label>SF deslizamiento</label><input id="wSfS" type="number" value="1.5" step="0.1" /></div>
+        </div>
+        <label><input type="checkbox" id="wPasivo" style="width:auto" /> contar el empuje pasivo delante de la puntera</label>
+        <div id="wout" class="mats"></div>
+        <h2 style="margin-top:12px;font-size:12px">Como GEO5 Cantilever Wall <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(cara virtual, Mononobe-Okabe, bit a bit con el binario)</span></h2>
+        <div class="row">
+          <div><label>k_h</label><input id="g5Kh" type="number" value="0" step="0.01" title="coeficiente sísmico horizontal; NEC-SE-GC: 0.6·Z·Fa (Manabí 0.336)" /></div>
+          <div><label>k_v</label><input id="g5Kv" type="number" value="0" step="0.01" title="coeficiente sísmico vertical; positivo = hacia abajo, levanta el muro (GEO5)" /></div>
+        </div>
+        <div class="row">
+          <div><label>talud cara vista s1 (1:s1)</label><input id="g5S1" type="number" value="0" step="0.5" title="0 = fuste vertical; el espesor del fuste del modelo es el de ABAJO, arriba queda fuste − h/s1" /></div>
+          <div><label>δ pared [°]</label><input id="g5Dp" type="text" value="auto" title="fricción suelo-hormigón en la cara del talón; «auto» = 2/3·φ" /></div>
+        </div>
+        <div class="row">
+          <div><label>k coronación [m]</label><input id="g5K" type="text" value="auto" title="espesor del fuste ARRIBA, como lo pide GEO5 (Geometry k); «auto» = fuste del modelo − h/s1" /></div>
+        </div>
+        <div id="g5out" class="mats"></div>
+        <div class="row">
+          <div><label>malla del sólido [m]</label><input id="wMs" type="number" value="0.2" step="0.05" min="0.05" title="tamaño de elemento del hexaedro; el fuste y la zapata tienen que caber en un número entero de elementos" /></div>
+          <div><label>longitud del muro [m]</label><input id="wL" type="number" value="1" step="0.5" min="0.5" title="longitud en la dirección y; 1 m = el muro por metro lineal, que es lo que calcula la verificación 2D" /></div>
+        </div>
+        <button class="run" id="wSolido" style="margin-top:6px" title="el mismo muro mallado con SÓLIDOS H8 (el motor de Hekatan Struct, verificado nudo a nudo contra SAP2000; sus modos incompatibles = C3D8I de Abaqus)">▣ resolver el muro en sólidos H8 (3D)</button>
+        <button class="run" id="wStruct" style="margin-top:6px" title="abre ESTE muro en Hekatan Struct (membrana · cáscara · sólido, verificado contra SAP2000): misma geometría, el relleno (γ, φ, δ) y el terreno de delante, con suelo lateral (muelles de Barkan y Terzaghi)">🏗 abrir este muro en Hekatan Struct</button>
+        <div id="wsolout" class="mats"></div>
+        <h2 style="margin-top:12px;font-size:12px">Muro en 2D <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(una sola área · deformación plana · Q4 = Plane de SAP2000)</span></h2>
+        <div class="row">
+          <div><label>corona [m]</label><input id="w2Corona" type="number" value="0.25" step="0.05" min="0.05" title="espesor del fuste en la coronación: el trasdós es vertical y la cara vista se inclina" /></div>
+          <div><label>malla [m]</label><input id="w2Ms" type="number" value="0.1" step="0.025" min="0.025" /></div>
+        </div>
+        <div class="row">
+          <div><label>dentellón ancho [m]</label><input id="w2Bd" type="number" value="0.35" step="0.05" min="0" title="0 = sin dentellón (entonces el deslizamiento lo toma toda la base)" /></div>
+          <div><label>dentellón prof. [m]</label><input id="w2Hd" type="number" value="0.4" step="0.05" min="0" /></div>
+        </div>
+        <div class="row">
+          <div><label>dentellón x [m]</label><input id="w2Xd" type="text" value="auto" title="eje del dentellón; «auto» = bajo el fuste" /></div>
+          <div><label>k_s base [kN/m³]</label><input id="w2Ks" type="number" value="30000" step="5000" /></div>
+        </div>
+        <label><input type="checkbox" id="w2Inc" checked style="width:auto" /> modos incompatibles (Plane de SAP2000 por defecto)</label>
+        <button class="run" id="w2Run" style="margin-top:6px" title="la sección del muro como UNA sola área mallada con Q4 en deformación plana; empuje, rellenos y Winkler iguales a los del sólido">▭ resolver el muro en 2D (área)</button>
+        <canvas id="w2Cv" width="340" height="460" style="width:100%;margin-top:6px;background:#0b1220;border-radius:6px;display:none"></canvas>
+        <div id="w2out" class="mats"></div>
+      </div>
+    </aside>
     <section class="panel" id="zapsec" hidden>
       <div class="zlay">
         <div>

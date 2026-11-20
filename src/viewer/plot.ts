@@ -219,10 +219,10 @@ export class SlopePlot {
       const nm = this.m.MATNAMES?.[mi] ?? `SUELO ${mi + 1}`;
       // capas finas: cajas alternadas en x para que no se pisen
       if (this.m.RIGID?.[mi]) {   // MURO: φ y c no significan nada, y el rótulo iría encima del propio muro → a su izquierda
-        box(cxm - 4.5, cym, [nm + " (rígido)", `E=${(MAT[mi][0] / 1000).toFixed(0)} MPa · γ=${MAT[mi][4].toFixed(0)} kN/m³`, "sin reducción SRM"]);
+        box(cxm - 4.5, cym, [nm + " · Rigid body (GEO5)", `E=${MAT[mi][0].toExponential(0).replace("e+", "·10^")} kPa · ν=${MAT[mi][1]} · γ=${+MAT[mi][4].toFixed(2)} kN/m³`, "no se deforma ni se reduce en la SRM"]);
         continue;
       }
-      box(cxm + [0, -8, 8, -16, 16][mi % 5], cym - (mi === 1 ? 2.5 : 0), [nm, `φ=${MAT[mi][2].toFixed(1)}°  c=${MAT[mi][3].toFixed(0)} kPa`, `γ=${MAT[mi][4].toFixed(0)} kN/m³`]);
+      box(cxm + [0, -8, 8, -16, 16][mi % 5], cym - (mi === 1 ? 2.5 : 0), [nm, `φ=${+MAT[mi][2].toFixed(2)}°  c=${+MAT[mi][3].toFixed(2)} kPa`, `γ=${+MAT[mi][4].toFixed(2)} kN/m³`]);          // sin redondear a entero: γ 18.5 salía «19» y φ 29.97 «30.0»
     }
     // cargas de la etapa
     const arrow = (xa: number, za: number, xb: number, zb: number, lw: number) => {
