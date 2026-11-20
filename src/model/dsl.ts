@@ -299,7 +299,7 @@ export function outlineFromInterfaces(def: SlopeDef): Pt[] {
 
 /** Texto .hgeo a partir de la definición (para que las herramientas de dibujo escriban el DSL). */
 export function serializeHgeo(def: SlopeDef): string {
-  const r = (v: number) => (Math.round(v * 1000) / 1000).toString();
+  const r = (v: number) => (Math.round(v * 1e10) / 1e10).toString();          // 20-nov-2026: 10 decimales (antes 3): un valor escrito a mano (fuste 0.4000288517) no se pierde al reescribir el .hgeo
   const p = (q: Pt) => `${r(q[0])},${r(q[1])}`;
   const L: string[] = [...def.comments];
   if (def.margins) L.push(`margenes xmin=${r(def.margins.xmin)} xmax=${r(def.margins.xmax)} fondo=${r(def.margins.bottom)}`);

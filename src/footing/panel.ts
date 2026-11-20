@@ -186,6 +186,6 @@ export function montarZapata(volver: () => void): void {
 /** Muestra (u oculta) el módulo de cimentaciones en lugar del de taludes/muros. */
 export function mostrarZapata(on: boolean): void {
   $<HTMLElement>("zapsec").hidden = !on;
-  Array.from(document.querySelectorAll<HTMLElement>("main > aside.panel, main > section.panel:not(#zapsec)")).forEach((el) => { el.hidden = on; });
+  Array.from(document.querySelectorAll<HTMLElement>("main > aside.panel, main > section.panel:not(#zapsec):not(#murosec)")).forEach((el) => { el.hidden = on; });
   if (on) { construir(); calcular(); }
 }

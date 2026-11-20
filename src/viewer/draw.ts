@@ -56,7 +56,7 @@ export class DrawTools {
     canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); this.finish(); });
     canvas.addEventListener("mouseleave", () => { this.mouse = null; this.render(); });
     window.addEventListener("keydown", (e) => {
-      if ((e.target as HTMLElement)?.tagName === "TEXTAREA" || (e.target as HTMLElement)?.tagName === "INPUT") return;
+      if ((e.target as HTMLElement)?.tagName === "TEXTAREA" || (e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.isContentEditable) return;
       if (e.key === "Shift") { this.shift = true; this.render(); }
       if (e.key === "Enter") this.finish();
       if (e.key === "Escape") this.cancel();

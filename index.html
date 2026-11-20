@@ -24,6 +24,7 @@
     .sl { display: grid; grid-template-columns: 78px 1fr 58px; gap: 6px; align-items: center; margin: 3px 0; font-size: 12px; }
     .sl input[type=range] { width: 100%; padding: 0; accent-color: var(--oro); }
     .sl .v { text-align: right; font: 12px Consolas, monospace; color: var(--txt); }
+    .sl .v { cursor: text; border-bottom: 1px dotted var(--mut); } .sl .v[contenteditable="true"] { outline: 1px solid var(--oro); background: #0006; }          /* el número se edita a mano */
     .sl .n { color: var(--mut); }
     textarea#hgeo { width: 100%; font: 11.5px Consolas, monospace; background: #0b0906; color: #f3ead0; border: 1px solid #4a3f28; border-radius: 6px; padding: 6px; resize: vertical; white-space: pre; overflow-x: auto; margin-top: 6px; }
     .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 12px; }
@@ -85,8 +86,10 @@
     #ladoMuro:not(:has(#murowrap:not([hidden]))) { display: none; }
     #ladoMuro h2:first-of-type { margin-top: 0 !important; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-    #zapsec { grid-column: 1 / -1; }
+    #zapsec, #murosec { grid-column: 1 / -1; }
+    #murosec .zlay { grid-template-columns: 360px 1fr; }
     .zlay { display: grid; grid-template-columns: 330px 1fr; gap: 14px; }
+    .cwt { border-collapse: collapse; width: 100%; } .cwt th, .cwt td { padding: 2px 6px; text-align: right; font: 12.5px Consolas, monospace; } .cwt td:nth-child(2), .cwt th:nth-child(2) { text-align: left; font-family: Segoe UI, Arial; } .cwt tr:nth-child(even) td { background: #ffffff0a; }
     .zg { margin-bottom: 8px; } .zt { color: var(--oro); text-transform: uppercase; letter-spacing: 1px; font-size: 11.5px; margin: 6px 0 3px; }
     .zc { display: grid; grid-template-columns: 1fr 92px 50px; gap: 6px; align-items: center; margin: 2px 0; font-size: 12.5px; color: var(--mut); }
     .zc input { padding: 3px 6px; text-align: right; font: 12.5px Consolas, monospace; } .zc i { font-style: normal; font-size: 11px; }
@@ -119,7 +122,7 @@
         <input type="file" id="fFile" accept=".hgeo,.txt" hidden>
       </div>
       <label>Ejemplo</label>
-      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option><option value="manabi">Muro de Manabí · con Vs para el dinámico</option><option value="talud_gwt">Talud con agua (freático GWT o coeficiente Ru) · GEO5 FS 1.98 → 1.76</option><option value="talud_poros">Talud con presión de poros dada (isolíneas) · = freático GWT: GEO5 FS 1.76 / 1.74</option><option value="talud_ru">Talud con coeficiente Ru=0.3 · GEO5 FS 1.98 → 1.42</option><option value="manabi_muro">Muro de Manabí paramétrico · verificación GEO5 + abrir en Hekatan Struct</option><option value="manabi_etapas">Muro de Manabí por etapas · Mohr-Coulomb, 7 etapas (= GeoFEM)</option><option value="manabi_etapas_e">Muro de Manabí por etapas · E de las correlaciones del SPT (13 / 12.4 MPa)</option><option value="zapata_guerra">Cimentaciones · zapata aislada de Guerra (GEO5 Spread Footing)</option></select>
+      <select id="model"><option value="models/demo04.json">Demo04 GEO5 · malla exacta de GEO5 (referencia)</option><option value="hgeo">Editor .hgeo · dibuja tu talud (mallador propio)</option><option value="muro">Muro cantilever · Rigid body + verificación GEO5 + sólidos H8</option><option value="manabi">Muro de Manabí · con Vs para el dinámico</option><option value="talud_gwt">Talud con agua (freático GWT o coeficiente Ru) · GEO5 FS 1.98 → 1.76</option><option value="talud_poros">Talud con presión de poros dada (isolíneas) · = freático GWT: GEO5 FS 1.76 / 1.74</option><option value="talud_ru">Talud con coeficiente Ru=0.3 · GEO5 FS 1.98 → 1.42</option><option value="manabi_muro">Muro de Manabí paramétrico · verificación GEO5 + abrir en Hekatan Struct</option><option value="manabi_etapas">Muro de Manabí por etapas · Mohr-Coulomb, 7 etapas (= GeoFEM)</option><option value="manabi_etapas_e">Muro de Manabí por etapas · E de las correlaciones del SPT (13 / 12.4 MPa)</option><option value="muro_geo5">Muro cantilever (GEO5) · solo el módulo: geometría, sismo y verificación</option><option value="zapata_guerra">Cimentaciones · zapata aislada de Guerra (GEO5 Spread Footing)</option></select>
       <div id="editor" hidden>
         <textarea id="hgeo" spellcheck="false" rows="11"></textarea>
         <div class="row"><button class="run" id="apply" style="margin-top:6px">✎ Aplicar (Ctrl+Enter)</button></div>
@@ -316,6 +319,20 @@
         <div id="w2out" class="mats"></div>
       </div>
     </aside>
+    <section class="panel" id="murosec" hidden>
+      <div class="zlay">
+        <div>
+          <h2>Muro cantilever <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(GEO5: Cantilever Wall)</span></h2>
+          <div class="row" style="gap:6px;margin-bottom:6px"><button id="cwVolver" class="tb">← Taludes y muros</button><button id="cwReset" class="tb">↺ Portoviejo (ejemplo)</button></div>
+          <div class="mats" style="margin:0 0 6px">Ejemplo: el muro de Portoviejo (Manabí) de GEO5 2024 (<i>muro_portoviejo_01.guz</i>): GEO5 da vuelco <b>2.71</b> y deslizamiento <b>1.20</b>. Coulomb + Mononobe-Okabe con el algoritmo del binario de GEO5 (bisección de la cara virtual, cuña, capas), igual a GEO5 a 1e-14.</div>
+          <div id="cwCampos"></div>
+        </div>
+        <div>
+          <canvas id="cwCv" width="900" height="620" style="display:block;width:auto;height:auto;max-width:100%;max-height:calc(100vh - 330px);margin:0 auto;border-radius:6px;cursor:pointer"></canvas>
+          <div id="cwOut" class="mats" style="margin-top:6px"></div>
+        </div>
+      </div>
+    </section>
     <section class="panel" id="zapsec" hidden>
       <div class="zlay">
         <div>

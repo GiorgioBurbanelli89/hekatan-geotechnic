@@ -25,6 +25,7 @@ import { actualizarMuro, engancharMuro } from "./wall/panel";
 import { engancharDinamico, actualizarDinamico, dinActivo, dibujar as dibujarDinamico } from "./dyn/panel";
 import { montarImportadorGeo5 } from "./import_geo5/visor";
 import { montarZapata, mostrarZapata } from "./footing/panel";
+import { montarMuro, mostrarMuro } from "./wall/cantilever";
 import { montarTipos, elegir as elegirTipo, tipoFem, tipoLemOpts } from "./tipos/panel";
 
 type Stage = { name: string; fs: number; alcanzada?: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean; u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number };
@@ -59,6 +60,27 @@ const pasos = new Pasos(document.querySelector("aside.panel")!, {
 type Slider = { id: string; label: string; min: number; max: number; step: number; value: number };
 let sliders: Slider[] = [];
 const sliderEl: Record<string, HTMLInputElement> = {};
+// 20-nov-2026 (Jorge: «las cotas y valores deben ser editables»): el número de CADA deslizador se edita a mano. Clic en el
+// número → se escribe el valor exacto → Enter (o salir del campo). El deslizador toma ESE valor sin redondearlo a su paso
+// (step = any) y, si hace falta, ensancha su rango; luego avisa con input + change, igual que si se hubiera arrastrado.
+document.addEventListener("click", (ev) => {
+  const sp = (ev.target as HTMLElement)?.closest?.(".sl .v") as HTMLSpanElement | null;
+  if (!sp || sp.isContentEditable) return;
+  const rng = sp.previousElementSibling as HTMLInputElement | null; if (!rng || rng.type !== "range") return;
+  const antes = sp.textContent ?? ""; sp.contentEditable = "true"; sp.focus();
+  const sel = getSelection(); const rg = document.createRange(); rg.selectNodeContents(sp); sel?.removeAllRanges(); sel?.addRange(rg);
+  const fin = (ok: boolean) => {
+    sp.removeEventListener("keydown", tecla); sp.removeEventListener("blur", sale); sp.contentEditable = "false";
+    const v = parseFloat((sp.textContent ?? "").replace(",", ".").trim());
+    if (!ok || !Number.isFinite(v)) { sp.textContent = antes; return; }
+    rng.step = "any"; if (v < parseFloat(rng.min)) rng.min = String(v); if (v > parseFloat(rng.max)) rng.max = String(v);
+    rng.value = String(v); sp.textContent = String(v);
+    rng.dispatchEvent(new Event("input", { bubbles: true })); rng.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const tecla = (e: KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); fin(true); } else if (e.key === "Escape") { e.preventDefault(); fin(false); } };
+  const sale = () => fin(true);
+  sp.addEventListener("keydown", tecla); sp.addEventListener("blur", sale);
+});
 const Q0 = 35, A0 = 72;   // sobrecarga y ancla de la Demo04 (kPa, kN): en la fixture las cargas nodales se escalan
 
 function buildSliders(m: GeoModel) {
@@ -781,7 +803,7 @@ cmdIn.addEventListener("keydown", (e) => {
   else if (e.key === "F3" || e.key === "F8" || e.key === "F9") { e.preventDefault(); draw.command(e.key.toLowerCase()); }
 });
 window.addEventListener("keydown", (e) => {   // entrada dinámica: si escribes con el ratón sobre el lienzo, va a la línea de órdenes
-  const tag = (e.target as HTMLElement)?.tagName; if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  const tag = (e.target as HTMLElement)?.tagName; if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target as HTMLElement)?.isContentEditable) return;          // un número de deslizador en edición no va a la línea de órdenes
   if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) { cmdIn.focus(); }
 });
 draw.onChange = (d) => {
@@ -796,10 +818,12 @@ selN.addEventListener("change", () => { const n = parseInt(selN.value); const fa
 const EJEMPLOS_HGEO: Record<string, string> = { manabi_etapas: MANABI_ETAPAS_HGEO, manabi_etapas_e: MANABI_ETAPAS_E_HGEO, manabi_muro: MANABI_MURO_HGEO, talud_gwt: TALUD_GWT_HGEO, talud_ru: TALUD_RU_HGEO, talud_poros: TALUD_POROS_HGEO };
 montarTipos({ abrir: (t) => { mostrarZapata(false); selModel.value = "hgeo"; edText.value = t; applyHgeo(); } });   // lista «Tipo de talud» (plantillas)
 montarZapata(() => { selModel.value = "models/demo04.json"; selModel.dispatchEvent(new Event("change")); });
+montarMuro(() => { selModel.value = "models/demo04.json"; selModel.dispatchEvent(new Event("change")); });
 selModel.addEventListener("change", () => {
   // CIMENTACIONES: otro módulo dentro de la misma app (GEO5 Spread Footing); no toca el talud
-  if (selModel.value === "zapata_guerra") { mostrarZapata(true); return; }
-  mostrarZapata(false);
+  if (selModel.value === "zapata_guerra") { mostrarMuro(false); mostrarZapata(true); return; }
+  if (selModel.value === "muro_geo5") { mostrarZapata(false); mostrarMuro(true); return; }          // el Cantilever Wall de GEO5 solo (sin el talud)
+  mostrarZapata(false); mostrarMuro(false);
   if (selModel.value === "muro") { edWrap.hidden = false; edText.value = MURO_HGEO; applyHgeo(); return; }   // ejemplo del muro, de un clic
   if (selModel.value === "manabi") { edWrap.hidden = false; edText.value = MANABI_HGEO; applyHgeo(); return; }   // muro de Manabí con Vs (dinámico)
   const ej = EJEMPLOS_HGEO[selModel.value];   // muro de Manabí POR ETAPAS (Mohr-Coulomb, las 7 etapas de GeoFEM)
