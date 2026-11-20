@@ -9,6 +9,7 @@ import { wallLevels, wallGround, MURO_BAT } from "../model/dsl";
 import { verificarMuro, type TeoriaEmpuje, type VerifResult } from "./verify";
 import { mallaMuroSolido, type MuroSolidoParams } from "../solid/muroMalla";
 import { resolverMuro2DUI } from "./panel2d";
+import { muroGeo5, alfaBiseccionGeo5 } from "./geo5Cantilever";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const n3 = (v: number) => (Math.round(v * 1000) / 1000).toString();
@@ -48,6 +49,28 @@ function tabla(r: VerifResult): string {
     <table><tr><th></th><th>H</th><th>V</th></tr>${fz}</table>
     <div style="margin-top:3px">ΣM estabilizadores ${r.Mest.toFixed(2)} · ΣM de vuelco ${r.Mdes.toFixed(2)} kN·m/m · e = ${n3(r.e)} m</div></details>
     ${r.avisos.map((a) => `<div style="color:var(--oro)">· ${a}</div>`).join("")}`;
+}
+
+/** El muro del modelo calculado EXACTAMENTE como GEO5 Cantilever Wall (muroGeo5): cara virtual con el α de la bisección
+ *  de GEO5, cuña corrida 1e-5 m, Coulomb + Mononobe-Okabe por capas. Igual al binario a 1e-14 (tests/muro_manabi_bits.ts). */
+function bloqueGeo5(def: SlopeDef, w: Wall, r: VerifResult): string {
+  const num = (id: string, d = 0) => { const v = parseFloat(($<HTMLInputElement>(id)?.value ?? "").replace(",", ".")); return Number.isFinite(v) ? v : d; };
+  const pm = w.pm, h = r.geom.Htot - pm.zapata, s1 = num("g5S1"), kh = num("g5Kh"), kv = num("g5Kv");
+  const kTxt = ($<HTMLInputElement>("g5K")?.value ?? "auto").trim().toLowerCase(), kDato = parseFloat(kTxt.replace(",", "."));
+  const k = Number.isFinite(kDato) && kDato > 0 ? kDato : (s1 > 0 ? pm.fuste - h / s1 : pm.fuste);          // GEO5 pide el espesor de ARRIBA (k) y el talud s1
+  const dTxt = ($<HTMLInputElement>("g5Dp")?.value ?? "auto").trim().toLowerCase();
+  const rel = r.suelos.relleno, bas = r.suelos.base, hormigon = def.soils.find((s) => s.name === w.soil);
+  const dp = (sv: { phi: number }) => (dTxt === "auto" || dTxt === "" ? (2 / 3) * sv.phi : parseFloat(dTxt.replace(",", ".")));
+  const g = muroGeo5({ k, h, xx: pm.zapata, v1: pm.dedo, v2: pm.talon, s1: s1 > 0 ? s1 : 0, gammaC: hormigon?.gamma ?? 24 },
+    [{ nombre: rel.name, gamma: rel.gamma, phi: rel.phi, deltaPared: dp(rel), hasta: r.geom.Htot }, { nombre: bas.name, gamma: bas.gamma, phi: bas.phi, deltaPared: dp(bas), hasta: Infinity }],
+    { kh, kv });
+  const f2 = (v: number) => v.toFixed(2), f6 = (v: number) => v.toPrecision(10);
+  const filas = g.fuerzas.map((q) => `<tr><td>${q.nombre}</td><td style="text-align:right">${f2(-q.Fx)}</td><td style="text-align:right">${f2(q.Fz)}</td><td style="text-align:right">${f2(q.x)}</td><td style="text-align:right">${f2(-q.z)}</td></tr>`).join("");
+  return `<div style="margin:4px 0">α cara virtual = <b>${alfaBiseccionGeo5(45 - rel.phi / 2).toFixed(12)}°</b> (bisección de GEO5) · B = ${g.B.toFixed(3)} m · k = ${k.toFixed(4)} m</div>
+    <table><tr><th>Force</th><th>F<sub>x</sub></th><th>F<sub>z</sub></th><th>x</th><th>z</th></tr>${filas}</table>
+    <div style="margin-top:3px">M<sub>res</sub> = <b>${f6(g.Mres)}</b> · M<sub>ovr</sub> = <b>${f6(g.Movr)}</b> kN·m/m → <b>FS vuelco ${g.fsVuelco.toFixed(4)}</b><br>
+    H<sub>res</sub> = <b>${f6(g.Hres)}</b> · H<sub>act</sub> = <b>${f6(g.Hact)}</b> kN/m → <b>FS deslizamiento ${g.fsDeslizamiento.toFixed(4)}</b></div>
+    <div style="color:var(--mut)">mismas columnas y signos que la tabla «Verification» de GEO5 (z negativa hacia arriba)</div>`;
 }
 
 /** El muro del .hgeo pasado a la malla de sólidos: TODO sale del modelo, nada clavado en el código.
@@ -90,6 +113,7 @@ export function actualizarMuro(def: SlopeDef | null, etapa = 0): void {
       return `${def.walls.length > 1 ? `<div style="color:var(--oro);font-weight:600;margin-top:6px">muro ${i + 1} · ${w.soil} en x = ${n3(w.pm.x)} m</div>` : ""}${tabla(r)}`;
     }).join("");
     out.innerHTML = html;
+    try { $<HTMLDivElement>("g5out").innerHTML = bloqueGeo5(def, def.walls[0], verificarMuro(def, def.walls[0], opciones(), etapa)); } catch (e) { $<HTMLDivElement>("g5out").innerHTML = `<span style="color:#e5382b">✖ ${(e as Error).message}</span>`; }
     ultimo = { def, w: def.walls[0], etapa };
     // si el sólido ya está resuelto, se vuelve a resolver con la geometría nueva (tarda ~0.2 s)
     if (solidoHecho) void resolverSolido();
@@ -128,7 +152,7 @@ export async function resolverSolido(): Promise<void> {
 
 /** Engancha los controles del panel. `onCambio` se llama cuando hay que recalcular la verificación. */
 export function engancharMuro(onCambio: () => void): void {
-  for (const id of ["wTeoria", "wDelta", "wBeta", "wRd", "wSfV", "wSfS", "wPasivo", "wMs", "wL"]) {
+  for (const id of ["wTeoria", "wDelta", "wBeta", "wRd", "wSfV", "wSfS", "wPasivo", "wMs", "wL", "g5Kh", "g5Kv", "g5S1", "g5Dp", "g5K"]) {
     const el = document.getElementById(id)!;
     el.addEventListener("change", onCambio);
     el.addEventListener("input", onCambio);

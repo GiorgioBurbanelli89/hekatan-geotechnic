@@ -150,6 +150,19 @@
         </div>
         <label><input type="checkbox" id="wPasivo" style="width:auto" /> contar el empuje pasivo delante de la puntera</label>
         <div id="wout" class="mats"></div>
+        <h2 style="margin-top:12px;font-size:12px">Como GEO5 Cantilever Wall <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(cara virtual, Mononobe-Okabe, bit a bit con el binario)</span></h2>
+        <div class="row">
+          <div><label>k_h</label><input id="g5Kh" type="number" value="0" step="0.01" title="coeficiente sísmico horizontal; NEC-SE-GC: 0.6·Z·Fa (Manabí 0.336)" /></div>
+          <div><label>k_v</label><input id="g5Kv" type="number" value="0" step="0.01" title="coeficiente sísmico vertical; positivo = hacia abajo, levanta el muro (GEO5)" /></div>
+        </div>
+        <div class="row">
+          <div><label>talud cara vista s1 (1:s1)</label><input id="g5S1" type="number" value="0" step="0.5" title="0 = fuste vertical; el espesor del fuste del modelo es el de ABAJO, arriba queda fuste − h/s1" /></div>
+          <div><label>δ pared [°]</label><input id="g5Dp" type="text" value="auto" title="fricción suelo-hormigón en la cara del talón; «auto» = 2/3·φ" /></div>
+        </div>
+        <div class="row">
+          <div><label>k coronación [m]</label><input id="g5K" type="text" value="auto" title="espesor del fuste ARRIBA, como lo pide GEO5 (Geometry k); «auto» = fuste del modelo − h/s1" /></div>
+        </div>
+        <div id="g5out" class="mats"></div>
         <div class="row">
           <div><label>malla del sólido [m]</label><input id="wMs" type="number" value="0.2" step="0.05" min="0.05" title="tamaño de elemento del hexaedro; el fuste y la zapata tienen que caber en un número entero de elementos" /></div>
           <div><label>longitud del muro [m]</label><input id="wL" type="number" value="1" step="0.5" min="0.5" title="longitud en la dirección y; 1 m = el muro por metro lineal, que es lo que calcula la verificación 2D" /></div>

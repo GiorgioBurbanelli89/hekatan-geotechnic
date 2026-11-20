@@ -123,7 +123,7 @@ export function muroGeo5(m: MuroG5, perfil: SueloG5[], sismo: SismoG5, alfaVirtu
   const alfaV = alfaVirtualDeg ?? alfaBiseccionGeo5(45 - sup.phi / 2);          // α de la cara virtual (bisección de GEO5)
   const th = rad(90 - alfaV);                            // ángulo de la cara virtual sobre la horizontal: el MISMO α para la cuña y para K (20-nov-2026: con θ exacto en la cuña y α de bisección en K, M_res daba 388.968 y GEO5 muestra 388.96)
   const xv = B - h / Math.tan(th);
-  const cuna: P[] = [[xt, xx], [B, xx], [xv, Hter], [xt, Hter]];
+  const cuna: P[] = [[xt, xx], [B, xx], [xv + 1e-5, Hter], [xt, Hter]];          // GEO5 corre 1e-5 m el punto de arriba de la cuña: peso y c.d.g. iguales al binario bit a bit (Frida, 20-nov-2026)
   // peso de la cuña por bandas de suelo (profundidad desde el terreno; la cuña llega hasta la profundidad h)
   let Wc = 0, mx = 0, my = 0, d0 = 0;
   for (const s of perfil) {

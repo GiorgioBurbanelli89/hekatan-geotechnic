@@ -14,6 +14,9 @@ const fila = (n: string, h: number, g: number, tol: number) => { const d = h - g
 console.log("— bit a bit contra Frida (CantileverWall_5.dll) —");
 fila("alfa cara virtual [°]", alfaBiseccionGeo5(30), 30.000915527343746, 1e-12);
 for (const [phi, a] of [[27, 31.50054931640625], [33, 28.501281738281254], [34.5, 27.748718261718757], [36, 27.001647949218743]] as const) fila(`alfa con phi ${phi}`, alfaBiseccionGeo5(45 - phi / 2), a, 1e-12);
+fila("Peso de la cuña", r.pesoCuna, 55.287195935578424, 1e-12);
+fila("cuña x desde el fuste", r.xCuna - (0.7 + 0.25 + 2.6 / 17.33), 0.6563994871255965, 1e-12);
+fila("cuña z desde arriba", r.Hterreno - r.yCuna, 1.5829687446284182, 1e-12);
 fila("Ka cara virtual", kCoulomb(rad(30), dK, a1), 0.6666466332305437, 1e-14);
 fila("Kae cara virtual", kMO(rad(30), dK, a1, psi), 1.594497947900209, 1e-14);
 fila("Ka talón", kCoulomb(rad(30), rad(20), 0), 0.29731385720545084, 1e-14);

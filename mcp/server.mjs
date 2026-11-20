@@ -128,6 +128,12 @@ srv.tool("calcular", "Aprieta «Recalcular todas las etapas» y espera a que ter
     return texto(await pag.evaluate(() => ((document.getElementById("log") || {}).textContent || "").slice(-3500)));
   });
 
+srv.tool("muro", "Lee el panel del muro de contención: la verificación (#wout) y el bloque «Como GEO5 Cantilever Wall» (#g5out). Solo lectura.", {},
+  async () => {
+    const e = sinPagina(); if (e) return e;
+    return texto(await pag.evaluate(() => { const t = (id) => ((document.getElementById(id) || {}).innerText || "").trim(); return { verificacion: t("wout"), geo5: t("g5out") }; }));
+  });
+
 srv.tool("resultados", "Lee el registro de cálculo (#log) y el factor de seguridad de cada etapa.", {},
   async () => {
     const e = sinPagina(); if (e) return e;
