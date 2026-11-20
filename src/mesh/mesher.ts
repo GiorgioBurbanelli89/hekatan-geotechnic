@@ -361,6 +361,7 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     stages.push({ name: st.name, loads: acc.slice() as GeoModel["stages"][number]["loads"], geo5: st.geo5, ...(staged ? { active: activo } : {}) });
   });
   const model: GeoModel = {
+    ...(def.srmGeo5 ? { srmContinua: def.srmGeo5 } : {}),          // `srm geo5` del .hgeo → el algoritmo SRM de GEO5
     name: "hgeo", X, Y, ELE, EMAT, FIXED, Fg: new Array(ndof).fill(0), Fs: new Array(ndof).fill(0), Fa: new Array(ndof).fill(0),
     // «Rigid body» de GEO5: su InputFile.txt lo declara `rigidbody` SIN módulo (el fuste no se flecta: nudos con traslación y giro comunes).
     // Aquí es una región elástica; para que no se flecte se le sube E hasta E_REL veces el del suelo más rígido

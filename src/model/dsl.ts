@@ -65,6 +65,7 @@ export type Seismic = { kh: number; kv: number; borde?: number };
 export type StageDef = { name: string; geo5?: number; surcharges: Surcharge[]; anchors: Anchor[]; sismo?: Seismic; activa?: Pt[]; inactiva?: Pt[] };
 export type SlopeDef = {
   outline: Pt[]; soils: Soil[]; layers: Layer[]; h: number; stages: StageDef[];
+  srmGeo5?: number;                         // `srm geo5`: el SRM con el algoritmo de GEO5 (bits 115 = el que da FS 1.362360 en el muro de Manabí); sin la orden, el SRM propio
   margins?: { xmin: number; xmax: number; bottom: number };
   interfaces: Pt[][];                       // GEO5: de margen a margen, la primera = terreno
   lines: Pt[][];                            // GEO5 "Free line": polilínea cualquiera que toca el borde/otra línea en sus dos extremos y CIERRA una región
@@ -235,6 +236,7 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
         const o = kv(toks.slice(2)), H = num(o.h ?? "4"), d = wallDims(H);
         def.walls.push({ soil: toks[1], pm: { x: num(o.x ?? o.xpie ?? "10"), H, ...(o.z ?? o.zpie ? { z: num((o.z ?? o.zpie)!) } : {}), fuste: num(o.fuste ?? String(d.fuste)), zapata: num(o.zapata ?? String(d.zapata)), talon: num(o.talon ?? o["talón"] ?? String(d.talon)), dedo: num(o.dedo ?? String(d.dedo)), emp: num(o.emp ?? String(d.emp)), ...(o.dentp && o.dentb ? { dentp: num(o.dentp), dentb: num(o.dentb) } : {}) } });
       } else if (cmd === "malla") def.h = num(toks[1]);
+      else if (cmd === "srm") def.srmGeo5 = /^geo5$/i.test(toks[1] ?? "") ? 115 : num(toks[1] ?? "0") || undefined;          // srm geo5 | srm <bits>
       else if (cmd === "etapa") {
         let i = 1; const nm: string[] = [];
         while (i < toks.length && !toks[i].includes("=")) nm.push(toks[i++]);
@@ -314,6 +316,7 @@ export function serializeHgeo(def: SlopeDef): string {
   for (const a of def.assign) L.push(`asignar ${a.soil} en ${p(a.p)}`);
   for (const c of def.layers) L.push(`capa ${c.soil} ${c.side} ${c.poly.map(p).join(" ")}`);
   L.push(`malla ${r(def.h)}`);
+  if (def.srmGeo5) L.push(def.srmGeo5 === 115 ? "srm geo5" : `srm ${def.srmGeo5}`);
   for (const st of def.stages) {
     let s = `etapa ${st.name}`;
     if (st.geo5) s += ` geo5=${st.geo5}`;

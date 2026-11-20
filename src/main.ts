@@ -488,6 +488,8 @@ async function loadFixture(url: string) {
 
 const AVISO_KH = "⚠ FS con sismo kh: no verificado contra benchmarks (docs/VALIDACION.md); la carga kh·γ sí";
 function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
+  { const su = d.soils.filter((s) => !s.rigido && !(d.walls ?? []).some((w) => w.soil === s.name)), mc = su.filter((s) => s.modelo === "mc").length;          // el selector muestra la ley que trae el modelo
+    const sel = document.getElementById("modSuelo") as HTMLSelectElement | null; if (sel) sel.value = !su.length || mc === su.length ? (su.length ? "mc" : sel.value) : mc === 0 ? "dp" : "mixto"; }
   try {
     const t0 = performance.now();
     def = d;
@@ -681,6 +683,13 @@ $<HTMLInputElement>("grid").addEventListener("change", (e) => { draw.state.grid 
 // MÉTODO analítico (equilibrio límite) vs elementos finitos. Al elegir Bishop/Fellenius se busca la superficie de falla
 // crítica y se dibuja sobre el talud; GeoFEM la borra y deja el mapa de elementos finitos.
 const selMetodo = $<HTMLSelectElement>("metodo"), lemOut = $<HTMLDivElement>("lemout");
+// 20-nov-2026 (Jorge: «hay que elegir Mohr-Coulomb y Drucker-Prager»): la ley de TODOS los suelos del modelo (el muro rígido no)
+$<HTMLSelectElement>("modSuelo").addEventListener("change", (ev) => {
+  const v = (ev.target as HTMLSelectElement).value; if (!def || v === "mixto") return;
+  for (const s of def.soils) if (!s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name)) s.modelo = v === "mc" ? "mc" : undefined;
+  for (const st of def.stages) delete st.geo5;
+  selModel.value = "hgeo"; edWrap.hidden = false; edText.value = serializeHgeo(def); applyHgeo();
+});
 function runLem() {
   const met = selMetodo.value; analitico = met !== "fem";
   if (met === "fem") { draw.lem = null; lemOut.textContent = ""; redraw(); return; }
