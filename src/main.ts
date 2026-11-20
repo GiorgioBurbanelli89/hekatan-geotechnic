@@ -512,7 +512,7 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
     const { model: m, stats } = meshSlope(def, { topeMs: 20000 });   // 20 s: el muro de Manabí con malla 0.5 malla en 12–15 s en Chrome (8 s lo cortaba); una geometría degenerada (interfaces que se cruzan) se corta a los 20 s
     const avisosVal = [...stats.avisos];   // p. ej. "ARCILLA asignado a la región de la línea libre"
     // fuera del alcance verificado (docs/VALIDACION.md §2): φ = 0 (GEO5 también aborta en R_mob_MohrCoulomb) y FS con sismo kh
-    if (def.soils.some((s) => s.phi < 1)) avisosVal.push("⚠ φ < 1° (no drenado): FS no verificado (GEO5 tampoco lo resuelve); compare con equilibrio límite");
+    if (def.soils.some((s) => s.phi < 1 && !s.rigido && !(def!.walls ?? []).some((w) => w.soil === s.name))) avisosVal.push("⚠ φ < 1° (no drenado): FS no verificado (GEO5 tampoco lo resuelve); compare con equilibrio límite");
     if (def.stages.some((st) => st.sismo && (st.sismo.kh || st.sismo.kv))) avisosVal.push(AVISO_KH);
     if (avisosVal.length) dStatus.textContent = avisosVal.join(" · ");
     m.MATNAMES = def.soils.map((s) => s.name);
