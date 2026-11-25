@@ -88,7 +88,7 @@ function buildSliders(m: GeoModel) {
   sliders = [];
   m.MAT.forEach((M, i) => {
     const sub = "₁₂₃₄₅₆₇₈₉"[i] ?? String(i + 1);
-    sliders.push({ id: `phi${i}`, label: `φ${sub} [°]`, min: 5, max: 45, step: 0.1, value: M[2] });
+    sliders.push({ id: `phi${i}`, label: `φ${sub} [°]`, min: 0, max: 45, step: 0.1, value: M[2] });
     sliders.push({ id: `c${i}`, label: `c${sub} [kPa]`, min: 0, max: Math.max(60, 2 * M[3]), step: 0.5, value: M[3] });
     sliders.push({ id: `g${i}`, label: `γ${sub} [kN/m³]`, min: 14, max: 24, step: 0.1, value: M[4] });
   });
@@ -104,6 +104,7 @@ function buildSliders(m: GeoModel) {
     const inp = row.querySelector("input") as HTMLInputElement; sliderEl[s.id] = inp;
     inp.addEventListener("input", () => {
       $<HTMLSpanElement>("sv_" + s.id).textContent = inp.value;
+      inp.dataset.movido = "1";
       for (const st of stages) if (st) st.stale = true;          // todo lo calculado ya no vale
       if (chkAuto.checked) { clearTimeout(timer); timer = window.setTimeout(() => run([visibleStage()]), 250); }
     });
@@ -441,11 +442,13 @@ const visibleStage = () => Math.min(parseInt(selStage.value || "0"), parseInt(se
 
 /** Modelo con los sliders aplicados. Con todo en el valor base es el modelo exacto (gravedad de GEO5 en la fixture). */
 function currentModel(): GeoModel {
-  const v = (id: string) => parseFloat(sliderEl[id].value);
+  // 25-nov-2026: el valor EXACTO del modelo mientras no se mueva el slider (antes el slider recortaba φ=0 a su mínimo 5° y
+  // redondeaba c al paso 0.5: la arcilla de Serquén φ=0 se calculaba con φ=5° y «aguantaba» por encima de Prandtl).
+  const v = (id: string) => { const s = sliders.find((x) => x.id === id); return s && !sliderEl[id].dataset.movido ? s.value : parseFloat(sliderEl[id].value); };
   const b = base!;
   const MAT = b.MAT.map((r, i) => { const r2 = r.slice(); r2[2] = v(`phi${i}`); r2[3] = v(`c${i}`); r2[4] = v(`g${i}`); return r2; });
   const gammaChanged = MAT.some((r, i) => r[4] !== b.MAT[i][4]);
-  const isBase = sliders.every((s) => parseFloat(sliderEl[s.id].value) === s.value);
+  const isBase = sliders.every((s) => v(s.id) === s.value);
   const st = b.stages.map((x) => ({ ...x, geo5: isBase ? x.geo5 : undefined }));   // la referencia GEO5 solo vale con los valores del modelo
   const out: GeoModel = { ...b, MAT, stages: st, recomputeGravity: b.recomputeGravity || gammaChanged, ...(b.agua && !chkAgua.checked ? { agua: undefined } : b.agua?.ru !== undefined ? { agua: { ...b.agua, ru: parseFloat(inpRu.value) } } : {}) };
   if (!def) { const q = v("q") / Q0, A = v("A") / A0; out.Fs = b.Fs.map((x) => x * q); out.Fa = b.Fa.map((x) => x * A); }

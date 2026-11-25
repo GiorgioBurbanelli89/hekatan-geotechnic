@@ -1,0 +1,48 @@
+# Arena (prueba de paso): igual que serquen_arena_portoviejo.hgeo pero desde 12.5 tonf/m2 de 0.5 en 0.5
+margenes xmin=0 xmax=20 fondo=-10
+interfaz 0,0 20,0
+suelo ARENA E=19613 nu=0.30 phi=30 c=1 gamma=18 modelo=mc
+asignar ARENA en 10,-5
+malla 0.5
+etapa terreno activa=10,-5
+etapa q2.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q7.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q10t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q12.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q13t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q13.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q14t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q14.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q15t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q15.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q16t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q16.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q17t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q17.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q18t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q18.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q19t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q19.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q20t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q20.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q21t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q21.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q22t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q22.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q23t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q23.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q24t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q24.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q25t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q25.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q26t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q26.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q27t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q27.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q28t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q28.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q29t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q29.5t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q30t q=4.90333 en 8.5,0 -> 11.5,0
+etapa q30.5t q=4.90333 en 8.5,0 -> 11.5,0

@@ -1,0 +1,24 @@
+# Serquen, «El SAP2000 aplicado al suelo» (C. Eng. William Rodriguez Serquen): corte 2D en deformacion plana del bloque 20 x 10 m
+# E = 2000 tonf/m2 = 19613 kPa del libro; resistencia supuesta (el libro no la da). Franja de 3 m (lado corto de 3 x 5 m) cargada de 5 en 5 tonf/m2.
+margenes xmin=0 xmax=20 fondo=-10
+interfaz 0,0 20,0
+suelo ARCILLA E=19613 nu=0.42 phi=0 c=49.03 gamma=18 modelo=mc
+asignar ARCILLA en 10,-5
+malla 0.5
+etapa terreno activa=10,-5
+etapa q5t q=49.033 en 8.5,0 -> 11.5,0
+etapa q10t q=49.033 en 8.5,0 -> 11.5,0
+etapa q15t q=49.033 en 8.5,0 -> 11.5,0
+etapa q20t q=49.033 en 8.5,0 -> 11.5,0
+etapa q25t q=49.033 en 8.5,0 -> 11.5,0
+etapa q30t q=49.033 en 8.5,0 -> 11.5,0
+etapa q35t q=49.033 en 8.5,0 -> 11.5,0
+etapa q40t q=49.033 en 8.5,0 -> 11.5,0
+etapa q45t q=49.033 en 8.5,0 -> 11.5,0
+etapa q50t q=49.033 en 8.5,0 -> 11.5,0
+etapa q55t q=49.033 en 8.5,0 -> 11.5,0
+etapa q60t q=49.033 en 8.5,0 -> 11.5,0
+etapa q65t q=49.033 en 8.5,0 -> 11.5,0
+etapa q70t q=49.033 en 8.5,0 -> 11.5,0
+etapa q75t q=49.033 en 8.5,0 -> 11.5,0
+etapa q80t q=49.033 en 8.5,0 -> 11.5,0

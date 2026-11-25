@@ -1,0 +1,41 @@
+# Serquen, «El SAP2000 aplicado al suelo» (C. Eng. William Rodriguez Serquen): corte 2D del bloque 20 x 10 m
+# Arena de Portoviejo (estudio TSN-ES-2025-206: SP, phi 30, c = 0). c = 1 kPa numerico (lo que recomienda Plaxis con c = 0). Pasos de 2.5 tonf/m2. Drucker-Prager de GEO5 (sin el apice de MC).
+margenes xmin=0 xmax=20 fondo=-10
+interfaz 0,0 20,0
+suelo ARENA E=19613 nu=0.30 phi=30 c=1 gamma=18 modelo=dp
+asignar ARENA en 10,-5
+malla 0.5
+etapa terreno activa=10,-5
+etapa q2.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q7.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q10t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q12.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q15t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q17.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q20t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q22.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q25t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q27.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q30t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q32.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q35t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q37.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q40t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q42.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q45t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q47.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q50t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q52.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q55t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q57.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q60t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q62.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q65t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q67.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q70t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q72.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q75t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q77.5t q=24.5166 en 8.5,0 -> 11.5,0
+etapa q80t q=24.5166 en 8.5,0 -> 11.5,0
+
