@@ -1,6 +1,7 @@
 // PANEL «CIMENTACIONES · ZAPATA AISLADA» (GEO5 Spread Footing dentro de Hekatan Geotechnic, sin ventana aparte).
 // Entradas a la izquierda; a la derecha la planta con el mapa de presión de contacto, el corte con el bulbo
 // Δσz frente a m·σor (zona de influencia) y la tabla de resultados con su fuente (GEO5 / literatura).
+import { Pane } from "tweakpane";
 import { calcularZapata, ZAPATA_GUERRA, type ZapataDatos, type ZapataResultado } from "./zapata";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -16,9 +17,9 @@ const GRUPOS: { t: string; c: Campo[] }[] = [
     { k: "Df", et: "Df (desde la rasante)", u: "m", r: [0, 5, 0.05], tip: "profundidad del fondo de la zapata bajo la rasante" },
     { k: "cx", et: "columna cx", u: "m", r: [0.2, 1.5, 0.05], tip: "lado x de la columna" },
     { k: "cy", et: "columna cy", u: "m", r: [0.2, 1.5, 0.05], tip: "lado y de la columna" },
-    { k: "gc", et: "γ hormigón", u: "γ", r: [2, 2.6, 0.01], tip: "peso unitario del hormigón (peso propio de zapata y columna)" },
+    { k: "gc", et: "γ hormigón", u: "γ", r: [2, 2.6, 0.0001], tip: "peso unitario del hormigón (peso propio de zapata y columna)" },
     { k: "gr", et: "γ relleno", u: "γ", r: [1.4, 2.2, 0.01], tip: "peso unitario del relleno sobre la zapata" },
-    { k: "Ec", et: "E hormigón", u: "MPa", r: [10000, 40000, 100], tip: "módulo del hormigón: rigidez relativa zapata/suelo (rígida si k > 1)" },
+    { k: "Ec", et: "E hormigón", u: "MPa", r: [10000, 40000, 1], tip: "módulo del hormigón: rigidez relativa zapata/suelo (rígida si k > 1)" },
   ] },
   { t: "Suelo", c: [
     { k: "gamma", et: "γ", u: "γ", r: [1.2, 2.3, 0.01], tip: "peso unitario natural del suelo" },
@@ -59,44 +60,57 @@ function uni(u: string | undefined, d: ZapataDatos) {
   return ({ γ: t ? "t/m³" : "kN/m³", p: t ? "t/m²" : "kPa", F: t ? "t" : "kN", "F·m": t ? "t·m" : "kN·m", "F/m³": t ? "t/m³" : "kN/m³" } as Record<string, string>)[u ?? ""] ?? u ?? "";
 }
 
+/** Panel estilo TWEAKPANE (librería tweakpane v4): carpetas plegables, fila etiqueta · slider · número. Se reconstruye
+ *  entero al cambiar t ↔ kN o cuando un número escrito sale del rango (el slider se AMPLÍA, no recorta). Los bindings
+ *  apuntan a un objeto espejo `P`: `datos` solo cambia cuando el usuario mueve/escribe (el paso de Tweakpane nunca
+ *  redondea a escondidas los valores del ejemplo). */
+let pane: Pane | null = null;
+const abiertas: Record<string, boolean> = {};
 function construir() {
-  const caja = $<HTMLDivElement>("zapCampos"), kU = datos.unidad === "t" ? 1 : 9.80665;
+  const caja = $<HTMLDivElement>("zapCampos"), kU = datos.unidad === "t" ? 1 : 9.80665, D = datos as unknown as Record<string, number>;
   const dec = (paso: number) => Math.max(0, -Math.floor(Math.log10(paso) + 1e-9));
-  caja.innerHTML = GRUPOS.map((g) => `<details class="zg" open><summary class="zt">${g.t}</summary>` + g.c.map((c) => {
-    const k = c.u && ESCALA.has(c.u) ? kU : 1, v = datos[c.k] as number, fin = Number.isFinite(v);
-    const mn = Math.min(c.r[0] * k, fin ? v : Infinity), mx = Math.max(c.r[1] * k, fin ? v : -Infinity), paso = c.r[2] * k;
-    const nf = c.k === "zw" ? `<label class="znf"><input type="checkbox" data-nf ${fin ? "" : "checked"}> sin freático</label>` : "";
-    return `<div class="zs" title="${c.tip}"><span>${c.et}</span><input class="zn" data-k="${c.k}" type="text" inputmode="decimal" value="${fin ? v : "∞"}"><i>${uni(c.u, datos)}</i>
-      <input class="zr" data-k="${c.k}" data-d="${dec(paso)}" type="range" min="${mn}" max="${mx}" step="${paso}" value="${fin ? v : mx}" ${fin ? "" : "disabled"}>${nf}</div>`;
-  }).join("") + `</details>`).join("");
-  const D = datos as unknown as Record<string, number>;
-  caja.querySelectorAll<HTMLInputElement>("input.zn").forEach((inp) => {
-    const rg = caja.querySelector<HTMLInputElement>(`input.zr[data-k=${inp.dataset.k}]`)!;
-    inp.addEventListener("input", () => {
-      const t = inp.value.trim().replace(",", ".");
-      const v = t === "" || t === "∞" || /^inf/i.test(t) ? Infinity : parseFloat(t);
-      if (Number.isNaN(v)) return;
-      D[inp.dataset.k!] = v;
-      if (Number.isFinite(v)) {   // el slider se amplía para contener lo escrito
-        if (v < +rg.min) rg.min = String(v); if (v > +rg.max) rg.max = String(v);
-        rg.disabled = false; rg.value = String(v);
+  pane?.dispose(); caja.innerHTML = "";
+  pane = new Pane({ container: caja });
+  const P: Record<string, number | boolean> = {};
+  let forzado: { k: string; v: number } | null = null;   // número escrito fuera de rango → reconstruir con el rango ampliado
+  for (const g of GRUPOS) {
+    const fo = pane.addFolder({ title: g.t.toUpperCase(), expanded: abiertas[g.t] ?? true });
+    fo.on("fold", (ev) => { abiertas[g.t] = ev.expanded; });
+    for (const c of g.c) {
+      const esc = c.u && ESCALA.has(c.u), paso = esc && kU !== 1 ? 10 ** Math.floor(Math.log10(c.r[2] * kU) + 1e-9) : c.r[2];
+      const v = D[c.k], fin = Number.isFinite(v), nd = dec(paso);
+      const mn = Math.min(c.r[0] * (esc ? kU : 1), fin ? v : Infinity), mx = Math.max(c.r[1] * (esc ? kU : 1), fin ? v : -Infinity);
+      const u = uni(c.u, datos), label = u ? `${c.et} [${u}]` : c.et;
+      if (c.k === "zw") {   // nivel freático: booleano «sin freático» + profundidad
+        P.sinNF = !fin; P.zw = fin ? v : Math.min(mx, Math.max(mn, d0("zw")));
+        const bNF = fo.addBinding(P, "sinNF", { label: "sin freático" });
+        const bZ = fo.addBinding(P, "zw", { label, min: mn, max: mx, step: paso, format: (x: number) => x.toFixed(nd), disabled: !fin });
+        bNF.element.title = "sin nivel freático (N.F. = ∞)"; bZ.element.title = c.tip;
+        bNF.on("change", (ev) => { bZ.disabled = ev.value as boolean; datos.zw = ev.value ? Infinity : +(P.zw as number).toFixed(nd); pedirCalculo(); });
+        bZ.on("change", (ev) => { if (P.sinNF) return; datos.zw = +(ev.value as number).toFixed(nd); pedirCalculo(); });
+        continue;
       }
-      const nf = caja.querySelector<HTMLInputElement>("input[data-nf]"); if (inp.dataset.k === "zw" && nf) { nf.checked = !Number.isFinite(v); rg.disabled = nf.checked; }
-      pedirCalculo();
-    });
-    rg.addEventListener("input", () => {   // valor redondeado al paso: al volver al valor original se recupera exacto
-      const v = +(+rg.value).toFixed(+rg.dataset.d!); D[rg.dataset.k!] = v; inp.value = String(v); pedirCalculo();
-    });
-  });
-  const nf = caja.querySelector<HTMLInputElement>("input[data-nf]");
-  nf?.addEventListener("change", () => {
-    const rg = caja.querySelector<HTMLInputElement>("input.zr[data-k=zw]")!, inp = caja.querySelector<HTMLInputElement>("input.zn[data-k=zw]")!;
-    rg.disabled = nf.checked; datos.zw = nf.checked ? Infinity : +rg.value; inp.value = nf.checked ? "∞" : String(datos.zw); pedirCalculo();
-  });
+      P[c.k] = v;
+      const bi = fo.addBinding(P as Record<string, number>, c.k, { label, min: mn, max: mx, step: paso, format: (x: number) => x.toFixed(nd) });
+      bi.element.title = c.tip; bi.element.dataset.k = c.k;
+      bi.on("change", (ev) => {
+        if (forzado?.k === c.k) return;               // Tweakpane lo recortó: vale lo escrito (se reconstruye)
+        const nv = +ev.value.toFixed(nd); if (nv === D[c.k]) return;
+        D[c.k] = nv; pedirCalculo();
+      });
+      // número escrito a mano: se lee ANTES que Tweakpane (captura) para ampliar el rango en vez de recortar
+      bi.element.querySelector<HTMLInputElement>("input")?.addEventListener("change", (e) => {
+        const t = (e.target as HTMLInputElement).value.trim().replace(",", "."), x = parseFloat(t);
+        if (!Number.isNaN(x) && (x < mn || x > mx)) { forzado = { k: c.k, v: x }; D[c.k] = x; setTimeout(() => { forzado = null; construir(); calcular(); }, 0); }
+      }, { capture: true });
+    }
+  }
   $<HTMLSelectElement>("zapMetodo").value = datos.metodo;
   $<HTMLSelectElement>("zapDren").value = datos.drenado ? "1" : "0";
   $<HTMLSelectElement>("zapUni").value = datos.unidad;
 }
+/** profundidad de arranque del slider del N.F. cuando el ejemplo no tiene freático */
+const d0 = (_k: "zw") => 3;
 
 /** recálculo en vivo sin trabarse: como mucho uno por cuadro de pantalla */
 let pendiente = false;

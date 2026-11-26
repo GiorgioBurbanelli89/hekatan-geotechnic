@@ -90,14 +90,15 @@
     #murosec .zlay { grid-template-columns: 360px 1fr; }
     .zlay { display: grid; grid-template-columns: 330px 1fr; gap: 14px; }
     .cwt { border-collapse: collapse; width: 100%; } .cwt th, .cwt td { padding: 2px 6px; text-align: right; font: 12.5px Consolas, monospace; } .cwt td:nth-child(2), .cwt th:nth-child(2) { text-align: left; font-family: Segoe UI, Arial; } .cwt tr:nth-child(even) td { background: #ffffff0a; }
-    .zg { margin-bottom: 6px; border: 1px solid #3a3020; border-radius: 6px; padding: 2px 8px 6px; background: #17130b; }
-    .zt { color: var(--oro); text-transform: uppercase; letter-spacing: 1px; font-size: 11.5px; margin: 4px 0 2px; cursor: pointer; user-select: none; }
-    .zt::marker { color: var(--terra); }
-    .zs { display: grid; grid-template-columns: 1fr 84px 46px; gap: 2px 6px; align-items: center; margin: 4px 0 2px; font-size: 12.5px; color: var(--mut); }
-    .zs .zn { padding: 2px 6px; text-align: right; font: 12.5px Consolas, monospace; } .zs i { font-style: normal; font-size: 11px; }
-    .zs .zr { grid-column: 1 / -1; width: 100%; padding: 0; margin: 0; height: 18px; accent-color: var(--terra); touch-action: pan-y; }
-    .zs .zr:disabled { opacity: .35; } .zs .znf { grid-column: 1 / -1; font-size: 11.5px; display: flex; gap: 6px; align-items: center; }
-    .zs .znf input { width: auto; }
+    /* Tweakpane (panel de la zapata) con la marca: fondo oscuro, dorado y terracota */
+    #zapCampos .tp-rotv { --tp-base-background-color: #1e1a12; --tp-base-shadow-color: #0008; --tp-base-font-family: "Segoe UI", system-ui, sans-serif;
+      --tp-container-background-color: #2a2316; --tp-container-background-color-active: #3a301e; --tp-container-background-color-focus: #342a1a; --tp-container-background-color-hover: #312818; --tp-container-foreground-color: #d3a53c;
+      --tp-button-background-color: #d08a3e; --tp-button-background-color-active: #f2cf5e; --tp-button-background-color-focus: #e5a04f; --tp-button-background-color-hover: #e5a04f; --tp-button-foreground-color: #14110a;
+      --tp-groove-foreground-color: #3a3020; --tp-input-background-color: #0f0c07; --tp-input-background-color-active: #1a150c; --tp-input-background-color-focus: #1a150c; --tp-input-background-color-hover: #15110a; --tp-input-foreground-color: #f3ead0;
+      --tp-label-foreground-color: #b9ad8c; --tp-monitor-background-color: #0f0c07; --tp-monitor-foreground-color: #b9ad8c;
+      --tp-blade-value-width: 150px; font-size: 12px; }
+    #zapCampos .tp-fldv_t { letter-spacing: 1px; font-weight: 600; } #zapCampos .tp-sldv_k::before { background: #d08a3e; }
+    #zapCampos input { width: 100%; min-width: 0; height: 20px; box-sizing: border-box; padding: 0 4px; border: 0; border-radius: 2px; font: inherit; color: var(--tp-input-foreground-color); background: var(--tp-input-background-color); }   /* anula el input{} global de la app */
     .zres { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
     .zbig { background: #14110a; border: 1px solid #4a3f28; border-radius: 8px; padding: 6px 10px; } .zbig span { display: block; color: var(--mut); font-size: 12px; } .zbig b { font: 700 22px Consolas, monospace; color: #f3ead0; }
     .zchip { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin: 2px 4px 2px 0; } .zchip.ok { background: #245a2c; color: #bfffc8; } .zchip.no { background: #7a1f1f; color: #ffd0d0; }
@@ -366,7 +367,7 @@
       </div>
     </section>
   </main>
-  <footer>Hekatan Engineers · Portoviejo, Ecuador · Todo lo que hay aquí está EXTRAÍDO del solver de GEO5 (FRGeoFEM) o MEDIDO en su course of analysis, nada es de libro.</footer>
+  <footer>Hekatan Engineers · Portoviejo, Ecuador · Todo lo que hay aquí está EXTRAÍDO del solver de GEO5 (FRGeoFEM) o MEDIDO en su course of analysis, nada es de libro. · <span id="ver" style="color:var(--oro)">v2026-11-26b</span></footer>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
