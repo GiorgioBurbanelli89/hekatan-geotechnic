@@ -21,6 +21,7 @@ export interface ZapataDatos {
   h: number;                     // canto [m]
   Df: number;                    // profundidad del fondo desde la rasante [m]
   cx: number; cy: number;        // columna [m]
+  xc?: number; yc?: number;      // posición del eje de la columna respecto al centro de la zapata [m] (0 = centrada; GEO5 «p»)
   gc: number;                    // peso específico del hormigón
   gr: number;                    // peso específico del relleno sobre la zapata
   // suelo (uno solo, homogéneo)
@@ -143,8 +144,12 @@ export function calcularZapata(d: ZapataDatos): ZapataResultado {
   const G = d.pesoPropio ? d.B * d.L * d.h * d.gc : 0;
   const Z = d.pesoPropio ? d.gr * Math.max(0, d.Df - d.h) * (d.B * d.L - d.cx * d.cy) : 0;
   const V = d.N + G + Z;
-  // GEO5 «Stress in the Footing Bottom»: e_x = (−My + Hx·t)/V ; e_y = (Mx + Hy·t)/V (columna centrada)
-  const ex = (-d.My + d.Hx * d.h) / V, ey = (d.Mx + d.Hy * d.h) / V;
+  // GEO5 «Stress in the Footing Bottom» (ayuda GEO5_EN.fhl, imágenes 3089-3094):
+  //   e_b = (Mx + Hy·t + N·p)/Q ,  e_t = (−My + Hx·t + N·p)/Q ,  p = desplazamiento del eje de la columna (zapata excéntrica).
+  // Solo N lleva el brazo p: el peso propio G y el relleno Z se toman centrados (Q = N + G + Z). GEO5 escribe p_x junto a
+  // Mx y p_y junto a My (nombra el desplazamiento por el eje del momento); aquí x_c va con e_x (My) e y_c con e_y (Mx).
+  const xc = d.xc ?? 0, yc = d.yc ?? 0;
+  const ex = (-d.My + d.Hx * d.h + d.N * xc) / V, ey = (d.Mx + d.Hy * d.h + d.N * yc) / V;
   const erx = Math.abs(ex) / d.B, ery = Math.abs(ey) / d.L, ert = Math.hypot(erx, ery);
   const H = Math.hypot(d.Hx, d.Hy), tD = H / V, delta = Math.atan(tD) / R;
   // --- área efectiva (GEO5 «Effective Area», forma rectangular) ---
@@ -222,7 +227,8 @@ export function calcularZapata(d: ZapataDatos): ZapataResultado {
   // --- informe ---
   const add = (nombre: string, valor: number, unidad: string, fuente: Linea["fuente"], nota?: string) => L_.push({ nombre, valor, unidad, fuente, nota });
   add("V en el fondo (N + G + Z)", V, F, "GEO5");
-  add("e_x", ex, "m", "GEO5"); add("e_y", ey, "m", "GEO5");
+  const exc = xc !== 0 || yc !== 0, nExc = "incluye N·p de la columna excéntrica (fórmula de la ayuda de GEO5; no corrido en GEO5)";
+  add("e_x", ex, "m", "GEO5", xc !== 0 ? nExc : undefined); add("e_y", ey, "m", "GEO5", yc !== 0 ? nExc : undefined);
   add("excentricidad relativa total e_t", ert, "", "GEO5", `≤ ${d.eAdm}`);
   add("b_ef × l_ef", bef * lef, "m²", "GEO5", `${bef.toFixed(3)} × ${lef.toFixed(3)}`);
   add("σ sobre el área efectiva", sigEf, p, "GEO5");
@@ -239,7 +245,8 @@ export function calcularZapata(d: ZapataDatos): ZapataResultado {
 
   if (ert > d.eAdm) av.push(`excentricidad relativa ${ert.toFixed(3)} > ${d.eAdm}: NO cumple`);
   if (ct.Acomp < d.B * d.L * 0.999) av.push(`la resultante sale del núcleo central: se despega el ${(100 * (1 - ct.Acomp / (d.B * d.L))).toFixed(1)} % de la planta`);
-  if (Math.abs(d.Mx) + Math.abs(d.My) > 0) av.push("excentricidad: GEO5 usa el área efectiva (B − 2e); σ_max/σ_min del mapa son la distribución lineal de la zapata rígida (literatura)");
+  if (exc) av.push(`columna excéntrica (x_c = ${xc}, y_c = ${yc} m): GEO5 suma N·p a los momentos (equivale a My − N·x_c y Mx + N·y_c con la columna centrada); zapata y relleno centrados. Fórmula de la ayuda de GEO5, NO comprobada con GEO5 corriendo`);
+  if (Math.abs(d.Mx) + Math.abs(d.My) > 0 || exc) av.push("excentricidad: GEO5 usa el área efectiva (B − 2e); σ_max/σ_min del mapa son la distribución lineal de la zapata rígida (literatura)");
   return {
     V, G, Z, H, delta, ex, ey, erx, ery, ert, bx, by, bef, lef, Aef, sigEf,
     sigMax: ct.pmax, sigMin: ct.pmin, Acomp: ct.Acomp, mapa: { nx: ct.nx, ny: ct.ny, p: ct.p, a: ct.a, b: ct.b, c: ct.c },
@@ -303,7 +310,7 @@ export function asientoGEO5(d: ZapataDatos, V: number, ex: number, ey: number, y
 /** El modelo de ejemplo «zapata_guerra»: Guerra, cap. 5, ej. 1 (zapata 3.45 × 3.45, h 0.45, P 121 t, My 17 t·m,
  *  ks 2920 t/m³). El libro NO da φ, c ni Df: el suelo es EQUIVALENTE (declarado), el que da q_adm ≈ 14 t/m² con FS 3. */
 export const ZAPATA_GUERRA: ZapataDatos = {
-  unidad: "t", B: 3.45, L: 3.45, h: 0.45, Df: 1.5, cx: 0.45, cy: 0.45, gc: 2.4028, gr: 1.8,
+  unidad: "t", B: 3.45, L: 3.45, h: 0.45, Df: 1.5, cx: 0.45, cy: 0.45, xc: 0, yc: 0, gc: 2.4028, gr: 1.8,
   gamma: 1.8, gsat: 2.0, phi: 22.2, c: 0, cu: 0, drenado: true, zw: Infinity,
   Edef: 89.9, nu: 0.3, m: 0.3, Ec: 23138, ks: 2920,
   N: 121, Mx: 0, My: 17, Hx: 0, Hy: 0,

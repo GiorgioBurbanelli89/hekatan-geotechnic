@@ -48,6 +48,17 @@ await cb(); res.zw_con = await dato("zw"); await cb(); res.zw_sin = String(await
 await page.select("#zapUni", "kN"); await espera(); res.kN = { N: await dato("N"), caja: await page.$eval(fila("N") + " input", (e) => e.value), smax: (await lee()).smax };
 await (await page.$("#zapCampos")).screenshot({ path: `${out}/05_panel_kN.png` });
 await page.select("#zapUni", "t"); await espera(); res.t_otra_vez = await lee();
+// columna excéntrica: x_c = 0.6 (arrastre + número), dibujo y hover del corte sobre la columna; vuelta a 0 exacta
+await arrastra("xc", 0.85); res.xc_arrastre = { xc: await dato("xc"), r: await lee() };
+await escribe("xc", 0.6); res.xc06 = await lee();
+await page.screenshot({ path: `${out}/06_xc_0.6.png`, fullPage: true });
+const cvC = await page.$("#zapCorte"); await cvC.evaluate((e) => e.scrollIntoView({ block: "center" })); await espera();
+const bC = await cvC.boundingBox(), info = await page.evaluate(() => { const { datos: d, r } = window.__zapata; return { B: d.B, Df: d.Df, h: d.h, zInf: r.asiento.zInf, xc: d.xc }; });
+const prof = info.Df + info.zInf + 0.5, sc2 = Math.min((560 - 50) / prof, (620 * 0.45) / (info.B + 1)), k = bC.width / 620;
+await page.mouse.move(bC.x + (620 * 0.27 + info.xc * sc2) * k, bC.y + (30 + 0.5 * sc2) * k); await espera();
+await cvC.screenshot({ path: `${out}/07_corte_columna_xc.png` });
+await (await page.$("#zapPlanta")).screenshot({ path: `${out}/08_planta_xc.png` });
+await escribe("xc", 0); res.xc_vuelta_exacta = JSON.stringify(await lee()) === JSON.stringify(base0);
 res.version = await page.$eval("#ver", (e) => e.textContent);
 writeFileSync(`${out}/resultados.json`, JSON.stringify(res, null, 1));
 writeFileSync(`${out}/consola.txt`, consola.join("\n"));

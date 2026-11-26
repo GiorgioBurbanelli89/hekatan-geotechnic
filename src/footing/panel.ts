@@ -17,6 +17,8 @@ const GRUPOS: { t: string; c: Campo[] }[] = [
     { k: "Df", et: "Df (desde la rasante)", u: "m", r: [0, 5, 0.05], tip: "profundidad del fondo de la zapata bajo la rasante" },
     { k: "cx", et: "columna cx", u: "m", r: [0.2, 1.5, 0.05], tip: "lado x de la columna" },
     { k: "cy", et: "columna cy", u: "m", r: [0.2, 1.5, 0.05], tip: "lado y de la columna" },
+    { k: "xc", et: "columna x_c", u: "m", r: [-1.5, 1.5, 0.01], tip: "posición del eje de la columna en x respecto al centro de la zapata (0 = centrada; ±(B−cx)/2 = de lindero). GEO5 suma N·x_c al momento" },
+    { k: "yc", et: "columna y_c", u: "m", r: [-1.5, 1.5, 0.01], tip: "posición del eje de la columna en y respecto al centro de la zapata (0 = centrada; ±(L−cy)/2 = de lindero). GEO5 suma N·y_c al momento" },
     { k: "gc", et: "γ hormigón", u: "γ", r: [2, 2.6, 0.0001], tip: "peso unitario del hormigón (peso propio de zapata y columna)" },
     { k: "gr", et: "γ relleno", u: "γ", r: [1.4, 2.2, 0.01], tip: "peso unitario del relleno sobre la zapata" },
     { k: "Ec", et: "E hormigón", u: "MPa", r: [10000, 40000, 1], tip: "módulo del hormigón: rigidez relativa zapata/suelo (rígida si k > 1)" },
@@ -79,7 +81,9 @@ function construir() {
     for (const c of g.c) {
       const esc = c.u && ESCALA.has(c.u), paso = esc && kU !== 1 ? 10 ** Math.floor(Math.log10(c.r[2] * kU) + 1e-9) : c.r[2];
       const v = D[c.k], fin = Number.isFinite(v), nd = dec(paso);
-      const mn = Math.min(c.r[0] * (esc ? kU : 1), fin ? v : Infinity), mx = Math.max(c.r[1] * (esc ? kU : 1), fin ? v : -Infinity);
+      const lim = c.k === "xc" ? (datos.B - datos.cx) / 2 : c.k === "yc" ? (datos.L - datos.cy) / 2 : NaN;   // columna dentro de la zapata
+      const r0 = Number.isNaN(lim) ? c.r[0] * (esc ? kU : 1) : -lim, r1 = Number.isNaN(lim) ? c.r[1] * (esc ? kU : 1) : lim;
+      const mn = Math.min(r0, fin ? v : Infinity), mx = Math.max(r1, fin ? v : -Infinity);
       const u = uni(c.u, datos), label = u ? `${c.et} [${u}]` : c.et;
       if (c.k === "zw") {   // nivel freático: booleano «sin freático» + profundidad
         P.sinNF = !fin; P.zw = fin ? v : Math.min(mx, Math.max(mn, d0("zw")));
@@ -90,7 +94,7 @@ function construir() {
         bZ.on("change", (ev) => { if (P.sinNF) return; datos.zw = +(ev.value as number).toFixed(nd); pedirCalculo(); });
         continue;
       }
-      P[c.k] = v;
+      P[c.k] = Number.isFinite(v) ? v : 0;
       const bi = fo.addBinding(P as Record<string, number>, c.k, { label, min: mn, max: mx, step: paso, format: (x: number) => x.toFixed(nd) });
       bi.element.title = c.tip; bi.element.dataset.k = c.k;
       bi.on("change", (ev) => {
@@ -172,7 +176,9 @@ function dibujarPlanta(r: ZapataResultado) {
   g.restore();
   g.strokeStyle = "#111"; g.lineWidth = 2; g.strokeRect(X(-d.B / 2), Y(d.L / 2), d.B * sc, d.L * sc);
   g.setLineDash([6, 4]); g.lineWidth = 1.5; g.strokeRect(X(r.ex - ax / 2), Y(r.ey + ay / 2), ax * sc, ay * sc); g.setLineDash([]);
-  g.lineWidth = 2; g.strokeRect(X(-d.cx / 2), Y(d.cy / 2), d.cx * sc, d.cy * sc);
+  const xcol = d.xc ?? 0, ycol = d.yc ?? 0;
+  g.lineWidth = 2; g.strokeRect(X(xcol - d.cx / 2), Y(ycol + d.cy / 2), d.cx * sc, d.cy * sc);
+  g.strokeStyle = "#111"; g.lineWidth = 1; g.beginPath(); g.moveTo(X(xcol) - 6, Y(ycol)); g.lineTo(X(xcol) + 6, Y(ycol)); g.moveTo(X(xcol), Y(ycol) - 6); g.lineTo(X(xcol), Y(ycol) + 6); g.stroke();
   g.fillStyle = "#e00"; g.beginPath(); g.arc(X(r.ex), Y(r.ey), 5, 0, 7); g.fill();
   g.font = "13px Segoe UI"; g.fillStyle = "#111"; g.textAlign = "center";
   g.fillText(`B = ${d.B} m`, X(0), Y(-d.L / 2) + 22);
@@ -203,8 +209,8 @@ function dibujarCorte(r: ZapataResultado) {
   g.strokeStyle = "#5a3d14"; g.lineWidth = 2; g.beginPath(); g.moveTo(0, Y(0)); g.lineTo(W * 0.55, Y(0)); g.stroke();
   if (Number.isFinite(d.zw) && d.zw < prof) { g.strokeStyle = "#1e64d0"; g.setLineDash([8, 4]); g.beginPath(); g.moveTo(0, Y(d.zw)); g.lineTo(W * 0.55, Y(d.zw)); g.stroke(); g.setLineDash([]); g.fillStyle = "#1e64d0"; g.fillText("▽ N.F.", 6, Y(d.zw) - 4); }
   // zapata y columna
-  g.fillStyle = "#b9b9b9"; g.fillRect(X(-d.B / 2), Y(d.Df - d.h), d.B * sc, d.h * sc); g.fillRect(X(-d.cx / 2), Y(-0.6), d.cx * sc, (d.Df - d.h + 0.6) * sc);
-  g.strokeStyle = "#333"; g.lineWidth = 1.5; g.strokeRect(X(-d.B / 2), Y(d.Df - d.h), d.B * sc, d.h * sc); g.strokeRect(X(-d.cx / 2), Y(-0.6), d.cx * sc, (d.Df - d.h + 0.6) * sc);
+  g.fillStyle = "#b9b9b9"; g.fillRect(X(-d.B / 2), Y(d.Df - d.h), d.B * sc, d.h * sc); g.fillRect(X((d.xc ?? 0) - d.cx / 2), Y(-0.6), d.cx * sc, (d.Df - d.h + 0.6) * sc);
+  g.strokeStyle = "#333"; g.lineWidth = 1.5; g.strokeRect(X(-d.B / 2), Y(d.Df - d.h), d.B * sc, d.h * sc); g.strokeRect(X((d.xc ?? 0) - d.cx / 2), Y(-0.6), d.cx * sc, (d.Df - d.h + 0.6) * sc);
   g.fillStyle = "#111"; g.font = "12px Segoe UI";
   g.fillText(`Df = ${d.Df} m`, X(d.B / 2) + 6, Y(d.Df) - 4); g.fillText(`φ = ${d.phi}°  c = ${d.c}  γ = ${d.gamma}`, 8, Y(d.Df) + 40);
   if (r.asiento) {
@@ -282,11 +288,11 @@ function hoverCorte(e: PointerEvent) {
     globo(g, px, py, L, cv.width, cv.height); return;
   }
   if (px > v.W * 0.55 || zw < -0.6) return;
-  const enZap = Math.abs(xw) <= d.B / 2 && zw >= d.Df - d.h && zw <= d.Df, enCol = Math.abs(xw) <= d.cx / 2 && zw >= -0.6 && zw < d.Df - d.h;
+  const enZap = Math.abs(xw) <= d.B / 2 && zw >= d.Df - d.h && zw <= d.Df, enCol = Math.abs(xw - (d.xc ?? 0)) <= d.cx / 2 && zw >= -0.6 && zw < d.Df - d.h;
   g.strokeStyle = "#c33"; g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(0, py); g.lineTo(v.W * 0.55, py); g.stroke(); g.setLineDash([]);
   let L: string[];
-  if (enZap) L = ["zapata", `B = ${d.B} m   L = ${d.L} m   h = ${d.h} m`, `Df = ${d.Df} m`, `φ = ${d.phi}°   c = ${d.c} ${u.p}   γ = ${d.gamma} ${uni("γ", d)}`];
-  else if (enCol) L = ["columna", `cx = ${d.cx} m   cy = ${d.cy} m`, `N = ${d.N} ${uni("F", d)}   My = ${d.My} ${uni("F·m", d)}`, `Df = ${d.Df} m`];
+  if (enZap) L = [(d.xc ?? 0) !== 0 || (d.yc ?? 0) !== 0 ? "zapata excéntrica" : "zapata", `B = ${d.B} m   L = ${d.L} m   h = ${d.h} m`, `Df = ${d.Df} m`, `φ = ${d.phi}°   c = ${d.c} ${u.p}   γ = ${d.gamma} ${uni("γ", d)}`];
+  else if (enCol) L = ["columna", `cx = ${d.cx} m   cy = ${d.cy} m`, `x_c = ${d.xc ?? 0} m   y_c = ${d.yc ?? 0} m`, `N = ${d.N} ${uni("F", d)}   My = ${d.My} ${uni("F·m", d)}`, `Df = ${d.Df} m`];
   else if (zw >= 0) L = ["suelo", `z = ${zw.toFixed(3)} m bajo la rasante`, `φ = ${d.phi}°   c = ${d.c} ${u.p}   γ = ${d.gamma} ${uni("γ", d)}`, `Df = ${d.Df} m   B = ${d.B} m`];
   else return;
   globo(g, px, py, L, cv.width, cv.height);
