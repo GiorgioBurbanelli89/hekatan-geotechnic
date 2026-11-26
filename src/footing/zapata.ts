@@ -46,7 +46,7 @@ export interface ZapataResultado {
   bx: number; by: number; bef: number; lef: number; Aef: number;
   sigEf: number;                 // presión uniforme sobre el área efectiva (la que usa GEO5)
   sigMax: number; sigMin: number; Acomp: number;   // presión de contacto lineal sin tracción (literatura)
-  mapa: { nx: number; ny: number; p: Float64Array };   // presión en la planta (rejilla de celdas)
+  mapa: { nx: number; ny: number; p: Float64Array; a: number; b: number; c: number };   // presión en la planta (rejilla) y su plano σ = max(0, a + b·x + c·y)
   N: { Nq: number; Nc: number; Ng: number };
   f: { sc: number; sq: number; sg: number; dc: number; dq: number; dg: number; ic: number; iq: number; ig: number };
   q0: number; g2: number;
@@ -242,7 +242,7 @@ export function calcularZapata(d: ZapataDatos): ZapataResultado {
   if (Math.abs(d.Mx) + Math.abs(d.My) > 0) av.push("excentricidad: GEO5 usa el área efectiva (B − 2e); σ_max/σ_min del mapa son la distribución lineal de la zapata rígida (literatura)");
   return {
     V, G, Z, H, delta, ex, ey, erx, ery, ert, bx, by, bef, lef, Aef, sigEf,
-    sigMax: ct.pmax, sigMin: ct.pmin, Acomp: ct.Acomp, mapa: { nx: ct.nx, ny: ct.ny, p: ct.p },
+    sigMax: ct.pmax, sigMin: ct.pmin, Acomp: ct.Acomp, mapa: { nx: ct.nx, ny: ct.ny, p: ct.p, a: ct.a, b: ct.b, c: ct.c },
     N: { Nq, Nc, Ng }, f: { sc, sq, sg, dc, dq, dg, ic, iq, ig }, q0, g2,
     Rc, Rq, Rg, Rd, qadm, FS, Rdh, FSh, asiento, winkler, beta, lineas: L_, avisos: av,
     unidades: { F, p, g },

@@ -32,6 +32,10 @@ const GRUPOS: { t: string; c: Campo[] }[] = [
 
 let datos: ZapataDatos = { ...ZAPATA_GUERRA };
 let montado = false;
+// HOVER (cursor + valor): la última vista dibujada de cada lienzo, para pasar del píxel al mundo
+let ultimo: ZapataResultado | null = null;
+let vistaP: { x0: number; y0: number; sc: number; bx: number; by: number; bh: number } | null = null;
+let vistaC: { xc: number; yg: number; sc: number; px0: number; pw: number; smax: number; zInf: number; W: number } | null = null;
 
 function uni(u: string | undefined, d: ZapataDatos) {
   const t = d.unidad === "t";
@@ -81,7 +85,7 @@ function calcular() {
     ${r.asiento ? `<div class="mut">asiento GEO5: característico ${f(r.asiento.sCar)} · centro ${f(r.asiento.sCen)} mm · bordes x ${f(r.asiento.sBx1)} / ${f(r.asiento.sBx2)} · y ${f(r.asiento.sBy1)} / ${f(r.asiento.sBy2)} mm · k = ${f(r.asiento.k, 2)} (${r.asiento.rigida ? "rígida" : "deformable"}) · giro x ${f(r.asiento.giroX, 4)} ‰</div>` : ""}
     ${r.winkler ? `<div class="mut">Winkler (k<sub>s</sub> = ${datos.ks}): medio ${f(r.winkler.sMed)} · máx ${f(r.winkler.sMax)} · mín ${f(r.winkler.sMin)} mm</div>` : ""}
     ${r.avisos.map((a) => `<div style="color:var(--oro)">· ${a}</div>`).join("")}`;
-  dibujarPlanta(r); dibujarCorte(r);
+  ultimo = r; dibujarPlanta(r); dibujarCorte(r);
 }
 
 /** paleta tipo SAFE: azul = mínimo, rojo = máximo */
@@ -122,6 +126,7 @@ function dibujarPlanta(r: ZapataResultado) {
   // valores extremos en las esquinas más / menos cargadas
   // barra de color
   const bx = W - 78, by = 50, bh = H - 100;
+  vistaP = { x0, y0, sc, bx, by, bh };
   for (let k = 0; k < bh; k++) { g.fillStyle = color(1 - k / bh); g.fillRect(bx, by + k, 18, 1.2); }
   g.strokeStyle = "#111"; g.lineWidth = 1; g.strokeRect(bx, by, 18, bh);
   g.fillStyle = "#111"; g.font = "12px Consolas";
@@ -136,6 +141,7 @@ function dibujarCorte(r: ZapataResultado) {
   const sc = Math.min((H - 50) / prof, (W * 0.45) / (d.B + 1));
   const xc = W * 0.27, yg = 30;
   const X = (x: number) => xc + x * sc, Y = (z: number) => yg + z * sc;
+  vistaC = { xc, yg, sc, px0: W * 0.6, pw: W * 0.37, smax: 0, zInf, W };
   // terreno y suelo
   g.fillStyle = "#efe2c4"; g.fillRect(0, Y(0), W * 0.55, H);
   g.strokeStyle = "#5a3d14"; g.lineWidth = 2; g.beginPath(); g.moveTo(0, Y(0)); g.lineTo(W * 0.55, Y(0)); g.stroke();
@@ -151,6 +157,7 @@ function dibujarCorte(r: ZapataResultado) {
     // perfil Δσz y m·σor (derecha)
     const px0 = W * 0.6, pw = W * 0.37, per = r.asiento.perfil, smax = Math.max(...per.map((q) => q.ds), 1e-9);
     const PX = (v: number) => px0 + v / smax * pw;
+    vistaC = { xc, yg, sc, px0, pw, smax, zInf, W };
     g.strokeStyle = "#333"; g.lineWidth = 1; g.beginPath(); g.moveTo(px0, Y(d.Df)); g.lineTo(px0, Y(d.Df + zInf + 0.3)); g.moveTo(px0, Y(d.Df)); g.lineTo(px0 + pw, Y(d.Df)); g.stroke();
     g.fillStyle = "rgba(60,170,60,.25)"; g.beginPath(); g.moveTo(PX(per[0].msor), Y(d.Df + per[0].z));
     for (const q of per) g.lineTo(PX(q.ds), Y(d.Df + q.z));
@@ -163,6 +170,70 @@ function dibujarCorte(r: ZapataResultado) {
   } else {
     g.fillStyle = "#555"; g.fillText("sin E_def: no se calcula el asiento de GEO5", W * 0.6, Y(d.Df));
   }
+}
+
+/** Globo del hover (fondo oscuro, texto claro, como los de Struct/Math Studio), pegado al cursor sin salirse. */
+function globo(g: CanvasRenderingContext2D, px: number, py: number, lineas: string[], W: number, H: number) {
+  g.font = "12px Consolas"; const w = Math.max(...lineas.map((l) => g.measureText(l).width)) + 16, h = lineas.length * 16 + 10;
+  let x = px + 14, y = py + 14; if (x + w > W - 4) x = px - 14 - w; if (y + h > H - 4) y = py - 14 - h; x = Math.max(4, x); y = Math.max(4, y);
+  g.fillStyle = "rgba(20,28,40,.92)"; g.strokeStyle = "#f0b400"; g.lineWidth = 1;
+  g.beginPath(); g.roundRect(x, y, w, h, 6); g.fill(); g.stroke();
+  g.fillStyle = "#fff"; g.textAlign = "left"; lineas.forEach((l, i) => g.fillText(l, x + 8, y + 18 + i * 16));
+}
+/** píxel del evento → coordenadas del lienzo (el canvas se muestra escalado por CSS) */
+function aLienzo(cv: HTMLCanvasElement, e: PointerEvent) {
+  const R = cv.getBoundingClientRect(); return { px: (e.clientX - R.left) * cv.width / R.width, py: (e.clientY - R.top) * cv.height / R.height };
+}
+
+/** Hover de la planta: σ(x, y) = max(0, a + b·x + c·y), el MISMO plano que pinta el mapa (no se lee el color). */
+function hoverPlanta(e: PointerEvent) {
+  const cv = $<HTMLCanvasElement>("zapPlanta"), r = ultimo, v = vistaP; if (!r || !v) return;
+  dibujarPlanta(r); const g = cv.getContext("2d")!, { px, py } = aLienzo(cv, e), d = datos;
+  const x = (px - v.x0) / v.sc - d.B / 2, y = d.L / 2 - (py - v.y0) / v.sc;
+  if (Math.abs(x) > d.B / 2 || Math.abs(y) > d.L / 2) return;   // fuera de la zapata: solo el mapa
+  const { a, b, c } = r.mapa, s = Math.max(0, a + b * x + c * y);
+  const ax = d.B - 2 * Math.abs(r.ex), ay = d.L - 2 * Math.abs(r.ey);
+  const dentro = Math.abs(x - r.ex) <= ax / 2 && Math.abs(y - r.ey) <= ay / 2;
+  g.strokeStyle = "#111"; g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(px, v.y0); g.lineTo(px, v.y0 + d.L * v.sc); g.moveTo(v.x0, py); g.lineTo(v.x0 + d.B * v.sc, py); g.stroke(); g.setLineDash([]);
+  g.fillStyle = "#fff"; g.strokeStyle = "#111"; g.lineWidth = 1.5; g.beginPath(); g.arc(px, py, 4, 0, 7); g.fill(); g.stroke();
+  // marca en la barra de colores
+  const t = (s - r.sigMin) / Math.max(1e-9, r.sigMax - r.sigMin), yb = v.by + (1 - Math.max(0, Math.min(1, t))) * v.bh;
+  g.fillStyle = "#111"; g.beginPath(); g.moveTo(v.bx - 2, yb); g.lineTo(v.bx - 10, yb - 5); g.lineTo(v.bx - 10, yb + 5); g.fill();
+  g.strokeStyle = "#111"; g.lineWidth = 2; g.beginPath(); g.moveTo(v.bx, yb); g.lineTo(v.bx + 18, yb); g.stroke();
+  globo(g, px, py, [`x = ${x.toFixed(3)} m   y = ${y.toFixed(3)} m`, `σ = ${s.toFixed(3)} ${r.unidades.p}${s <= 0 ? " (despegada)" : ""}`,
+    dentro ? "dentro del área efectiva GEO5" : "fuera del área efectiva GEO5"], cv.width, cv.height);
+}
+
+/** Hover del corte: a la derecha el perfil Δσz / m·σor en la z del cursor (interpolación lineal de la MISMA polilínea
+ *  que se dibuja); a la izquierda los datos de la zapata, la columna o el suelo. */
+function hoverCorte(e: PointerEvent) {
+  const cv = $<HTMLCanvasElement>("zapCorte"), r = ultimo, v = vistaC; if (!r || !v) return;
+  dibujarCorte(r); const g = cv.getContext("2d")!, { px, py } = aLienzo(cv, e), d = datos, u = r.unidades;
+  const xw = (px - v.xc) / v.sc, zw = (py - v.yg) / v.sc;   // x desde el eje, z desde la rasante
+  if (px >= v.px0 - 10 && r.asiento) {   // perfil de esfuerzos
+    const z = zw - d.Df, per = r.asiento.perfil; if (z < 0 || z > v.zInf + 0.3) return;
+    g.strokeStyle = "#c33"; g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(v.px0, py); g.lineTo(v.px0 + v.pw, py); g.stroke(); g.setLineDash([]);
+    const L = [`z = ${z.toFixed(3)} m bajo el fondo`];
+    if (z > v.zInf) L.push("bajo la zona de influencia", "(Δσz < m·σor: no asienta)");
+    else {
+      let k = 0; while (k < per.length - 2 && per[k + 1].z < z) k++;
+      const q0 = per[k], q1 = per[Math.min(k + 1, per.length - 1)], w = q1.z > q0.z ? Math.max(0, Math.min(1, (z - q0.z) / (q1.z - q0.z))) : 0;
+      const ds = q0.ds + (q1.ds - q0.ds) * w, ms = q0.msor + (q1.msor - q0.msor) * w;
+      const PX = (s: number) => v.px0 + s / v.smax * v.pw;
+      for (const [s, col] of [[ds, "#2a8a2a"], [ms, "#111"]] as [number, string][]) { g.fillStyle = col; g.beginPath(); g.arc(PX(s), py, 4, 0, 7); g.fill(); }
+      L.push(`Δσz   = ${ds.toFixed(3)} ${u.p}`, `m·σor = ${ms.toFixed(3)} ${u.p}`, "dentro de la zona de influencia");
+    }
+    globo(g, px, py, L, cv.width, cv.height); return;
+  }
+  if (px > v.W * 0.55 || zw < -0.6) return;
+  const enZap = Math.abs(xw) <= d.B / 2 && zw >= d.Df - d.h && zw <= d.Df, enCol = Math.abs(xw) <= d.cx / 2 && zw >= -0.6 && zw < d.Df - d.h;
+  g.strokeStyle = "#c33"; g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(0, py); g.lineTo(v.W * 0.55, py); g.stroke(); g.setLineDash([]);
+  let L: string[];
+  if (enZap) L = ["zapata", `B = ${d.B} m   L = ${d.L} m   h = ${d.h} m`, `Df = ${d.Df} m`, `φ = ${d.phi}°   c = ${d.c} ${u.p}   γ = ${d.gamma} ${uni("γ", d)}`];
+  else if (enCol) L = ["columna", `cx = ${d.cx} m   cy = ${d.cy} m`, `N = ${d.N} ${uni("F", d)}   My = ${d.My} ${uni("F·m", d)}`, `Df = ${d.Df} m`];
+  else if (zw >= 0) L = ["suelo", `z = ${zw.toFixed(3)} m bajo la rasante`, `φ = ${d.phi}°   c = ${d.c} ${u.p}   γ = ${d.gamma} ${uni("γ", d)}`, `Df = ${d.Df} m   B = ${d.B} m`];
+  else return;
+  globo(g, px, py, L, cv.width, cv.height);
 }
 
 /** Monta el panel una vez y engancha los selectores. */
@@ -180,6 +251,12 @@ export function montarZapata(volver: () => void): void {
     construir(); calcular();
   });
   $<HTMLButtonElement>("zapVolver").addEventListener("click", volver);
+  // hover con mouse y táctil (pointer events); al salir se repinta limpio
+  for (const [id, fn] of [["zapPlanta", hoverPlanta], ["zapCorte", hoverCorte]] as [string, (e: PointerEvent) => void][]) {
+    const cv = $<HTMLCanvasElement>(id); cv.style.touchAction = "pan-y";   // tocar = ver el valor; arrastrar en horizontal = recorrer; vertical sigue desplazando la página
+    cv.addEventListener("pointermove", fn); cv.addEventListener("pointerdown", fn);
+    cv.addEventListener("pointerleave", (e) => { if (ultimo && e.pointerType !== "touch") (id === "zapPlanta" ? dibujarPlanta : dibujarCorte)(ultimo); });
+  }
   $<HTMLButtonElement>("zapReset").addEventListener("click", () => { datos = { ...ZAPATA_GUERRA }; construir(); calcular(); });
 }
 
