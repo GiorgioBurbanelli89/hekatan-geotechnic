@@ -5,30 +5,47 @@ import { calcularZapata, ZAPATA_GUERRA, type ZapataDatos, type ZapataResultado }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-type Campo = { k: keyof ZapataDatos; et: string; u?: string; paso?: number; tip?: string };
+/** Campo con su slider: rango [min, max] y paso en unidades «t» (t, t/m², t/m³…); en kN se escalan por 9.80665.
+ *  Si el valor escrito sale del rango, el slider se AMPLÍA (no recorta). */
+type Campo = { k: keyof ZapataDatos; et: string; u?: string; r: [number, number, number]; tip: string };
 const GRUPOS: { t: string; c: Campo[] }[] = [
   { t: "Zapata", c: [
-    { k: "B", et: "B (lado x)", u: "m", paso: 0.05 }, { k: "L", et: "L (lado y)", u: "m", paso: 0.05 },
-    { k: "h", et: "canto h", u: "m", paso: 0.05 }, { k: "Df", et: "Df (desde la rasante)", u: "m", paso: 0.1 },
-    { k: "cx", et: "columna cx", u: "m", paso: 0.05 }, { k: "cy", et: "columna cy", u: "m", paso: 0.05 },
-    { k: "gc", et: "γ hormigón", u: "γ", paso: 0.1 }, { k: "gr", et: "γ relleno", u: "γ", paso: 0.1 },
-    { k: "Ec", et: "E hormigón", u: "MPa", paso: 1000 },
+    { k: "B", et: "B (lado x)", u: "m", r: [0.5, 8, 0.05], tip: "ancho de la zapata en la dirección x" },
+    { k: "L", et: "L (lado y)", u: "m", r: [0.5, 8, 0.05], tip: "largo de la zapata en la dirección y" },
+    { k: "h", et: "canto h", u: "m", r: [0.2, 2, 0.05], tip: "espesor (canto) de la zapata" },
+    { k: "Df", et: "Df (desde la rasante)", u: "m", r: [0, 5, 0.05], tip: "profundidad del fondo de la zapata bajo la rasante" },
+    { k: "cx", et: "columna cx", u: "m", r: [0.2, 1.5, 0.05], tip: "lado x de la columna" },
+    { k: "cy", et: "columna cy", u: "m", r: [0.2, 1.5, 0.05], tip: "lado y de la columna" },
+    { k: "gc", et: "γ hormigón", u: "γ", r: [2, 2.6, 0.01], tip: "peso unitario del hormigón (peso propio de zapata y columna)" },
+    { k: "gr", et: "γ relleno", u: "γ", r: [1.4, 2.2, 0.01], tip: "peso unitario del relleno sobre la zapata" },
+    { k: "Ec", et: "E hormigón", u: "MPa", r: [10000, 40000, 100], tip: "módulo del hormigón: rigidez relativa zapata/suelo (rígida si k > 1)" },
   ] },
   { t: "Suelo", c: [
-    { k: "gamma", et: "γ", u: "γ", paso: 0.05 }, { k: "gsat", et: "γ saturado", u: "γ", paso: 0.05 },
-    { k: "phi", et: "φ", u: "°", paso: 0.5 }, { k: "c", et: "c", u: "p", paso: 0.5 },
-    { k: "cu", et: "c_u (no drenado)", u: "p", paso: 0.5 }, { k: "zw", et: "N.F. (prof.)", u: "m", paso: 0.1, tip: "vacío o ∞ = sin agua" },
-    { k: "Edef", et: "E_def", u: "MPa", paso: 1, tip: "0 = no calcula el asiento de GEO5" }, { k: "nu", et: "ν", paso: 0.05 },
-    { k: "m", et: "m (resist. estructural)", paso: 0.05 }, { k: "ks", et: "k_s (Winkler)", u: "F/m³", paso: 100, tip: "0 = sin Winkler" },
+    { k: "gamma", et: "γ", u: "γ", r: [1.2, 2.3, 0.01], tip: "peso unitario natural del suelo" },
+    { k: "gsat", et: "γ saturado", u: "γ", r: [1.5, 2.4, 0.01], tip: "peso unitario saturado (bajo el nivel freático)" },
+    { k: "phi", et: "φ", u: "°", r: [0, 45, 0.1], tip: "ángulo de fricción interna (efectivo)" },
+    { k: "c", et: "c", u: "p", r: [0, 20, 0.1], tip: "cohesión efectiva" },
+    { k: "cu", et: "c_u (no drenado)", u: "p", r: [0, 20, 0.1], tip: "resistencia al corte no drenada (solo con «no drenado»)" },
+    { k: "zw", et: "N.F. (prof.)", u: "m", r: [0, 20, 0.05], tip: "profundidad del nivel freático bajo la rasante; marca «sin freático» para ∞" },
+    { k: "Edef", et: "E_def", u: "MPa", r: [0, 300, 0.1], tip: "módulo de deformación del suelo (0 = no calcula el asiento de GEO5)" },
+    { k: "nu", et: "ν", r: [0, 0.49, 0.01], tip: "coeficiente de Poisson del suelo" },
+    { k: "m", et: "m (resist. estructural)", r: [0, 1, 0.01], tip: "coeficiente de resistencia estructural: la zona de influencia acaba donde Δσz = m·σor" },
+    { k: "ks", et: "k_s (Winkler)", u: "F/m³", r: [0, 20000, 10], tip: "módulo de balasto (0 = sin Winkler)" },
   ] },
   { t: "Cargas (servicio, cabeza)", c: [
-    { k: "N", et: "N", u: "F", paso: 1 }, { k: "Mx", et: "Mx", u: "F·m", paso: 0.5 }, { k: "My", et: "My", u: "F·m", paso: 0.5 },
-    { k: "Hx", et: "Hx", u: "F", paso: 0.5 }, { k: "Hy", et: "Hy", u: "F", paso: 0.5 },
+    { k: "N", et: "N", u: "F", r: [0, 1000, 0.5], tip: "carga axial de servicio en la cabeza de la columna" },
+    { k: "Mx", et: "Mx", u: "F·m", r: [-200, 200, 0.1], tip: "momento alrededor de x (excentricidad en y)" },
+    { k: "My", et: "My", u: "F·m", r: [-200, 200, 0.1], tip: "momento alrededor de y (excentricidad en x)" },
+    { k: "Hx", et: "Hx", u: "F", r: [-100, 100, 0.1], tip: "cortante horizontal en x" },
+    { k: "Hy", et: "Hy", u: "F", r: [-100, 100, 0.1], tip: "cortante horizontal en y" },
   ] },
   { t: "Exigencias", c: [
-    { k: "FS", et: "FS vertical", paso: 0.1 }, { k: "eAdm", et: "e relativa admisible", paso: 0.01 },
+    { k: "FS", et: "FS vertical", r: [1, 5, 0.1], tip: "factor de seguridad exigido a la capacidad vertical (q_adm = R_d / FS)" },
+    { k: "eAdm", et: "e relativa admisible", r: [0, 0.5, 0.001], tip: "excentricidad relativa admisible (1/3 ≈ 0.333)" },
   ] },
 ];
+/** unidades que cambian con t ↔ kN (factor 9.80665) */
+const ESCALA = new Set(["γ", "p", "F", "F·m", "F/m³"]);
 
 let datos: ZapataDatos = { ...ZAPATA_GUERRA };
 let montado = false;
@@ -43,22 +60,47 @@ function uni(u: string | undefined, d: ZapataDatos) {
 }
 
 function construir() {
-  const caja = $<HTMLDivElement>("zapCampos");
-  caja.innerHTML = GRUPOS.map((g) => `<div class="zg"><div class="zt">${g.t}</div>` + g.c.map((c) => {
-    const v = datos[c.k] as number;
-    return `<label class="zc" title="${c.tip ?? ""}"><span>${c.et}</span><input data-k="${c.k}" type="text" value="${Number.isFinite(v) ? v : "∞"}"><i>${uni(c.u, datos)}</i></label>`;
-  }).join("") + `</div>`).join("");
-  caja.querySelectorAll<HTMLInputElement>("input[data-k]").forEach((inp) => {
+  const caja = $<HTMLDivElement>("zapCampos"), kU = datos.unidad === "t" ? 1 : 9.80665;
+  const dec = (paso: number) => Math.max(0, -Math.floor(Math.log10(paso) + 1e-9));
+  caja.innerHTML = GRUPOS.map((g) => `<details class="zg" open><summary class="zt">${g.t}</summary>` + g.c.map((c) => {
+    const k = c.u && ESCALA.has(c.u) ? kU : 1, v = datos[c.k] as number, fin = Number.isFinite(v);
+    const mn = Math.min(c.r[0] * k, fin ? v : Infinity), mx = Math.max(c.r[1] * k, fin ? v : -Infinity), paso = c.r[2] * k;
+    const nf = c.k === "zw" ? `<label class="znf"><input type="checkbox" data-nf ${fin ? "" : "checked"}> sin freático</label>` : "";
+    return `<div class="zs" title="${c.tip}"><span>${c.et}</span><input class="zn" data-k="${c.k}" type="text" inputmode="decimal" value="${fin ? v : "∞"}"><i>${uni(c.u, datos)}</i>
+      <input class="zr" data-k="${c.k}" data-d="${dec(paso)}" type="range" min="${mn}" max="${mx}" step="${paso}" value="${fin ? v : mx}" ${fin ? "" : "disabled"}>${nf}</div>`;
+  }).join("") + `</details>`).join("");
+  const D = datos as unknown as Record<string, number>;
+  caja.querySelectorAll<HTMLInputElement>("input.zn").forEach((inp) => {
+    const rg = caja.querySelector<HTMLInputElement>(`input.zr[data-k=${inp.dataset.k}]`)!;
     inp.addEventListener("input", () => {
-      const k = inp.dataset.k as keyof ZapataDatos, t = inp.value.trim().replace(",", ".");
+      const t = inp.value.trim().replace(",", ".");
       const v = t === "" || t === "∞" || /^inf/i.test(t) ? Infinity : parseFloat(t);
-      if (!Number.isNaN(v)) { (datos as unknown as Record<string, number>)[k] = v; calcular(); }
+      if (Number.isNaN(v)) return;
+      D[inp.dataset.k!] = v;
+      if (Number.isFinite(v)) {   // el slider se amplía para contener lo escrito
+        if (v < +rg.min) rg.min = String(v); if (v > +rg.max) rg.max = String(v);
+        rg.disabled = false; rg.value = String(v);
+      }
+      const nf = caja.querySelector<HTMLInputElement>("input[data-nf]"); if (inp.dataset.k === "zw" && nf) { nf.checked = !Number.isFinite(v); rg.disabled = nf.checked; }
+      pedirCalculo();
     });
+    rg.addEventListener("input", () => {   // valor redondeado al paso: al volver al valor original se recupera exacto
+      const v = +(+rg.value).toFixed(+rg.dataset.d!); D[rg.dataset.k!] = v; inp.value = String(v); pedirCalculo();
+    });
+  });
+  const nf = caja.querySelector<HTMLInputElement>("input[data-nf]");
+  nf?.addEventListener("change", () => {
+    const rg = caja.querySelector<HTMLInputElement>("input.zr[data-k=zw]")!, inp = caja.querySelector<HTMLInputElement>("input.zn[data-k=zw]")!;
+    rg.disabled = nf.checked; datos.zw = nf.checked ? Infinity : +rg.value; inp.value = nf.checked ? "∞" : String(datos.zw); pedirCalculo();
   });
   $<HTMLSelectElement>("zapMetodo").value = datos.metodo;
   $<HTMLSelectElement>("zapDren").value = datos.drenado ? "1" : "0";
   $<HTMLSelectElement>("zapUni").value = datos.unidad;
 }
+
+/** recálculo en vivo sin trabarse: como mucho uno por cuadro de pantalla */
+let pendiente = false;
+function pedirCalculo() { if (pendiente) return; pendiente = true; requestAnimationFrame(() => { pendiente = false; calcular(); }); }
 
 const f = (v: number, n = 3) => (Number.isFinite(v) ? v.toFixed(n) : "∞");
 
