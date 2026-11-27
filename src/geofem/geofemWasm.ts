@@ -71,6 +71,8 @@ export class GeoFemWasm {
   }
 
   setLog(log: Log): void { this.log = log; this.mod.geoLog = log; }
+  /** libera la memoria del modelo en el WASM (los submodelos de la SRM por etapa se crean y destruyen en cada corrida) */
+  destroy(): void { this.mod._geofem_destroy(this.h); }
 
   /** Dinámico NO LINEAL (Mohr-Coulomb de GEO5) en el motor C++: mismas opciones y resultado que GeoFem.dynamicNL (solver.ts);
    *  validado contra FRGeoFEM 2024 (tests/dinamico_nl_geo5.ts). Las historias de aceleración `ax`/`ay` no se calculan (0). */

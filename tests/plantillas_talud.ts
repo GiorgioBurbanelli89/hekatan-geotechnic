@@ -16,7 +16,7 @@ let bad = 0; const ok = (c: boolean, t: string) => { console.log((c ? "  ✓ " :
 const OP = { agua: true, cargas: true };
 
 // ---- cada tipo, con sus valores por defecto (y con agua y sobrecarga) ----
-for (const t of PLANTILLAS) for (const extra0 of [{}, { hw: 3, q: 20 }] as Record<string, number>[]) {
+for (const t of PLANTILLAS.filter((t) => t.id !== "excavacion_muro")) for (const extra0 of [{}, { hw: 3, q: 20 }] as Record<string, number>[]) {
   const extra = t.id === "muro" && extra0.hw ? { q: 20 } : extra0;   // el muro no lleva freático
   const txt = hgeoPlantilla(t.id, extra), d = parseHgeo(txt);
   const t0 = Date.now(), b = criticalCircle(d, "bishop", 40, OP), f = criticalCircle(d, "fellenius", 40, OP), tl = (Date.now() - t0) / 1000;

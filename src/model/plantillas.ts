@@ -13,10 +13,13 @@
 //   ladera     talud NATURAL: el terreno del pie también baja, con pendiente α hacia afuera
 //   compuesto  una cara con QUIEBRE: 1:n abajo hasta hq y 1:n₂ arriba
 //   blando     corte con un ESTRATO BLANDO intermedio (espesor t a la profundidad d bajo la corona): la falla lo busca
+//   excavacion_muro  el corte con una EXCAVACIÓN al pie sostenida por un MURO EN VOLADIZO de hormigón (pantalla, zapata con
+//              puntera y talón, DENTELLÓN bajo el talón), CONSTRUIDO POR ETAPAS: (1) talud natural (peso propio), (2) el muro
+//              (la región pasa de suelo a hormigón: `asigna=`), (3) se excava delante (`inactiva=`), (4) FS por SRM del estado final
 //   zapata     corte con una CARGA q de ancho Bz a la distancia dz del borde de la cara (zapata, edificio, tránsito)
 import type { Pt } from "./dsl";
 
-export type PDef = { key: string; label: string; unit: string; def: number; min: number; max: number; step: number };
+export type PDef = { key: string; label: string; unit: string; def: number; min: number; max: number; step: number; grupo?: string };   // grupo: carpeta del panel Tweakpane
 export type Plantilla = { id: string; nombre: string; descripcion: string; params: PDef[] };
 
 const COMUNES = {
@@ -57,6 +60,25 @@ export const PLANTILLAS: Plantilla[] = [
     { key: "t", label: "espesor del estrato blando t", unit: "m", def: 1.5, min: 0.25, max: 8, step: 0.25 },
     P("phi", { label: "φ suelo", def: 30 }), P("c", { label: "c suelo", def: 20 }), { key: "phib", label: "φ estrato blando", unit: "°", def: 14, min: 0, max: 45, step: 0.5 },
     { key: "cb", label: "c estrato blando", unit: "kPa", def: 3, min: 0, max: 80, step: 0.5 }, P("gamma"), P("hw")] },
+  { id: "excavacion_muro", nombre: "Talud con excavación al pie y muro en voladizo (con dentellón)", descripcion: "el corte de siempre; al pie se excava delante y un muro cantilever de hormigón (pantalla + zapata con puntera, talón y dentellón) sostiene el talud. Etapas: talud natural → muro → excavación → FS (SRM) del estado final", params: [
+    P("H", { grupo: "talud" }), P("n", { grupo: "talud" }),
+    { grupo: "excavación", key: "dexc", label: "profundidad de la excavación", unit: "m", def: 1.8, min: 0, max: 6, step: 0.1 },
+    { grupo: "excavación", key: "bexc", label: "ancho de la excavación (desde la pantalla)", unit: "m", def: 7.8, min: 1, max: 30, step: 0.1 },
+    { grupo: "muro", key: "hp", label: "altura de la pantalla (corona → zapata)", unit: "m", def: 2.8, min: 0.8, max: 8, step: 0.1 },
+    { grupo: "muro", key: "tp", label: "espesor de la pantalla", unit: "m", def: 0.4, min: 0.15, max: 1.2, step: 0.05 },
+    { grupo: "muro", key: "tz", label: "espesor de la zapata", unit: "m", def: 0.4, min: 0.2, max: 1.5, step: 0.05 },
+    { grupo: "muro", key: "pun", label: "puntera", unit: "m", def: 1.5, min: 0, max: 5, step: 0.1 },
+    { grupo: "muro", key: "tal", label: "talón", unit: "m", def: 1.5, min: 0.3, max: 6, step: 0.1 },
+    { grupo: "muro", key: "db", label: "dentellón: ancho", unit: "m", def: 0.4, min: 0, max: 1.5, step: 0.05 },
+    { grupo: "muro", key: "dp", label: "dentellón: profundidad bajo la zapata", unit: "m", def: 0.6, min: 0, max: 3, step: 0.05 },
+    { grupo: "muro", key: "muro", label: "muro (1 = con muro · 0 = misma excavación sin muro)", unit: "", def: 1, min: 0, max: 1, step: 1 },
+    { grupo: "hormigón (elástico)", key: "Em", label: "E del hormigón", unit: "GPa", def: 25, min: 10, max: 40, step: 0.5 },
+    { grupo: "hormigón (elástico)", key: "num", label: "ν del hormigón", unit: "", def: 0.2, min: 0.1, max: 0.3, step: 0.01 },
+    { grupo: "hormigón (elástico)", key: "gm", label: "γ del hormigón", unit: "kN/m³", def: 24, min: 22, max: 26, step: 0.5 },
+    P("phi", { grupo: "suelo" }), P("c", { grupo: "suelo" }), P("gamma", { grupo: "suelo" }),
+    { grupo: "suelo", key: "Es", label: "E del suelo", unit: "MPa", def: 20, min: 5, max: 200, step: 1 },
+    { grupo: "suelo", key: "nus", label: "ν del suelo", unit: "", def: 0.3, min: 0.15, max: 0.45, step: 0.01 },
+    { grupo: "malla", key: "h", label: "tamaño de elemento (malla)", unit: "m", def: 0.8, min: 0.2, max: 2, step: 0.05 }] },
   { id: "zapata", nombre: "Carga en la corona (zapata)", descripcion: "corte con una carga q de ancho Bz a la distancia dz detrás del borde de la cara (zapata, edificio, tránsito)", params: [
     P("H"), P("n"), P("phi"), P("c"), P("gamma"), P("hw"), P("q", { label: "carga q de la zapata", def: 100 }),
     { key: "Bz", label: "ancho de la carga Bz", unit: "m", def: 3, min: 0.5, max: 12, step: 0.25 }, { key: "dz", label: "distancia al borde dz", unit: "m", def: 2, min: 0, max: 15, step: 0.25 }] },
@@ -82,6 +104,7 @@ export function hgeoPlantilla(id: string, dados: Record<string, number> = {}): s
     if (!(p.hw > 0)) return [];
     const zc = Math.min(p.hw, H - 0.3); return [`agua gwt ${pts([[xmin, z0], [xpie, 0], [xc, zc], [xmax, zc]])}`];
   };
+  if (id === "excavacion_muro") { L1.push(...excavacionMuro(p)); return L1.join("\n") + "\n"; }
   if (id === "compuesto") {
     const hq = Math.min(Math.max(p.hq, 0.5), H - 0.5), xpie = Math.max(H, 5), x1 = xpie + hq * n, xc = x1 + (H - hq) * p.n2;
     const xmax = xc + Math.max(2 * H, 10), fondo = -Math.max(0.5 * H, 3);
@@ -143,4 +166,50 @@ export function hgeoPlantilla(id: string, dados: Record<string, number> = {}): s
 export function fsInfinito(phi: number, beta: number, c = 0, gamma = 1, z = 1): number {
   const b = (beta * Math.PI) / 180;
   return c / (gamma * z * Math.sin(b) * Math.cos(b)) + Math.tan((phi * Math.PI) / 180) / Math.tan(b);
+}
+
+/** Geometría del muro en voladizo al pie del corte (la usan la plantilla, el dibujo y las pruebas). Cotas absolutas. */
+export function muroExcavacion(p: Record<string, number>) {
+  const H = p.H, n = p.n, xpie = Math.max(H, 5), xc = xpie + n * H, xmax = xc + Math.max(2 * H, 10);
+  const tp = p.tp, xw = xpie - tp / 2, xb = xpie + tp / 2;                 // pantalla CENTRADA en el pie del talud (cara vista en xw)
+  const zt = (x: number) => (x <= xpie ? 0 : Math.min((x - xpie) / n, H));   // terreno natural
+  const hp = Math.max(p.hp, 0.5), zz = -hp, zb = zz - p.tz;                 // techo y fondo de la zapata
+  const dexc = Math.min(Math.max(p.dexc, 0), hp - 0.2);                     // la excavación no llega a la zapata
+  const xp = Math.max(xw - p.pun, 0.5), xt = xb + p.tal;                    // puntera y extremo del talón
+  const db = Math.min(p.db, xt - xb), dp = db > 0.01 ? p.dp : 0, zd = zb - dp, xd = xt - db;   // dentellón pegado al extremo del talón
+  const fondo = Math.min(-Math.max(0.5 * H, 3), zd - 1);                    // el fondo baja si el dentellón lo pide (≥ 1 m debajo)
+  const xe = Math.max(xw - p.bexc, 0);                                      // borde izquierdo de la excavación
+  return { xpie, xc, xmax, xw, xb, zt, hp, zz, zb, dexc, xp, xt, xd, zd, db, dp, fondo, xe };
+}
+/** el contorno del muro (polígono cerrado, antihorario) */
+export function poligonoMuro(p: Record<string, number>): Pt[] {
+  const g = muroExcavacion(p);
+  const dent: Pt[] = g.dp > 0.01 ? [[g.xd, g.zb], [g.xd, g.zd], [g.xt, g.zd]] : [];
+  return [[g.xw, 0], [g.xw, g.zz], [g.xp, g.zz], [g.xp, g.zb], ...dent, [g.xt, g.zb], [g.xt, g.zz], [g.xb, g.zz], [g.xb, g.zt(g.xb)], [g.xpie, 0]];
+}
+function excavacionMuro(p: Record<string, number>): string[] {
+  const g = muroExcavacion(p), H = p.H, L: string[] = [];
+  const r6 = (v: number) => String(Math.round(v * 1e6) / 1e6), pts = (P: Pt[]) => P.map((q) => `${r6(q[0])},${r6(q[1])}`).join(" ");   // 6 decimales: la cara de atrás acaba EN la cara del talud
+  L.push(`margenes xmin=0 xmax=${r(g.xmax)} fondo=${r(g.fondo)}`, `interfaz ${pts([[0, 0], [g.xpie, 0], [g.xc, H], [g.xmax, H]])}`);
+  L.push(`suelo SUELO E=${r(p.Es * 1000)} nu=${r(p.nus)} phi=${r(p.phi)} c=${r(p.c)} gamma=${r(p.gamma)}`);
+  // hormigón ELÁSTICO con su E (no el Rigid body de GEO5 con E = 1e9): no plastifica y la SRM no lo reduce; φ y c altos solo
+  // para que el aviso «φ < 1°» no salte
+  L.push(`suelo HORMIGON E=${r(p.Em * 1e6)} nu=${r(p.num)} phi=45 c=10000 gamma=${r(p.gm)} elastico=1`);
+  // contorno del muro como LÍNEA LIBRE (del terreno en la cara vista al terreno en la cara de atrás), con un vértice en el fondo de la excavación
+  const dent: Pt[] = g.dp > 0.01 ? [[g.xd, g.zb], [g.xd, g.zd], [g.xt, g.zd]] : [];
+  const lm: Pt[] = [[g.xw, 0], ...(g.dexc > 0.05 ? [[g.xw, -g.dexc] as Pt] : []), [g.xw, g.zz], [g.xp, g.zz], [g.xp, g.zb], ...dent, [g.xt, g.zb], [g.xt, g.zz], [g.xb, g.zz], [g.xb, g.zt(g.xb)]];
+  L.push(`linea ${pts(lm)}`);
+  const pMuro: Pt = [(g.xw + g.xb) / 2, g.zz / 2];
+  const hayExc = g.dexc > 0.05;
+  const pExc: Pt = [(g.xe + g.xw) / 2, -g.dexc / 2];
+  if (hayExc) L.push(`linea ${pts(g.xe > 0.05 ? [[g.xe, 0], [g.xe, -g.dexc], [g.xw, -g.dexc]] : [[0, -g.dexc], [g.xw, -g.dexc]])}`);
+  // antes del muro TODO es suelo natural (también la región del muro y la de la excavación)
+  L.push(`asignar SUELO en ${r(g.xc + 1)},${r(g.fondo / 2)}`, `asignar SUELO en ${r(pMuro[0])},${r(pMuro[1])}`);
+  if (hayExc) L.push(`asignar SUELO en ${r(pExc[0])},${r(pExc[1])}`);
+  L.push(`malla ${r(p.h)}`);
+  L.push("etapa talud natural");
+  if (p.muro >= 0.5) L.push(`etapa muro asigna=HORMIGON@${r(pMuro[0])},${r(pMuro[1])}`);
+  if (hayExc) L.push(`etapa excavacion inactiva=${r(pExc[0])},${r(pExc[1])}`);
+  L.push("etapa FS final srm=1");
+  return L;
 }

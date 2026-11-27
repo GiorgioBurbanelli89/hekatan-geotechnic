@@ -336,7 +336,8 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
   const stages: GeoModel["stages"] = [];
   let acc: string[] = ["Fg"];
   // ---- actividad por etapa (Activity de GEO5): se hereda; `inactiva`/`activa` señalan la región por un punto ----
-  const staged = def.stages.some((st) => st.activa?.length || st.inactiva?.length);
+  const staged = def.stages.some((st) => st.activa?.length || st.inactiva?.length || st.asigna?.length || st.srm);
+  const conMat = def.stages.some((st) => st.asigna?.length);   // cambio de material por etapa (GEO5): EMAT propio de cada etapa
   const regionEn = (p: Pt) => {
     for (let e = 0; e < ELE.length; e++) {
       const [a, b, c] = ELE[e];
@@ -345,7 +346,7 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     }
     throw new Error(`el punto ${p[0]},${p[1]} de «activa/inactiva» no cae en ninguna región`);
   };
-  let activo = new Array<number>(ELE.length).fill(1);
+  let activo = new Array<number>(ELE.length).fill(1), ematSt = EMAT.slice();
   def.stages.forEach((st, si) => {
     const F = new Float64Array(ndof);
     for (const sc of st.surcharges) surchargeLoad(F, sc.q, sc.a, sc.b, X, Y, bEdges);
@@ -357,8 +358,12 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
       activo = activo.slice();
       for (const q of st.inactiva ?? []) { const k = regionEn(q); REGK.forEach((r, e) => { if (r === k) activo[e] = 0; }); }
       for (const q of st.activa ?? []) { const k = regionEn(q); REGK.forEach((r, e) => { if (r === k) activo[e] = 1; }); }
+      if (st.asigna?.length) {
+        ematSt = ematSt.slice();
+        for (const a of st.asigna) { const si2 = soilIdx.get(a.soil); if (!si2) throw new Error(`asigna: el suelo «${a.soil}» no existe`); const k = regionEn(a.p); REGK.forEach((r, e) => { if (r === k) ematSt[e] = si2; }); }
+      }
     }
-    stages.push({ name: st.name, loads: acc.slice() as GeoModel["stages"][number]["loads"], geo5: st.geo5, ...(staged ? { active: activo } : {}) });
+    stages.push({ name: st.name, loads: acc.slice() as GeoModel["stages"][number]["loads"], geo5: st.geo5, ...(staged ? { active: activo } : {}), ...(conMat ? { emat: ematSt } : {}), ...(st.srm ? { srm: true } : {}) });
   });
   const model: GeoModel = {
     ...(def.srmGeo5 ? { srmContinua: def.srmGeo5 } : {}),          // `srm geo5` del .hgeo → el algoritmo SRM de GEO5
@@ -371,7 +376,7 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     // «1e6 × el suelo más rígido» (daba E = 2.5e10 kPa, «25000000 MPa» en el rótulo). Antes solo se usaba en el modo GEO5 (bit 32).
     MAT: def.soils.map((s) => [s.rigido ? E_RIGIDO_GEO5 : s.E, s.rigido ? NU_RIGIDO_GEO5 : s.nu, s.phi, s.c, s.gamma, s.psi]), recomputeGravity: true, loads, stages,
     MATNAMES: def.soils.map((s) => s.name),
-    RIGID: def.soils.map((s) => !!s.rigido),
+    RIGID: def.soils.map((s) => !!s.rigido || !!s.elastico),   // `elastico=1` (hormigón con su E): región elástica sin reducción SRM
     ...(def.poros?.length ? { agua: { gwt: [], poros: def.poros.map((q) => ({ pts: q.pts as [number, number][], u: q.u })), gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : def.gwt?.length ? { agua: { gwt: def.gwt, gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : def.ru !== undefined ? { agua: { gwt: [], ru: def.ru, terreno: spanInterface(def.interfaces[0], def.margins!.xmin, def.margins!.xmax).map((q) => [q[0], q[1]] as [number, number]), gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : {}),
     ...(def.soils.some((s) => s.modelo === "mc") ? { MODEL: def.soils.map((s) => (s.modelo === "mc" ? 1 : 0)) } : {}),   // muro de hormigón: región elástica, la SRM no le reduce c ni φ
     ...(staged ? { staged: true, REGK } : {}),

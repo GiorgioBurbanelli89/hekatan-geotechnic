@@ -17,6 +17,7 @@ export type PlotOptions = {
   deformScale?: number;     // 0 = sin deformada
   u?: Float64Array; uel?: Float64Array;
   active?: ArrayLike<number>;   // construcción por etapas: 1/0 por elemento; los inactivos no se pintan (solo sus aristas)
+  emat?: ArrayLike<number>;     // material de cada elemento EN ESA ETAPA (`etapa … asigna=`: el muro nace de hormigón en su etapa)
 };
 
 type Edge = { a: number; b: number; count: number; mats: Set<number> };
@@ -97,7 +98,7 @@ export class SlopePlot {
   setModel(m: PlotModel): void { this.m = m; }
 
   draw(o: PlotOptions): { lv: number[]; vmin: number; vmax: number } {
-    const { X, Y, EMAT, MAT, Fs, Fa } = this.m;
+    const { X, Y, MAT, Fs, Fa } = this.m, EMAT = o.emat ?? this.m.EMAT;
     const ELE = o.active ? this.m.ELE.filter((_, e) => o.active![e]) : this.m.ELE;
     const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
     const FG = this.dark ? "#f3ead0" : "#000", BG = this.dark ? "#000" : "#fff";
@@ -199,7 +200,11 @@ export class SlopePlot {
       for (let t = -H; t < W + H; t += 7 * k) { ctx.moveTo(t, H); ctx.lineTo(t + H, 0); }
       ctx.stroke(); ctx.restore();
       ctx.beginPath(); ctx.strokeStyle = this.dark ? "#cfcfcf" : "#3a3a3a"; ctx.lineWidth = 2.4 * k;
-      for (const e of this.edges) { const M = [...e.mats]; if (M.some(esMuro) && (e.count === 1 || M.some((mm) => !esMuro(mm)))) line(e.a, e.b); }
+      if (o.emat) {   // materiales de la etapa: el contorno del muro = aristas de elementos de muro que no comparte otro elemento de muro activo
+        const cnt = new Map<string, [number, number, number]>();
+        this.m.ELE.forEach((el, e) => { if ((o.active && !o.active[e]) || !esMuro(EMAT[e])) return; for (const [p0, p1] of [[el[0], el[1]], [el[1], el[2]], [el[2], el[0]]]) { const k = p0 < p1 ? `${p0},${p1}` : `${p1},${p0}`; const c = cnt.get(k); if (c) c[2]++; else cnt.set(k, [p0, p1, 1]); } });
+        for (const [p0, p1, c] of cnt.values()) if (c === 1) line(p0, p1);
+      } else for (const e of this.edges) { const M = [...e.mats]; if (M.some(esMuro) && (e.count === 1 || M.some((mm) => !esMuro(mm)))) line(e.a, e.b); }
       ctx.stroke();
     }
     // deformada (opcional): contorno desplazado
@@ -223,11 +228,15 @@ export class SlopePlot {
       ctx.fillStyle = FG; lines.forEach((l, i) => ctx.fillText(l, px, py - h / 2 + (10 + i * 14) * k));
     };
     for (let mi = 0; mi < MAT.length; mi++) {
-      if (!EMAT.includes(mi + 1)) continue;
+      if (!Array.prototype.includes.call(EMAT, mi + 1)) continue;
       const [cxm, cym] = cen(mi + 1);
       const nm = this.m.MATNAMES?.[mi] ?? `SUELO ${mi + 1}`;
       // capas finas: cajas alternadas en x para que no se pisen
       if (this.m.RIGID?.[mi]) {   // MURO: φ y c no significan nada, y el rótulo iría encima del propio muro → a su izquierda
+        if (MAT[mi][0] < 1e9) {   // `elastico=1`: hormigón con su propio E (no el Rigid body de GEO5, E = 1e9): rótulo arriba a la izquierda, fuera del muro
+          box(cxm - 5, cym + 3.8, [nm + " · elástico", `E=${(MAT[mi][0] / 1e6).toFixed(1)} GPa · ν=${MAT[mi][1]} · γ=${+MAT[mi][4].toFixed(2)} kN/m³`, "no plastifica ni se reduce en la SRM"]);
+          continue;
+        }
         box(cxm - 4.5, cym, [nm + " · Rigid body (GEO5)", `E=${MAT[mi][0].toExponential(0).replace("e+", "·10^")} kPa · ν=${MAT[mi][1]} · γ=${+MAT[mi][4].toFixed(2)} kN/m³`, "no se deforma ni se reduce en la SRM"]);
         continue;
       }

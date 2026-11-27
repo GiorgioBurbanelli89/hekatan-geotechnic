@@ -31,7 +31,9 @@ export type GeoModel = {
   // ATADURAS [gdl esclavo, gdl maestro]: u_esclavo = u_maestro, por ELIMINACIÓN (el esclavo comparte la fila del maestro).
   // Las respetan modes(), dynamic() y la SRM (nrstep/srm: gather/scatter por `map`).
   TIES?: number[][];
-  stages: { name: string; loads: string[]; geo5?: number; active?: number[] }[];   // active: 1/0 por elemento (construcción por etapas)
+  // active: 1/0 por elemento (construcción por etapas); emat: material de cada elemento EN ESA ETAPA (cambio de material de GEO5,
+  // `etapa … asigna=`); srm: en un modelo por etapas, esa etapa calcula el FS por SRM sobre la geometría/materiales del momento
+  stages: { name: string; loads: string[]; geo5?: number; active?: number[]; emat?: number[]; srm?: boolean }[];
   srmContinua?: boolean | number;   // modo GEO5 (true = 1; número = bits de geofem_set_srm). SRM de GEO5: cada peldaño desde el estado convergido del anterior (no desde cero)
   staged?: boolean;          // true = CONSTRUCCIÓN POR ETAPAS: análisis de tensiones encadenado (sin SRM); motores TS y WASM
   REGK?: number[];           // región de cada elemento (la que señala `activa/inactiva`)
@@ -604,9 +606,10 @@ export class GeoFem {
   /** Una etapa de CONSTRUCCIÓN (tensiones, SRF = 1), la misma que runStaged de geofem.cpp: activa `a`, carga = peso
    *  de los activos + Fextra, Newton desde el estado anterior; si no cierra, la carga nueva entra en 2, 4, 8, 16
    *  incrementos. En la PRIMERA etapa el estado se pone a cero y u también al acabar (GEO5); la ε NO (medido). */
-  stagedStep(a: ArrayLike<number>, Fextra: ArrayLike<number>, first: boolean): { conv: boolean; alcanzada: number; u: Float64Array; sig1: Float64Array; epl1: Float64Array; eps1: Float64Array } {
+  stagedStep(a: ArrayLike<number>, Fextra: ArrayLike<number>, first: boolean, emat?: ArrayLike<number>): { conv: boolean; alcanzada: number; u: Float64Array; sig1: Float64Array; epl1: Float64Array; eps1: Float64Array } {
     const ne = this.ne, ndof = this.ndof;
     for (let e = 0; e < ne; e++) this.act[e] = a[e] ? 1 : 0;
+    this.ponerMateriales(emat);
     this.dormido.fill(1);
     for (let e = 0; e < ne; e++) if (this.act[e]) for (let k = 0; k < 12; k++) this.dormido[this.edof[e * 12 + k]] = 0;
     if (first) this.prevAct = null;
@@ -647,6 +650,25 @@ export class GeoFem {
       if (nsub < 16) this.log(`    etapa: con ${nsub} incremento(s) no cierra; se reparte la carga en ${nsub * 2}`);
     }
     if (nsub > 16) nsub = 16;
+    if (!c && !this.modoG5 && this.prevAct) {
+      // EXCAVACIÓN GRADUAL (26-nov-2026; solo si lo anterior no cerró, así que los casos que ya convergían no cambian): al quitar
+      // elementos, las fuerzas que hacían sobre los que quedan se liberan de golpe y los incrementos de arriba NO las reparten (solo
+      // reparten F − Flast). Aquí se parte de las fuerzas internas de los que quedan (Σ Bᵀσ de arranque, en equilibrio con lo
+      // quitado) y se va a la carga nueva en n pasos: F_k = F_int0 + (F − F_int0)·k/n (Brown & Booker 1985; «excavation forces»).
+      const sA = Float64Array.from(this.SIG), eA = Float64Array.from(this.EPL), dA = Float64Array.from(this.DEP), hA = Uint8Array.from(this.hasDep), uA = Float64Array.from(u), FkA = Float64Array.from(Fk), alcA = this.alcanzada;
+      const Fi0 = new Float64Array(ndof); this.SIG.set(sig0); this.fintSig(Fi0);
+      for (let n = 4; n <= 64 && !c; n *= 2) {
+        this.SIG.set(sig0); this.EPL.set(epl0); this.DEP.set(dep0); this.hasDep.set(has0); u.fill(0); c = true;
+        for (let j = 1; j <= n && c; j++) {
+          for (let d = 0; d < ndof; d++) Fk[d] = Fi0[d] + (F[d] - Fi0[d]) * j / n;
+          const [cj, du1, itj] = this.nrstep(1.0, Fk, j, undefined, true); c = cj; it += itj;
+          if (c) { let m = 0; for (let d = 0; d < ndof; d++) m = Math.max(m, Math.abs(du1[d])); if (!(m < 1.0)) c = false; }
+          if (c) for (let d = 0; d < ndof; d++) u[d] += du1[d];
+        }
+        if (c) { this.alcanzada = 1; nsub = n; this.log(`    etapa: cierra liberando las fuerzas de la excavación en ${n} pasos`); }
+      }
+      if (!c) { this.SIG.set(sA); this.EPL.set(eA); this.DEP.set(dA); this.hasDep.set(hA); u.set(uA); Fk.set(FkA); this.alcanzada = alcA; }   // como si no se hubiera intentado
+    }
     if (!c) {   // REINTENTO: toda la carga, con la tangente del ápice de GEO5 (como geofem.cpp)
       const sa = Float64Array.from(this.SIG), ea = Float64Array.from(this.EPL), da = Float64Array.from(this.DEP), ha = Uint8Array.from(this.hasDep), alc = this.alcanzada;
       this.SIG.set(sig0); this.EPL.set(epl0); this.DEP.set(dep0); this.hasDep.set(has0);
@@ -720,9 +742,55 @@ export class GeoFem {
     for (let i = 0; i < nn; i++) if (enRegion[i] && !viejo[i]) for (const d of [2 * i, 2 * i + 1]) { const r = this.map[d]; if (r >= 0) this.Utot[d] = x[r]; }
   }
 
+  /** SRM de una etapa `srm=1` en otro motor (worker: WASM con subModeloSrm); null = la hace este motor (srmEnEtapa) */
+  srmExterno?: (si: number) => StageResult | null;
+  private EMAT0: number[] | null = null;   // materiales de la malla (los de `asignar`) antes de los cambios por etapa
+  /** CAMBIO DE MATERIAL de la etapa (GEO5 «Assign» por etapa): el elemento conserva σ y ε_pl; la tangente plástica guardada
+   *  se olvida (el material nuevo arranca con su De). Sin `emat`, los materiales de la malla. */
+  private ponerMateriales(emat?: ArrayLike<number>): void {
+    if (!this.EMAT0) this.EMAT0 = this.EMAT.slice();
+    const src = emat ?? this.EMAT0;
+    for (let e = 0; e < this.ne; e++) if (this.EMAT[e] !== src[e]) { this.EMAT[e] = src[e]; for (let q = 0; q < NG; q++) this.hasDep[e * NG + q] = 0; }
+  }
+
+  /** FS por SRM DENTRO de un modelo por etapas (`etapa … srm=1`): sobre los elementos activos y los materiales de esa etapa,
+   *  desde cero con su peso propio + cargas (la escalera de GEO5 de siempre: el FS no depende de la historia de tensiones en
+   *  un material sin endurecimiento). No toca el estado encadenado: σ, ε_pl, u acumulado y la K elástica se restauran. */
+  private srmEnEtapa(a: ArrayLike<number>, Fextra: ArrayLike<number>, emat?: ArrayLike<number>) {
+    const ne = this.ne, ndof = this.ndof;
+    const keep = { SIG: Float64Array.from(this.SIG), EPL: Float64Array.from(this.EPL), DEP: Float64Array.from(this.DEP), has: Uint8Array.from(this.hasDep), act: Uint8Array.from(this.act), dor: Uint8Array.from(this.dormido), emat: this.EMAT.slice() };
+    for (let e = 0; e < ne; e++) this.act[e] = a[e] ? 1 : 0;
+    this.ponerMateriales(emat);
+    this.dormido.fill(1);
+    for (let e = 0; e < ne; e++) if (this.act[e]) for (let k = 0; k < 12; k++) this.dormido[this.edof[e * 12 + k]] = 0;
+    const F = new Float64Array(ndof);
+    for (let e = 0; e < ne; e++) {
+      if (!this.act[e]) continue;
+      const rho = -this.MAT[this.EMAT[e] - 1][4];
+      for (let q = 0; q < NG; q++) { const [N] = t6(GP[q][0], GP[q][1]); for (let k = 0; k < 6; k++) F[2 * this.ELE[e][k] + 1] += N[k] * rho * this.dJw[e * NG + q]; }
+    }
+    for (let d = 0; d < ndof; d++) F[d] += Fextra[d];
+    this.assembleK(this.Kel, true); if (!bandFactor(this.Kel)) throw new Error("SRM de la etapa: K elástica singular");
+    let na = 0; for (let e = 0; e < ne; e++) na += this.act[e];
+    this.log(`    SRM sobre la geometría de la etapa: ${na} de ${ne} elementos activos`);
+    const r = this.srm(F);
+    this.SIG.set(keep.SIG); this.EPL.set(keep.EPL); this.DEP.set(keep.DEP); this.hasDep.set(keep.has); this.act.set(keep.act); this.dormido.set(keep.dor);
+    for (let e = 0; e < ne; e++) this.EMAT[e] = keep.emat[e];
+    this.restaurarKel();
+    return r;
+  }
+  /** K elástica de la malla completa con los materiales de la malla (la del constructor) */
+  private restaurarKel(): void {
+    const act = Uint8Array.from(this.act), dor = Uint8Array.from(this.dormido), em = this.EMAT.slice();
+    this.act.fill(1); this.dormido.fill(0); if (this.EMAT0) for (let e = 0; e < this.ne; e++) this.EMAT[e] = this.EMAT0[e];
+    this.assembleK(this.Kel, true); bandFactor(this.Kel);
+    this.act.set(act); this.dormido.set(dor); for (let e = 0; e < this.ne; e++) this.EMAT[e] = em[e];
+  }
+
   /** Construcción por etapas: TODAS en orden (fs = NaN: análisis de tensiones). Misma salida que GeoFemWasm.runStaged. */
   runStaged(m: GeoModel, onStage?: (r: StageResult, index: number) => void): StageResult[] {
     const ndof = this.ndof, ne = this.ne;
+    this.MAT = m.MAT;   // sliders de φ/c con el motor reutilizado
     const LOADS: Record<string, ArrayLike<number>> = { ...(m.loads || {}), Fs: m.Fs, Fa: m.Fa };
     return m.stages.map((st, si) => {
       const F = new Float64Array(ndof);
@@ -730,13 +798,27 @@ export class GeoFem {
       if (m.agua) { const ex = extraAguaEtapa(m, st.active ?? new Array(ne).fill(1)); for (let d = 0; d < ndof; d++) F[d] += ex[d]; }
       const t0 = performance.now();
       this.log(""); this.log(`### ${st.name} ###`);
-      const r = this.stagedStep(st.active ?? new Array(ne).fill(1), F, si === 0);
+      if (st.srm && this.srmExterno) {   // la misma SRM en otro motor (el WASM, con el submodelo de los elementos activos)
+        const ext = this.srmExterno(si);
+        if (ext) { this.log(`  ${st.name.padEnd(22)} >>> FS=${f4(ext.fs)}  (motor WASM, submodelo de la etapa)  [${((performance.now() - t0) / 1000).toFixed(1)} s]`); onStage?.(ext, si); return ext; }
+      }
+      if (st.srm) {   // FS por SRM sobre la geometría de esta etapa (no cambia el estado encadenado)
+        const q = this.srmEnEtapa(st.active ?? new Array(ne).fill(1), F, st.emat);
+        const sec = (performance.now() - t0) / 1000;
+        this.log(`    progresion dx(mm) por SRF:${q.prog}`);
+        this.log(`  ${st.name.padEnd(22)} >>> FS=${f4(q.fs)}  [${sec.toFixed(1)} s]`);
+        const res: StageResult = { name: st.name, fs: q.fs, geo5: st.geo5, u: q.ulo, uel: q.uel, steps: q.steps, prog: q.prog, seconds: sec, u1: q.u1, sig1: q.sig1, epl1: q.epl1, eps1: q.eps1, ngp: ne * NG };
+        onStage?.(res, si); return res;
+      }
+      const r = this.stagedStep(st.active ?? new Array(ne).fill(1), F, si === 0, st.emat);
       const sec = (performance.now() - t0) / 1000;
       this.log(`  ${st.name.padEnd(22)} >>> ${r.conv ? "equilibrio" : "NO CONVERGE"}  [${sec.toFixed(1)} s]`);
       const res: StageResult = { name: st.name, fs: NaN, alcanzada: r.alcanzada, geo5: st.geo5, u: r.u, uel: new Float64Array(ndof), steps: [], prog: "", seconds: sec, u1: r.u, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: ne * NG };
       onStage?.(res, si); return res;
     });
   }
+  /** Fuerzas internas Σ Bᵀ·σ·w del estado guardado (elementos activos): en los gdl fijos son las REACCIONES (comprobación del equilibrio). */
+  fuerzasInternas(): Float64Array { const F = new Float64Array(this.ndof); this.fintSig(F); return F; }
 
   /** Estado INICIAL de la SRM (SRF = 1): si no cierra de una vez, desde cero en 2, 4, 8, 16 incrementos (como geofem.cpp). Solo SRF = 1. */
   private nrstepInc(SRF: number, F: Float64Array, rstep: number): [boolean, Float64Array, number] {

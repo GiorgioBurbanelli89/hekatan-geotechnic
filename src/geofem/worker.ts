@@ -3,6 +3,7 @@
 // `stageIdx` = qué etapas calcular (cada etapa es independiente: arranca de cero con su carga total).
 import { GeoFem, GeoModel, StageResult } from "./solver";
 import { GeoFemWasm } from "./geofemWasm";
+import { subModeloSrm, resultadoCompleto, type SubModelo } from "./submodelo";
 import { correrDinamico, DynIn, DynOut } from "../dyn/dinamico";
 
 export type WorkerIn = { type: "run"; model: GeoModel; stageIdx: number[]; engine?: "wasm" | "ts" } | { type: "dyn"; model: GeoModel; opts: DynIn };
@@ -32,7 +33,9 @@ self.onmessage = async (ev: MessageEvent<WorkerIn>) => {
   const log = (line: string) => post({ type: "log", line });
   try {
     const t0 = performance.now();
-    const want = msg.engine ?? "wasm";
+    // cambio de material por etapa y SRM dentro de un modelo por etapas: solo en el motor TS (el WASM no los tiene)
+    const soloTs = msg.model.stages.some((st) => st.emat || st.srm);
+    const want = soloTs ? "ts" : msg.engine ?? "wasm";
     // la malla, B, detJ·w y la banda no cambian con los sliders de φ/c/q/ancla: se reutilizan (γ y E sí rehacen)
     const key = want + "|" + JSON.stringify(msg.model.MAT.map((r) => [r[0], r[1], r[4]])) + "|" + msg.model.X.length + "|" + msg.model.ELE.length;
     if (!fem || femKey !== key) {
@@ -43,7 +46,18 @@ self.onmessage = async (ev: MessageEvent<WorkerIn>) => {
     }
     post({ type: "engine", engine: fem instanceof GeoFemWasm ? "wasm" : "ts" });
     fem.setLog(log);
+    // SRM de las etapas `srm=1` de un modelo por etapas: en el WASM con el submodelo de los elementos activos (3-4 veces más rápido)
+    const subs: GeoFemWasm[] = [];
+    if (fem instanceof GeoFem) fem.srmExterno = undefined;
+    if (fem instanceof GeoFem && msg.model.staged && msg.engine !== "ts") {
+      const m = msg.model, porEtapa = new Map<number, { w: GeoFemWasm; s: SubModelo }>();
+      for (let si = 0; si < m.stages.length; si++) if (m.stages[si].srm) {
+        try { const s = subModeloSrm(m, si); const w = await GeoFemWasm.create(s.model, log); subs.push(w); porEtapa.set(si, { w, s }); } catch (e) { log(`(SRM de la etapa en TS: ${(e as Error).message})`); }
+      }
+      fem.srmExterno = (si) => { const q = porEtapa.get(si); if (!q) return null; q.w.setLog(log); const r = q.w.run(q.s.model)[0]; return resultadoCompleto(r, q.s, m, si); };
+    }
     fem.run(msg.model, msg.stageIdx, (r: StageResult, index: number) => post({ type: "stage", index, result: r }));
+    for (const w of subs) w.destroy();
     post({ type: "done", seconds: (performance.now() - t0) / 1000 });
   } catch (e) {
     post({ type: "error", message: (e as Error).message });

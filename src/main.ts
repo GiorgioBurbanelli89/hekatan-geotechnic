@@ -546,13 +546,14 @@ function buildStageTabs() {
   if (!model) { etabs.innerHTML = ""; return; }
   const vis = visibleStage();
   etabs.innerHTML = model.stages.map((st, i) => {
-    const r = stages[i]; const fs = r && !r.stale ? (model?.staged ? ((r.alcanzada ?? 1) < 1 ? `<span class="fs" style="color:#e5382b">✖</span>` : `<span class="fs">✓</span>`) : r.steps.length ? (r.fs < 1 ? `<span class="fs" style="color:#e5382b">FS &lt; 1 (${r.fs.toFixed(2)})</span>` : `<span class="fs">FS ${r.fs.toFixed(2)}</span>`) : `<span class="fs" style="color:#e5382b">✖</span>`) : "";
+    const r = stages[i]; const fs = r && !r.stale ? (model?.staged && !model.stages[i]?.srm ? ((r.alcanzada ?? 1) < 1 ? `<span class="fs" style="color:#e5382b">✖</span>` : `<span class="fs">✓</span>`) : r.steps.length ? (r.fs < 1 ? `<span class="fs" style="color:#e5382b">FS &lt; 1 (${r.fs.toFixed(2)})</span>` : `<span class="fs">FS ${r.fs.toFixed(2)}</span>`) : `<span class="fs" style="color:#e5382b">✖</span>`) : "";
     return `<button data-st="${i}" class="${i === vis ? "on" : ""}">${i + 1}. ${st.name}${fs}</button>`;
   }).join("");
   etabs.querySelectorAll<HTMLButtonElement>("button").forEach((b) => { b.onclick = () => { selStage.value = b.dataset.st!; selStage.dispatchEvent(new Event("change")); }; });
 }
 function fsTable() {
-  const rows = stages.map((s) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok"${(s.steps.length && s.fs >= 1) || model?.staged ? "" : ' style="color:#e5382b"'}>${model?.staged ? ((s.alcanzada ?? 1) < 1 ? `✖ no converge (${(100 * (s.alcanzada ?? 0)).toFixed(0)} % de la carga)` : "tensiones ✓") : s.steps.length ? (s.fs < 1 ? `FS &lt; 1: inestable (${s.fs.toFixed(4)})` : s.fs.toFixed(4)) : "< 1 ✖ falla"}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
+  const tens = (i: number) => !!model?.staged && !model.stages[i]?.srm;   // etapa de TENSIONES (las `srm=1` dan FS)
+  const rows = stages.map((s, i) => s ? `<tr${s.stale ? ' style="opacity:.45"' : ""}><td>${s.name}${s.stale ? " ⟳" : ""}</td><td class="ok"${(s.steps.length && s.fs >= 1) || tens(i) ? "" : ' style="color:#e5382b"'}>${tens(i) ? ((s.alcanzada ?? 1) < 1 ? `✖ no converge (${(100 * (s.alcanzada ?? 0)).toFixed(0)} % de la carga)` : "tensiones ✓") : s.steps.length ? (s.fs < 1 ? `FS &lt; 1: inestable (${s.fs.toFixed(4)})` : s.fs.toFixed(4)) : "< 1 ✖ falla"}</td><td>${s.geo5 ? s.geo5.toFixed(2) : "—"}</td><td>${s.seconds.toFixed(1)} s</td></tr>` : "").join("");
   fsEl.innerHTML = `<table><tr><th>etapa</th><th>FS</th><th>GEO5</th><th>t</th></tr>${rows}</table>` + (busy ? `<div style="color:var(--oro);margin-top:4px">calculando…</div>` : "");
 }
 
@@ -612,11 +613,12 @@ function redraw() {
   const stress = isStressField(kind) && !!st.sig1;
   const vals = analitico ? new Float64Array(model.X.length)   // método analítico: talud sin color map, solo el círculo de falla
     : stress ? stressField(kind, model.ELE, model.X.length, st.ngp!, st.sig1!, st.eps1!, st.epl1!) : nodalField(u, st.uel, model.X.length, kind);
-  const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress && !model.staged ? " · estado de tensión SRF=1" : "");
+  const tensSt = model.staged && !model.stages[si]?.srm;
+  const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress && !tensSt ? " · estado de tensión SRF=1" : "");
   const rango = plot.draw({
     field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, isolineas: aguaIsolineas(), surface: selSurf.value as "iso" | "line" | "none",
-    title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${model.staged ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}${st.fs < 1 ? "  (FS < 1: inestable)" : ""}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
-    deformScale: factorDeformada(u, st.uel), u, uel: st.uel, active: model.stages[si]?.active,
+    title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${tensSt ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}${st.fs < 1 ? "  (FS < 1: inestable)" : ""}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
+    deformScale: factorDeformada(u, st.uel), u, uel: st.uel, active: model.stages[si]?.active, emat: model.stages[si]?.emat,
   });
   draw.setMap(plot.mapping());
   (window as unknown as { __geoMap: unknown }).__geoMap = plot.mapping();   // para el arnés puppeteer (clics en coordenadas del mundo)

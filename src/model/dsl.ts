@@ -32,6 +32,11 @@
 //   etapa NOMBRE inactiva=x,y;x,y activa=x,y   CONSTRUCCIÓN POR ETAPAS (Activity de GEO5): el punto señala la región
 //       (como `asignar`); la actividad se HEREDA de la etapa anterior. Con alguna etapa así, el cálculo es de TENSIONES
 //       por etapas (cada una arranca del estado de la anterior; la 1 es el estado inicial: sus desplazamientos = 0)
+//   etapa NOMBRE asigna=HORMIGON@8,-1.5        CAMBIO DE MATERIAL en la etapa (GEO5): la región del punto pasa a ese suelo (se hereda;
+//       las tensiones se conservan y entra la diferencia de peso). Para construir un muro dentro del terreno natural.
+//   etapa NOMBRE srm=1                        en un modelo por etapas: FS por SRM sobre la geometría/materiales de ese momento
+//   suelo … elastico=1                        región ELÁSTICA con su propio E (hormigón): no plastifica y la SRM no la reduce
+//                                             (a diferencia de `rigido=1`, que es el Rigid body de GEO5 con E = 1e9)
 //   sismo kh=-0.336 kv=0 [borde=1]           lo mismo como etapa «+sismo»; kh > 0 empuja a +x; región = centro a ≥ borde
 //                                            (por defecto h) de los márgenes izquierdo, derecho y fondo
 //   # comentario
@@ -41,7 +46,7 @@ import { terrenoTalud, terrainFromParam, baseGeom, varianteDeTexto, varianteATex
 import { TIPOS_V1, terrenoV1 } from "./taludes_v1";
 export { terrainFromParam };
 export type Pt = [number, number];
-export type Soil = { name: string; E: number; nu: number; phi: number; c: number; gamma: number; gsat?: number; psi: number; rigido?: boolean; vs?: number; modelo?: "mc" | "dp" };   // vs [m/s]: onda de corte para el DINÁMICO (E_din = 2(1+ν)·(γ/g)·Vs²); sin vs, el dinámico usa E
+export type Soil = { name: string; E: number; nu: number; phi: number; c: number; gamma: number; gsat?: number; psi: number; rigido?: boolean; elastico?: boolean; vs?: number; modelo?: "mc" | "dp" };   // vs [m/s]: onda de corte para el DINÁMICO (E_din = 2(1+ν)·(γ/g)·Vs²); sin vs, el dinámico usa E
 /** Muro cantilever (GEO5 «Rigid body»): x = cara delantera del fuste, H = altura vista sobre el terreno de delante,
  *  fuste/zapata = espesores, talon/dedo = voladizos de la zapata, emp = profundidad de la BASE bajo el terreno. */
 export type WallParam = {
@@ -62,7 +67,10 @@ export type Anchor = { F: number; p: Pt; ang: number };
  *  pone el usuario. Región: todos los elementos cuyo centro dista ≥ `borde` [m] de los márgenes izquierdo, derecho y fondo
  *  (GEO5: la región «no debe tocar los bordes»); por defecto borde = h de la malla. */
 export type Seismic = { kh: number; kv: number; borde?: number };
-export type StageDef = { name: string; geo5?: number; surcharges: Surcharge[]; anchors: Anchor[]; sismo?: Seismic; activa?: Pt[]; inactiva?: Pt[] };
+/** `asigna=HORMIGON@8,-1.5;…` (GEO5: cambio de material en una etapa): la región del punto pasa a ese suelo desde esta etapa (se hereda).
+ *  `srm=1`: en un modelo por etapas, esta etapa NO cambia el estado: calcula el FS por reducción de resistencia (SRM) sobre la
+ *  geometría y los materiales que hay en ese momento (activos + asignaciones), desde el peso propio como cualquier etapa SRM. */
+export type StageDef = { name: string; geo5?: number; surcharges: Surcharge[]; anchors: Anchor[]; sismo?: Seismic; activa?: Pt[]; inactiva?: Pt[]; asigna?: { soil: string; p: Pt }[]; srm?: boolean };
 export type SlopeDef = {
   outline: Pt[]; soils: Soil[]; layers: Layer[]; h: number; stages: StageDef[];
   srmGeo5?: number;                         // `srm geo5`: el SRM con el algoritmo de GEO5 (bits 115 = el que da FS 1.362360 en el muro de Manabí); sin la orden, el SRM propio
@@ -227,7 +235,7 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
       else if (cmd === "talud") { const o = kv(toks.slice(1)); for (const t of toks.slice(1)) { const m = t.match(/^([A-Za-z_][A-Za-z_0-9]*)=(.+)$/); if (m) o[m[1].toLowerCase()] = m[2]; } talTxt = o; def.param = { xpie: num(o.xpie ?? "10"), zpie: num(o.zpie ?? "-10"), H: num(o.h ?? "6"), beta: num(o.beta ?? "33"), corona: num(o.corona ?? "8"), zfin: num(o.zfin ?? String(num(o.zpie ?? "-10") + num(o.h ?? "6"))), beta2: num(o.beta2 ?? "28.6"), ...(o.bermas ? { bermas: num(o.bermas), berma: num(o.berma ?? "2") } : {}) }; def.interfaces.unshift([]); }
       else if (cmd === "suelo") {
         const o = kv(toks.slice(2));
-        def.soils.push({ name: toks[1], E: num(o.e ?? "0"), nu: num(o.nu ?? "0.3"), phi: num(o.phi ?? "0"), c: num(o.c ?? "0"), gamma: num(o.gamma ?? "0"), ...(o.gsat ? { gsat: num(o.gsat) } : {}), psi: num(o.psi ?? "0"), rigido: /^(1|si|sí|true|yes)$/i.test(o.rigido ?? o.rigid ?? "") || undefined, ...(o.vs ? { vs: num(o.vs) } : {}), ...(/^(mc|mohr)/i.test(o.modelo ?? "") ? { modelo: "mc" as const } : {}) });
+        def.soils.push({ name: toks[1], E: num(o.e ?? "0"), nu: num(o.nu ?? "0.3"), phi: num(o.phi ?? "0"), c: num(o.c ?? "0"), gamma: num(o.gamma ?? "0"), ...(o.gsat ? { gsat: num(o.gsat) } : {}), psi: num(o.psi ?? "0"), rigido: /^(1|si|sí|true|yes)$/i.test(o.rigido ?? o.rigid ?? "") || undefined, elastico: /^(1|si|sí|true|yes)$/i.test(o.elastico ?? o["elástico"] ?? "") || undefined, ...(o.vs ? { vs: num(o.vs) } : {}), ...(/^(mc|mohr)/i.test(o.modelo ?? "") ? { modelo: "mc" as const } : {}) });
       } else if (cmd === "asignar") { const en = toks.indexOf("en"); def.assign.push({ soil: toks[1], p: pts([toks[en + 1]])[0] }); }
       else if (cmd === "capa") {
         const side = toks[2].toLowerCase();
@@ -248,6 +256,8 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
           if (key === "geo5") st.geo5 = num(val);
           else if (key === "q") { const en = rest.indexOf("en", j); const p = pts([rest[en + 1], rest[en + 3]]); st.surcharges.push({ q: num(val), a: p[0], b: p[1] }); j = en + 3; }
           else if (key === "activa" || key === "inactiva") (st[key] ??= []).push(...val.split(";").filter(Boolean).map((q) => q.split(",").map(Number) as Pt));
+          else if (key === "asigna") (st.asigna ??= []).push(...val.split(";").filter(Boolean).map((q) => { const [nm, pp] = q.split("@"); if (!pp) throw new Error(`asigna=SUELO@x,y (falta @ en «${q}»)`); return { soil: nm, p: pp.split(",").map(Number) as Pt }; }));
+          else if (key === "srm") st.srm = /^(1|si|sí|true|yes)$/i.test(val) || undefined;
           else if (key === "kh" || key === "kv" || key === "borde") { st.sismo ??= { kh: 0, kv: 0 }; (st.sismo as Record<string, number>)[key] = num(val); }
           else if (key === "f") { const en = rest.indexOf("en", j); const p = pts([rest[en + 1]])[0]; const o = kv(rest.slice(en + 2, en + 4)); st.anchors.push({ F: num(val), p, ang: num(o.ang ?? "0") }); j = en + 2; }
         }
@@ -307,7 +317,7 @@ export function serializeHgeo(def: SlopeDef): string {
   if (def.margins) L.push(`margenes xmin=${r(def.margins.xmin)} xmax=${r(def.margins.xmax)} fondo=${r(def.margins.bottom)}`);
   def.interfaces.forEach((it, k) => { if (k === 0 && def.param) { const q = def.param; L.push(`talud xpie=${r(q.xpie)} zpie=${r(q.zpie)} H=${r(q.H)} beta=${r(q.beta)} corona=${r(q.corona)} zfin=${r(q.zfin)} beta2=${r(q.beta2)}${q.bermas ? ` bermas=${r(q.bermas)} berma=${r(q.berma ?? 0)}` : ""}${varianteATexto(def.variante)}`); } else L.push(`interfaz ${it.map(p).join(" ")}`); });
   if (!def.interfaces.length && def.outline.length) L.push(`contorno ${def.outline.map(p).join(" ")}`);
-  for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.gsat ? ` gsat=${r(s.gsat)}` : ""}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.vs ? ` vs=${r(s.vs)}` : ""}${s.modelo === "mc" ? " modelo=mc" : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}`);
+  for (const s of def.soils) L.push(`suelo ${s.name} E=${r(s.E)} nu=${r(s.nu)} phi=${r(s.phi)} c=${r(s.c)} gamma=${r(s.gamma)}${s.gsat ? ` gsat=${r(s.gsat)}` : ""}${s.psi ? ` psi=${r(s.psi)}` : ""}${s.vs ? ` vs=${r(s.vs)}` : ""}${s.modelo === "mc" ? " modelo=mc" : ""}${s.rigido && !(def.walls ?? []).some((w) => w.soil === s.name) ? " rigido=1" : ""}${s.elastico ? " elastico=1" : ""}`);
   for (const w of def.walls ?? []) L.push(`muro ${w.soil} x=${r(w.pm.x)}${Number.isFinite(w.pm.z as number) ? ` z=${r(w.pm.z as number)}` : ""} H=${r(w.pm.H)} fuste=${r(w.pm.fuste)} zapata=${r(w.pm.zapata)} talon=${r(w.pm.talon)} dedo=${r(w.pm.dedo)} emp=${r(w.pm.emp)}${w.pm.dentp && w.pm.dentb ? ` dentp=${r(w.pm.dentp)} dentb=${r(w.pm.dentb)}` : ""}`);
   if (def.ru !== undefined) L.push(`agua ru=${r(def.ru)}`);
   for (const q of def.poros ?? []) L.push(`agua poros ${r(q.u)} ${q.pts.map(p).join(" ")}`);
@@ -325,6 +335,8 @@ export function serializeHgeo(def: SlopeDef): string {
     if (st.sismo) s += ` kh=${r(st.sismo.kh)} kv=${r(st.sismo.kv)}${st.sismo.borde !== undefined ? ` borde=${r(st.sismo.borde)}` : ""}`;
     if (st.inactiva?.length) s += ` inactiva=${st.inactiva.map(p).join(";")}`;
     if (st.activa?.length) s += ` activa=${st.activa.map(p).join(";")}`;
+    if (st.asigna?.length) s += ` asigna=${st.asigna.map((a) => `${a.soil}@${p(a.p)}`).join(";")}`;
+    if (st.srm) s += " srm=1";
     L.push(s);
   }
   return L.join("\n") + "\n";
