@@ -9,7 +9,7 @@
     "dev": "vite --host 0.0.0.0 --port 4700",
     "build": "vite build",
     "preview": "vite preview --port 4701",
-    "test": "tsx tests/plantillas_talud.ts && tsx tests/zapata_geo5.ts && tsx tests/demo04.ts && tsx tests/muro_geo5.ts && tsx tests/muro_manabi_bits.ts && tsx tests/muro_manabi_fs_geo5.ts && tsx tests/dinamico_columna.ts && tsx tests/dinamico_nl_geo5.ts && tsx tests/sismo_muro.ts && tsx tests/dinamico_muro.ts && tsx tests/etapas_ts_wasm.ts && tsx tests/taludes_variantes.ts && tsx tests/excavacion_muro.ts",
+    "test": "tsx tests/plantillas_talud.ts && tsx tests/zapata_geo5.ts && tsx tests/demo04.ts && tsx tests/muro_geo5.ts && tsx tests/muro_manabi_bits.ts && tsx tests/muro_manabi_fs_geo5.ts && tsx tests/dinamico_columna.ts && tsx tests/dinamico_nl_geo5.ts && tsx tests/sismo_muro.ts && tsx tests/dinamico_muro.ts && tsx tests/etapas_ts_wasm.ts && tsx tests/taludes_variantes.ts && tsx tests/excavacion_muro.ts && tsx tests/estado_k0.ts && tsx tests/analitico.ts",
     "deploy": "node deploy.mjs"
   },
   "devDependencies": {

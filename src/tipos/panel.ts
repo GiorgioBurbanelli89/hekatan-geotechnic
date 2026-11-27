@@ -19,6 +19,8 @@ const f3 = (v?: number) => (v === undefined || !Number.isFinite(v) ? "…" : v.t
 /** opciones del método analítico para la gráfica de main.ts: con un tipo activo cuentan el freático y la sobrecarga */
 export const tipoLemOpts = (): LemOpts => (actual ? OPTS : {});
 export const tipoActivo = () => actual;
+/** cambia un parámetro del tipo activo (si lo tiene) y recalcula; false si no hay tipo o no tiene ese parámetro */
+export function ponerParamTipo(k: string, v: number): boolean { if (!actual || !plantilla(actual).params.some((q) => q.key === k)) return false; elegir(actual, { ...p, [k]: v }); return true; }
 /** FS de elementos finitos de la etapa i (lo llama main.ts al llegar cada etapa del worker) */
 export function tipoFem(i: number, fs: number) { if (!actual) return; fem[i] = fs; tabla(); }
 
@@ -94,6 +96,13 @@ function panelTweakpane(t: ReturnType<typeof plantilla>, c: HTMLElement) {
     const fo = pane.addFolder({ title: g.toUpperCase(), expanded: g !== "hormigón (elástico)" && g !== "malla" });
     for (const q of t.params.filter((q2) => (q2.grupo ?? "parámetros") === g)) {
       const label = q.unit ? `${q.label} [${q.unit}]` : q.label;
+      if (q.key === "ini") {   // estado inicial de la etapa 1: lista
+        P.ini = p.ini;
+        const b = fo.addBinding(P as Record<string, number>, "ini", { label: "estado inicial", options: { "carga por gravedad": 0, "procedimiento K0 (Jaky)": 1, "K0 + paso plástico nulo": 2 } });
+        b.element.dataset.k = q.key; b.element.title = "PLAXIS/GEO5: K0 = σv = Σγh, σh = K0·σv sin cálculo; en taludes no está en equilibrio (usa gravedad o el paso nulo)";
+        b.on("change", (ev) => { p.ini = ev.value as number; pedir(); });
+        continue;
+      }
       if (q.key === "muro") {
         P.muro = p.muro >= 0.5;
         const b = fo.addBinding(P, "muro", { label: "con muro (sin marcar: la misma excavación sin muro)" });

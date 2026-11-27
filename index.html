@@ -142,6 +142,8 @@
       <div id="lemout" class="mats" style="margin:4px 0"></div>
       <label>Etapas a calcular</label>
       <select id="nstages"><option value="3">3 (peso propio · sobrecarga · ancla)</option><option value="2">2</option><option value="1">1 (solo peso propio)</option></select>
+      <label title="estado de tensiones de la 1.ª etapa en un cálculo por etapas (PLAXIS «Initial phase» / GEO5 «geostatic stress»)">Estado inicial (etapa 1)</label>
+      <select id="inicial"><option value="gravedad">carga por gravedad (FEM)</option><option value="k0">procedimiento K0 (σh = K0·σv, Jaky)</option><option value="k0nulo">K0 + paso plástico nulo</option></select>
       <h2 style="margin-top:12px">Parámetros <span style="color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0">(recalcula solo)</span></h2>
       <div id="gsliders"></div>
       <div id="sliders"></div>
@@ -368,7 +370,7 @@
       </div>
     </section>
   </main>
-  <footer><span id="pieTxt">Hekatan Engineers · Portoviejo, Ecuador · Todo lo que hay aquí está EXTRAÍDO del solver de GEO5 (FRGeoFEM) o MEDIDO en su course of analysis, nada es de libro.</span> · <span id="ver" style="color:var(--oro)">v2026-11-27c</span></footer>
+  <footer><span id="pieTxt">Hekatan Engineers · Portoviejo, Ecuador · Todo lo que hay aquí está EXTRAÍDO del solver de GEO5 (FRGeoFEM) o MEDIDO en su course of analysis, nada es de libro.</span> · <span id="ver" style="color:var(--oro)">v2026-11-27d</span></footer>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

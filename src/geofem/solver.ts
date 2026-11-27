@@ -37,6 +37,11 @@ export type GeoModel = {
   srmContinua?: boolean | number;   // modo GEO5 (true = 1; número = bits de geofem_set_srm). SRM de GEO5: cada peldaño desde el estado convergido del anterior (no desde cero)
   staged?: boolean;          // true = CONSTRUCCIÓN POR ETAPAS: análisis de tensiones encadenado (sin SRM); motores TS y WASM
   REGK?: number[];           // región de cada elemento (la que señala `activa/inactiva`)
+  /** ESTADO INICIAL de la primera etapa de un modelo por etapas: «gravedad» (por defecto: el peso propio por elementos finitos) o
+   *  «k0» (procedimiento K0 de PLAXIS / «geostatic stress» de GEO5: σv = Σγ·h de la columna sobre cada punto de Gauss, σh = K0·σv,
+   *  τ = 0, u = 0, sin cálculo) o «k0nulo» (K0 + un paso plástico NULO que aplica las fuerzas desequilibradas) */
+  inicial?: "gravedad" | "k0" | "k0nulo";
+  K0?: number[];             // K0 por material (NaN = Jaky 1 − sinφ; en un material rígido/elástico, ν/(1 − ν))
 };
 
 /** Opciones del análisis dinámico LINEAL (Newmark / HHT-α de FRGeoFEM). Unidades kN, m, t, s. */
@@ -96,6 +101,10 @@ export type StageResult = {
   name: string;
   fs: number;
   alcanzada?: number;       // construcción por etapas: fracción de la carga nueva que llegó al equilibrio (1 = toda)
+  /** ESTADO DE FALLA (último peldaño convergido de la SRM, SRF = srfF ≈ FS): σ, ε_pl, ε de u(FS) por PG y 1/0 = PG plástico */
+  falla?: { srf: number; sig: Float64Array; epl: Float64Array; eps: Float64Array; plas: Float64Array };
+  uIni?: Float64Array;      // fase inicial por GRAVEDAD: desplazamientos del peso propio (se muestran; para las etapas siguientes u = 0, como GEO5)
+  desequilibrio?: { max: number; suma: number; nulo?: boolean };   // estado K0: fuerzas desequilibradas (kN) en los gdl libres
   geo5?: number;
   u: Float64Array;          // último peldaño convergido
   uel: Float64Array;        // u ELÁSTICA (la referencia que resta GEO5: u(FS) − u_el)
@@ -632,6 +641,7 @@ export class GeoFem {
     const u = new Float64Array(ndof), Fk = new Float64Array(ndof); let it = 0, c = false, nsub = 1;
     this.alcanzada = 1;
     GeoFem.gApex = this.modoG5 ? 0 : 0.1;   // construcción por etapas: tangente del ápice 0.1·De (como geofem.cpp); la SRM sigue con la de GEO5
+    if (first && this.inicial !== "gravedad") return this.etapaK0(F);
     for (; nsub <= 16; nsub *= 2) {
       if (nsub > 1) { this.SIG.set(sig0); this.EPL.set(epl0); this.DEP.set(dep0); this.hasDep.set(has0); u.fill(0); }
       c = true;
@@ -689,6 +699,7 @@ export class GeoFem {
     let na = 0; for (let e = 0; e < ne; e++) na += this.act[e];
     let sF = 0; for (let i = 0; i < this.nn; i++) sF += F[2 * i + 1];
     this.log(`    ETAPA ${first ? "inicial" : ""}: ${na} de ${ne} elementos activos, carga vertical ${sF.toFixed(3)} kN, ${c ? "CONVERGE" : "NO CONVERGE"} en ${it} iteraciones (${nsub} incremento(s))${c ? "" : ` · carga alcanzada ${(100 * this.alcanzada).toFixed(1)} %`}`);
+    if (first) this.uIni = Float64Array.from(u);   // desplazamientos del PESO PROPIO de la fase inicial: se muestran (como GEO5) y no se acumulan
     return { conv: c, alcanzada: this.alcanzada, u: Float64Array.from(this.Utot), sig1: Float64Array.from(this.SIG), epl1: Float64Array.from(this.EPL), eps1: Float64Array.from(this.EPSacc) };
   }
 
@@ -744,6 +755,69 @@ export class GeoFem {
 
   /** SRM de una etapa `srm=1` en otro motor (worker: WASM con subModeloSrm); null = la hace este motor (srmEnEtapa) */
   srmExterno?: (si: number) => StageResult | null;
+  inicial: "gravedad" | "k0" | "k0nulo" = "gravedad"; K0: number[] = [];
+  uIni: Float64Array | null = null;   // u de la fase inicial por gravedad (solo para verla; las etapas siguientes arrancan de u = 0)
+  desequilibrio: { max: number; suma: number; nulo?: boolean } | undefined;
+  /** σ del PROCEDIMIENTO K0 en cada punto de Gauss de los elementos activos: σv = ∫γ dz de la columna de elementos ACTIVOS que hay
+   *  encima del punto (capas y huecos incluidos: suma por elemento de la cuerda vertical × su γ), σh = σ_zz(fuera del plano) = K0·σv,
+   *  τ = 0 (compresión negativa, como el resto del motor). */
+  estadoK0(): void {
+    const ne = this.ne, X = this.X, Y = this.Y, E = this.ELE, act = this.act;
+    const caja = new Float64Array(ne * 3);   // xmin, xmax, ymax por elemento (esquinas: lados rectos)
+    for (let e = 0; e < ne; e++) { const [a, b, c] = E[e]; caja[3 * e] = Math.min(X[a], X[b], X[c]); caja[3 * e + 1] = Math.max(X[a], X[b], X[c]); caja[3 * e + 2] = Math.max(Y[a], Y[b], Y[c]); }
+    const cuerda = (e: number, x: number): [number, number] | null => {   // tramo vertical del triángulo en x
+      const [a, b, c] = E[e]; let lo = Infinity, hi = -Infinity;
+      for (const [p, q] of [[a, b], [b, c], [c, a]]) { const x1 = X[p], x2 = X[q]; if ((x - x1) * (x - x2) > 0 || x1 === x2) continue; const y = Y[p] + (Y[q] - Y[p]) * (x - x1) / (x2 - x1); lo = Math.min(lo, y); hi = Math.max(hi, y); }
+      return hi > lo ? [lo, hi] : null;
+    };
+    this.SIG.fill(0); this.EPL.fill(0); this.hasDep.fill(0);
+    for (let e = 0; e < ne; e++) {
+      if (!act[e]) continue;
+      const mm = this.EMAT[e] - 1, M = this.MAT[mm];
+      let k0 = this.K0[mm]; if (!Number.isFinite(k0)) k0 = this.rigid[mm] ? M[1] / (1 - M[1]) : 1 - Math.sin(M[2] * Math.PI / 180);
+      for (let q = 0; q < NG; q++) {
+        const [N] = t6(GP[q][0], GP[q][1]); let x = 0, y = 0; for (let k = 0; k < 6; k++) { x += N[k] * X[E[e][k]]; y += N[k] * Y[E[e][k]]; }
+        let sv = 0;
+        for (let f = 0; f < ne; f++) {
+          if (!act[f] || x < caja[3 * f] - 1e-12 || x > caja[3 * f + 1] + 1e-12 || caja[3 * f + 2] <= y) continue;
+          const ch = cuerda(f, x); if (!ch) continue; const L = ch[1] - Math.max(ch[0], y); if (L > 0) sv += L * this.MAT[this.EMAT[f] - 1][4];
+        }
+        const s = this.SIG.subarray((e * NG + q) * 4, (e * NG + q) * 4 + 4); s[0] = -k0 * sv; s[1] = -sv; s[2] = -k0 * sv; s[3] = 0;
+      }
+    }
+  }
+  /** primera etapa con estado K0 (+ paso plástico nulo si `k0nulo`): sin Newton de carga; u = 0 */
+  private etapaK0(F: Float64Array) {
+    const ndof = this.ndof, ne = this.ne;
+    this.estadoK0();
+    const Fi = new Float64Array(ndof); this.fintSig(Fi);
+    let mx = 0, sm = 0; for (let k = 0; k < this.nfree; k++) { const d = this.free[k]; if (this.dormido[d]) continue; const r = F[d] - Fi[d]; mx = Math.max(mx, Math.abs(r)); sm += Math.abs(r); }
+    this.desequilibrio = { max: mx, suma: sm };
+    this.log(`    ESTADO INICIAL K0 (procedimiento K0, sin cálculo): fuerzas desequilibradas máx ${mx.toFixed(3)} kN · Σ|R| ${sm.toFixed(3)} kN${mx > 1e-3 ? " (superficie inclinada o capas no horizontales: el estado K0 NO está en equilibrio)" : " (en equilibrio)"}`);
+    let conv = true, it = 0;
+    if (this.inicial === "k0nulo") {   // PASO PLÁSTICO NULO (PLAXIS «plastic nil step»): sin carga nueva, se equilibra lo que falta
+      const [c, , n] = this.nrstep(1.0, F, 1, undefined, true); conv = c; it = n;
+      const F2 = new Float64Array(ndof); this.fintSig(F2); let m2 = 0; for (let k = 0; k < this.nfree; k++) { const d = this.free[k]; if (!this.dormido[d]) m2 = Math.max(m2, Math.abs(F[d] - F2[d])); }
+      this.desequilibrio = { max: mx, suma: sm, nulo: true };
+      this.log(`    paso plástico nulo: ${c ? "CONVERGE" : "NO CONVERGE"} en ${n} iteraciones · desequilibrio que queda ${m2.toExponential(2)} kN (los desplazamientos del paso se ponen a 0)`);
+    }
+    GeoFem.gApex = 0;
+    this.Flast = Float64Array.from(F); this.alcanzada = conv ? 1 : 0; this.prevAct = Uint8Array.from(this.act);
+    let na = 0; for (let e = 0; e < ne; e++) na += this.act[e];
+    this.log(`    ETAPA inicial: ${na} de ${ne} elementos activos · estado ${this.inicial === "k0" ? "K0" : "K0 + paso nulo"}${it ? ` (${it} it)` : ""}`);
+    return { conv, alcanzada: this.alcanzada, u: Float64Array.from(this.Utot), sig1: Float64Array.from(this.SIG), epl1: Float64Array.from(this.EPL), eps1: Float64Array.from(this.EPSacc) };
+  }
+  private falla: StageResult["falla"];
+  /** copia el estado del último peldaño convergido (lo mismo que guardarFalla de geofem.cpp) */
+  private guardarFalla(u: Float64Array, srf: number): void {
+    const n = this.ne * NG, eps = new Float64Array(n * 4), plas = new Float64Array(n);
+    for (let e = 0; e < this.ne; e++) for (let q = 0; q < NG; q++) {
+      const kk = e * NG + q, B = this.Bc.subarray(kk * 36, kk * 36 + 36); let e0 = 0, e1 = 0, e2 = 0;
+      for (let c = 0; c < 12; c++) { const v = u[this.edof[e * 12 + c]]; e0 += B[c] * v; e1 += B[12 + c] * v; e2 += B[24 + c] * v; }
+      eps[kk * 4] = e0; eps[kk * 4 + 1] = e1; eps[kk * 4 + 3] = e2; plas[kk] = this.hasDep[kk];
+    }
+    this.falla = { srf, sig: Float64Array.from(this.SIG), epl: Float64Array.from(this.EPL), eps, plas };
+  }
   private EMAT0: number[] | null = null;   // materiales de la malla (los de `asignar`) antes de los cambios por etapa
   /** CAMBIO DE MATERIAL de la etapa (GEO5 «Assign» por etapa): el elemento conserva σ y ε_pl; la tangente plástica guardada
    *  se olvida (el material nuevo arranca con su De). Sin `emat`, los materiales de la malla. */
@@ -791,6 +865,7 @@ export class GeoFem {
   runStaged(m: GeoModel, onStage?: (r: StageResult, index: number) => void): StageResult[] {
     const ndof = this.ndof, ne = this.ne;
     this.MAT = m.MAT;   // sliders de φ/c con el motor reutilizado
+    this.inicial = m.inicial ?? "gravedad"; this.K0 = m.K0 ?? [];
     const LOADS: Record<string, ArrayLike<number>> = { ...(m.loads || {}), Fs: m.Fs, Fa: m.Fa };
     return m.stages.map((st, si) => {
       const F = new Float64Array(ndof);
@@ -807,13 +882,14 @@ export class GeoFem {
         const sec = (performance.now() - t0) / 1000;
         this.log(`    progresion dx(mm) por SRF:${q.prog}`);
         this.log(`  ${st.name.padEnd(22)} >>> FS=${f4(q.fs)}  [${sec.toFixed(1)} s]`);
-        const res: StageResult = { name: st.name, fs: q.fs, geo5: st.geo5, u: q.ulo, uel: q.uel, steps: q.steps, prog: q.prog, seconds: sec, u1: q.u1, sig1: q.sig1, epl1: q.epl1, eps1: q.eps1, ngp: ne * NG };
+        const res: StageResult = { name: st.name, fs: q.fs, geo5: st.geo5, u: q.ulo, uel: q.uel, steps: q.steps, prog: q.prog, seconds: sec, u1: q.u1, sig1: q.sig1, epl1: q.epl1, eps1: q.eps1, ngp: ne * NG, falla: this.falla };
         onStage?.(res, si); return res;
       }
+      this.uIni = null;
       const r = this.stagedStep(st.active ?? new Array(ne).fill(1), F, si === 0, st.emat);
       const sec = (performance.now() - t0) / 1000;
       this.log(`  ${st.name.padEnd(22)} >>> ${r.conv ? "equilibrio" : "NO CONVERGE"}  [${sec.toFixed(1)} s]`);
-      const res: StageResult = { name: st.name, fs: NaN, alcanzada: r.alcanzada, geo5: st.geo5, u: r.u, uel: new Float64Array(ndof), steps: [], prog: "", seconds: sec, u1: r.u, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: ne * NG };
+      const res: StageResult = { name: st.name, fs: NaN, alcanzada: r.alcanzada, ...(si === 0 && this.uIni ? { uIni: this.uIni } : {}), ...(si === 0 && this.inicial !== "gravedad" && this.desequilibrio ? { desequilibrio: this.desequilibrio } : {}), geo5: st.geo5, u: r.u, uel: new Float64Array(ndof), steps: [], prog: "", seconds: sec, u1: r.u, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: ne * NG };
       onStage?.(res, si); return res;
     });
   }
@@ -866,6 +942,7 @@ export class GeoFem {
     this.porPaso = pp;
     // instantánea del estado de tensión (SRF=1) para los campos del visor
     const sig1 = Float64Array.from(this.SIG), epl1 = Float64Array.from(this.EPL), eps1 = new Float64Array(this.ne * NG * 4);
+    this.guardarFalla(u1, 1);
     for (let e = 0; e < this.ne; e++) for (let q = 0; q < NG; q++) {
       const kk = e * NG + q, B = this.Bc.subarray(kk * 36, kk * 36 + 36); let e0 = 0, e1 = 0, e2 = 0;
       for (let c = 0; c < 12; c++) { const v = u1[this.edof[e * 12 + c]]; e0 += B[c] * v; e1 += B[12 + c] * v; e2 += B[24 + c] * v; }
@@ -894,7 +971,7 @@ export class GeoFem {
         const ok = cv && Number.isFinite(norm(ub));
         this.log(`    SRM rs${pad02(rs)} paso=${f4(RED0)} SRF=${f4(f)} ${ok ? "CONVERGE" : "DIVERGE"} it=${nit} (FS < 1)`);
         if (ok) {
-          fs = f; ulo = ub; steps.push({ srf: f, u: ub });
+          fs = f; ulo = ub; steps.push({ srf: f, u: ub }); this.guardarFalla(ub, f);
           let dxmax = 0; for (let i = 0; i < this.nn; i++) dxmax = Math.max(dxmax, Math.abs(ub[2 * i]));
           prog += ` ${f.toFixed(3)}:${(dxmax * 1e3).toFixed(0)}`;
           break;
@@ -920,7 +997,7 @@ export class GeoFem {
         if (this.modoG5) { if (conv) { pend = new Float64Array(this.ndof); for (let d = 0; d < this.ndof; d++) pend[d] = this.lastEta * this.lastRaw![d]; } else pend = null; }
       } else [conv, u, nit] = this.nrstep(trial, Ftot, rs);   // SRF > 1: sin reintento por incrementos (la divergencia fija el FS; con reintento Demo04 etapa 3 daba 1.7369)
       if (conv && Number.isFinite(norm(u))) {
-        Racc *= s; fs = trial; ulo = u; steps.push({ srf: trial, u });
+        Racc *= s; fs = trial; ulo = u; steps.push({ srf: trial, u }); this.guardarFalla(u, trial);
         let dxmax = 0; for (let i = 0; i < this.nn; i++) dxmax = Math.max(dxmax, Math.abs(u[2 * i]));
         prog += ` ${trial.toFixed(3)}:${(dxmax * 1e3).toFixed(0)}`;
         this.log(`    SRM rs${pad02(rs)} paso=${f4(s)} SRF=${f4(trial)} CONVERGE it=${nit}`);
@@ -1296,7 +1373,7 @@ export class GeoFem {
       const sec = (performance.now() - ts) / 1000;
       this.log(`    progresion dx(mm) por SRF:${r.prog}`);
       this.log(`  ${st.name.padEnd(22)} >>> FS=${f4(r.fs)}  ${st.geo5 ? `(GEO5=${st.geo5.toFixed(2)})` : "(sin referencia GEO5)"}  [${sec.toFixed(1)} s]`);
-      const res: StageResult = { name: st.name, fs: r.fs, geo5: st.geo5, u: r.ulo, uel: r.uel, steps: r.steps, prog: r.prog, seconds: sec, u1: r.u1, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: this.ne * NG };
+      const res: StageResult = { name: st.name, fs: r.fs, geo5: st.geo5, u: r.ulo, uel: r.uel, steps: r.steps, prog: r.prog, seconds: sec, u1: r.u1, sig1: r.sig1, epl1: r.epl1, eps1: r.eps1, ngp: this.ne * NG, falla: this.falla };
       results.push(res); onStage?.(res, si);
     }
     this.log(""); this.log("================ RESUMEN (Hekatan Geotechnic · TS) ================");

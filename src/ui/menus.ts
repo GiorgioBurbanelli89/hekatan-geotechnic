@@ -70,12 +70,13 @@ export function montarMenus(): void {
   const pie = $("pieTxt"); if (pie) pie.hidden = true;
   // ---- pestañas de resultados sobre el modelo ----
   const tabs = document.createElement("div"); tabs.id = "rtabs"; tabs.setAttribute("role", "tablist");
-  tabs.innerHTML = `<div class="fila">${[["desp", "Desplazamientos"], ["esf", "Esfuerzos"], ["plas", "Puntos plásticos"], ["fs", "FS"], ["tabla", "Tabla"]].map(([id, t]) => `<button role="tab" data-p="${id}">${t}</button>`).join("")}</div><div class="sub" id="rsub"></div>`;
+  tabs.innerHTML = `<div class="fila">${[["desp", "Desplazamientos"], ["esf", "Esfuerzos"], ["plas", "Puntos plásticos"], ["fs", "FS"], ["ana", "Analítico vs FEM"], ["tabla", "Tabla"]].map(([id, t]) => `<button role="tab" data-p="${id}">${t}</button>`).join("")}</div><div class="sub" id="rsub"></div>`;
   const etabs = $("etabs")!; etabs.before(tabs);
   tabs.querySelectorAll<HTMLButtonElement>("button[data-p]").forEach((b) => b.addEventListener("click", () => pestana(b.dataset.p!)));
   const bajo = document.createElement("div"); bajo.id = "rpanel"; bajo.hidden = true;
   const stack = centro.querySelector(".stack")!; const hover = $("hover")!;
-  stack.after(hover); hover.after(bajo); bajo.append($("fs")!, $("log")!);
+  const ana = document.createElement("div"); ana.id = "analitico"; ana.className = "mats";
+  stack.after(hover); hover.after(bajo); bajo.append(ana, $("fs")!, $("log")!);
   pestana("desp", false);
   // el campo también se elige desde la carpeta Vista (o por código): la pestaña activa lo sigue
   $<HTMLSelectElement>("field")!.addEventListener("change", (e) => {
@@ -170,11 +171,20 @@ function pestana(p: string, elegir = true) {
   const sub = $("rsub")!, panel = $("rpanel")!, field = $<HTMLSelectElement>("field")!;
   const g = GRUPOS[p];
   if (g) {
-    panel.hidden = true; $("fs")!.hidden = false; $("log")!.hidden = false;
+    panel.hidden = true; $("fs")!.hidden = false; $("log")!.hidden = false; $("analitico")!.hidden = true; window.dispatchEvent(new CustomEvent("analitico-fuera"));
     if (elegir && !g.some(([v]) => v === field.value)) { field.value = g[0][0]; field.dispatchEvent(new Event("change")); }
     sub.innerHTML = g.map(([v, t]) => `<button data-f="${v}" class="${v === field.value ? "on" : ""}">${t}</button>`).join("");
+    // estado del resultado: falla (SRF = FS, el de GEO5 tras la SRM) o servicio (SRF = 1); por defecto falla salvo en Esfuerzos
+    let est = $<HTMLSelectElement>("estadoRes");
+    if (!est) { est = document.createElement("select"); est.id = "estadoRes"; est.title = "estado que se ve en las etapas con SRM: falla = último peldaño convergido (SRF = FS) · servicio = SRF = 1"; est.innerHTML = `<option value="falla">estado: falla (SRF = FS)</option><option value="servicio">estado: servicio (SRF = 1)</option>`; est.addEventListener("change", () => field.dispatchEvent(new Event("change"))); }
+    if (elegir || !est.dataset.tab || est.dataset.tab !== p) { est.value = p === "esf" ? "servicio" : "falla"; est.dataset.tab = p; }
+    sub.appendChild(est);
+    if (elegir) field.dispatchEvent(new Event("change"));
     sub.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.addEventListener("click", () => { field.value = b.dataset.f!; field.dispatchEvent(new Event("change")); sub.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); }));
   } else {
+    $("analitico")!.hidden = p !== "ana";
+    if (p === "ana") { sub.innerHTML = `<span class="nota">método analítico / clásico junto al FEM: fórmula, números y diferencia · P1–P3 y el círculo crítico, sobre el mapa</span>`; panel.hidden = false; $("fs")!.hidden = true; $("log")!.hidden = true; window.dispatchEvent(new CustomEvent("analitico")); return; }
+    window.dispatchEvent(new CustomEvent("analitico-fuera"));
     sub.innerHTML = p === "fs" ? `<span class="nota">FS por etapa (pestañas de etapa arriba) · peldaño SRF:</span>` : `<span class="nota">FS por etapa y registro del cálculo (el mismo log que el driver de Python / GEO5)</span>`;
     if (p === "fs") { const st = $("step"); if (st) sub.appendChild(st); }
     panel.hidden = false; $("fs")!.hidden = false; $("log")!.hidden = p !== "tabla";

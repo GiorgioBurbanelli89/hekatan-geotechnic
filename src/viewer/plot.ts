@@ -21,7 +21,9 @@ export type PlotOptions = {
   numeros?: "" | "nudos" | "elementos" | "ambos";
   /** campo CALCULADO pero uniforme (p. ej. desplazamientos de la fase inicial, que GEO5 pone a 0): en vez de dejar solo la malla,
    *  se pinta el valor en toda la región activa, la leyenda lleva ese único valor y este rótulo explica por qué */
-  planoNota?: string;   // numerar nudos (esquinas) y/o elementos (menú Malla); con muchos se omite     // material de cada elemento EN ESA ETAPA (`etapa … asigna=`: el muro nace de hormigón en su etapa)
+  planoNota?: string;
+  puntos?: number[];
+  marcas?: { x: number; z: number; t: string }[];   // puntos de comparación del método analítico (P1, P2, …)            // PUNTOS PLÁSTICOS (x, z, x, z, …): marcadores sobre el mapa   // numerar nudos (esquinas) y/o elementos (menú Malla); con muchos se omite     // material de cada elemento EN ESA ETAPA (`etapa … asigna=`: el muro nace de hormigón en su etapa)
 };
 
 type Edge = { a: number; b: number; count: number; mats: Set<number> };
@@ -220,6 +222,16 @@ export class SlopePlot {
       ctx.fillStyle = this.dark ? "#6ab0ff" : "#1f3fff"; ctx.font = `${11 * k}px sans-serif`; ctx.textAlign = "right"; ctx.fillText(q.label, la - 4 * k, lb - 4 * k); ctx.textAlign = "left";
     }
     if (o.isolineas) ctx.restore();
+    if (o.puntos?.length) {   // puntos de Gauss plásticos: cruces pequeñas (como los «plastic points» de GEO5/PLAXIS)
+      ctx.save(); ctx.strokeStyle = this.dark ? "#ff6fd8" : "#c0007a"; ctx.lineWidth = 1 * k; ctx.beginPath(); const r = 2.2 * k;
+      for (let i = 0; i < o.puntos.length; i += 2) { const [p, q] = tf(o.puntos[i], o.puntos[i + 1]); ctx.moveTo(p - r, q - r); ctx.lineTo(p + r, q + r); ctx.moveTo(p - r, q + r); ctx.lineTo(p + r, q - r); }
+      ctx.stroke(); ctx.restore();
+    }
+    if (o.marcas?.length) {
+      ctx.save(); ctx.font = `bold ${11 * k}px Segoe UI, Arial`; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      for (const mk of o.marcas) { const [p, q] = tf(mk.x, mk.z); ctx.beginPath(); ctx.arc(p, q, 4 * k, 0, 2 * Math.PI); ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 1.5 * k; ctx.strokeStyle = "#000"; ctx.stroke(); ctx.fillStyle = this.dark ? "#fff" : "#000"; ctx.fillText(mk.t, p + 6 * k, q); }
+      ctx.restore();
+    }
     // MURO (región rígida): su contorno se remarca en gris hormigón, para verlo dentro del mapa de color
     const rig = this.m.RIGID;
     if (rig?.some((r) => r)) {

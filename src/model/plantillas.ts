@@ -78,6 +78,7 @@ export const PLANTILLAS: Plantilla[] = [
     P("phi", { grupo: "suelo" }), P("c", { grupo: "suelo" }), P("gamma", { grupo: "suelo" }),
     { grupo: "suelo", key: "Es", label: "E del suelo", unit: "MPa", def: 20, min: 5, max: 200, step: 1 },
     { grupo: "suelo", key: "nus", label: "ν del suelo", unit: "", def: 0.3, min: 0.15, max: 0.45, step: 0.01 },
+    { grupo: "etapas", key: "ini", label: "estado inicial", unit: "", def: 0, min: 0, max: 2, step: 1 },   // 0 carga por gravedad · 1 procedimiento K0 · 2 K0 + paso plástico nulo
     { grupo: "malla", key: "h", label: "tamaño de elemento (malla)", unit: "m", def: 0.8, min: 0.2, max: 2, step: 0.05 }] },
   { id: "zapata", nombre: "Carga en la corona (zapata)", descripcion: "corte con una carga q de ancho Bz a la distancia dz detrás del borde de la cara (zapata, edificio, tránsito)", params: [
     P("H"), P("n"), P("phi"), P("c"), P("gamma"), P("hw"), P("q", { label: "carga q de la zapata", def: 100 }),
@@ -223,6 +224,7 @@ function excavacionMuro(p: Record<string, number>): string[] {
   L.push(`asignar SUELO en ${r(g.xc + 1)},${r(g.fondo / 2)}`, `asignar SUELO en ${r(pMuro[0])},${r(pMuro[1])}`);
   if (hayExc) L.push(`asignar SUELO en ${r(pExc[0])},${r(pExc[1])}`);
   L.push(`malla ${r(p.h)}`);
+  if (p.ini >= 0.5) L.push(p.ini >= 1.5 ? "inicial k0 nulo" : "inicial k0");
   L.push("etapa talud natural");
   if (p.muro >= 0.5) L.push(`etapa muro asigna=HORMIGON@${r(pMuro[0])},${r(pMuro[1])}`);
   if (hayExc) L.push(`etapa excavacion inactiva=${r(pExc[0])},${r(pExc[1])}`);

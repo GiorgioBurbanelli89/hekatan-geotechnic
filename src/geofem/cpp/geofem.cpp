@@ -99,6 +99,16 @@ struct GeoFem {
   vector<double> SIG, DEP; vector<unsigned char> hasDep;
   // estado de TENSIÓN (SRF=1, la «stress analysis» de GEO5) para los campos del visor: σ, ε total, ε plástica acumulada, u
   vector<double> EPL, Dinv, SIG1, EPL1, EPS1, U1;
+  // estado de FALLA (último peldaño convergido de la SRM, SRF = FS): σ, ε_pl, ε de u(FS) y PUNTOS PLÁSTICOS (retorno activo)
+  vector<double> SIGF, EPLF, EPSF; vector<unsigned char> PLF; double srfF = 1;
+  void guardarFalla(const vector<double>& u, double srf) {
+    SIGF = SIG; EPLF = EPL; PLF = hasDep; srfF = srf; EPSF.assign((size_t)ne * NG * 4, 0.0);
+    for (int e = 0; e < ne; e++) for (int q = 0; q < NG; q++) {
+      size_t kk = (size_t)e * NG + q; const double* B = &Bc[kk * 36]; double e0 = 0, e1 = 0, e2 = 0;
+      for (int c = 0; c < 12; c++) { double v = u[edof[e * 12 + c]]; e0 += B[c] * v; e1 += B[12 + c] * v; e2 += B[24 + c] * v; }
+      EPSF[kk * 4] = e0; EPSF[kk * 4 + 1] = e1; EPSF[kk * 4 + 3] = e2;
+    }
+  }
   vector<double> Fg2;
   int nstepsOut = 0;
   // CONSTRUCCIÓN POR ETAPAS (Activity de GEO5): elemento activo o no. Un elemento inactivo no aporta rigidez, ni
@@ -768,6 +778,7 @@ struct GeoFem {
     porPaso = pp;
     // instantánea del estado de tensión (SRF=1) para los campos del visor
     SIG1 = SIG; EPL1 = EPL; U1 = u;
+    guardarFalla(u, 1.0);   // sin peldaños convergidos, el «estado de falla» es el de SRF = 1
     for (int e = 0; e < ne; e++) for (int q = 0; q < NG; q++) {
       size_t kk = (size_t)e * NG + q; const double* B = &Bc[kk * 36]; double e0 = 0, e1 = 0, e2 = 0;
       for (int c = 0; c < 12; c++) { double v = u[edof[e * 12 + c]]; e0 += B[c] * v; e1 += B[12 + c] * v; e2 += B[24 + c] * v; }
@@ -796,7 +807,7 @@ struct GeoFem {
         bool ok = cv && std::isfinite(vnorm(u.data(), ndof));
         LOG(fmt("    SRM rs%02d paso=%.4f SRF=%.4f %s it=%d (FS < 1)", rs, RED0, f, ok ? "CONVERGE" : "DIVERGE", nit));
         if (ok) {
-          fs = f; ulo = u; hallado = true;
+          fs = f; ulo = u; hallado = true; guardarFalla(u, f);
           if (nstepsOut < maxSteps) { outSrf[nstepsOut] = f; std::memcpy(outStepsU + (size_t)nstepsOut * ndof, u.data(), sizeof(double) * ndof); nstepsOut++; }
           double dxmax = 0; for (int i = 0; i < nn; i++) dxmax = std::max(dxmax, std::fabs(u[2 * i]));
           prog += fmt(" %.3f:%.0f", f, dxmax * 1e3);
@@ -824,7 +835,7 @@ struct GeoFem {
         if (modoG5) { if (conv) { pend.assign(ndof, 0.0); for (int d = 0; d < ndof; d++) pend[d] = lastEta * lastRaw[d]; } else pend.clear(); }
       } else conv = nrstep(trial, Ftot, rs, u, nit);   // SRF > 1: SIN reintento por incrementos (la divergencia de GEO5 es la que fija el FS; con reintento Demo04 etapa 3 daba 1.7369 en vez de 1.69)
       if (conv && std::isfinite(vnorm(u.data(), ndof))) {
-        Racc *= s; fs = trial; ulo = u;
+        Racc *= s; fs = trial; ulo = u; guardarFalla(u, trial);
         if (nstepsOut < maxSteps) { outSrf[nstepsOut] = trial; std::memcpy(outStepsU + (size_t)nstepsOut * ndof, u.data(), sizeof(double) * ndof); nstepsOut++; }
         double dxmax = 0; for (int i = 0; i < nn; i++) dxmax = std::max(dxmax, std::fabs(u[2 * i]));
         prog += fmt(" %.3f:%.0f", trial, dxmax * 1e3);
@@ -1048,6 +1059,14 @@ EMSCRIPTEN_KEEPALIVE void geofem_state1(int h, double* sig, double* epl, double*
   GeoFem* g = handles[h]; size_t n = (size_t)g->ne * NG * 4;
   std::memcpy(sig, g->SIG1.data(), sizeof(double) * n); std::memcpy(epl, g->EPL1.data(), sizeof(double) * n); std::memcpy(eps, g->EPS1.data(), sizeof(double) * n);
   std::memcpy(u1, g->U1.data(), sizeof(double) * g->ndof);
+}
+// estado de FALLA de la última etapa (último peldaño convergido de la SRM): σ, ε_pl, ε (4/GP), plástico 0/1 por GP; devuelve su SRF
+EMSCRIPTEN_KEEPALIVE double geofem_statefs(int h, double* sig, double* epl, double* eps, double* plas) {
+  GeoFem* g = handles[h]; size_t n = (size_t)g->ne * NG * 4;
+  if (g->SIGF.size() != n) return 0;
+  std::memcpy(sig, g->SIGF.data(), sizeof(double) * n); std::memcpy(epl, g->EPLF.data(), sizeof(double) * n); std::memcpy(eps, g->EPSF.data(), sizeof(double) * n);
+  for (size_t k = 0; k < n / 4; k++) plas[k] = g->PLF[k];
+  return g->srfF;
 }
 EMSCRIPTEN_KEEPALIVE
 double geofem_run_stage(int h, const double* F, double* outU, double* outUel, double* outSrf, double* outStepsU, int maxSteps) {

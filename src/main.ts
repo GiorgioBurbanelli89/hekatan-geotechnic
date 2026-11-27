@@ -4,8 +4,9 @@
 // lienzo (draw.ts) que reescriben el texto y remallan. Cada etapa es independiente (arranca de cero con
 // su carga total, como GEO5): un slider recalcula solo la etapa visible.
 import { montarMenus } from "./ui/menus";
+import { analitico as calcAnalitico } from "./analitico/panel";
 import { PLANTILLAS } from "./model/plantillas";
-import type { GeoModel } from "./geofem/solver";
+import { GP, t6, type GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
 import { FieldKind, FIELD_LABEL, FIELD_UNIT, nodalField, stressField, isStressField } from "./viewer/geo5scale";
@@ -28,9 +29,9 @@ import { engancharDinamico, actualizarDinamico, dinActivo, dibujar as dibujarDin
 import { montarImportadorGeo5 } from "./import_geo5/visor";
 import { montarZapata, mostrarZapata } from "./footing/panel";
 import { montarMuro, mostrarMuro } from "./wall/cantilever";
-import { montarTipos, elegir as elegirTipo, tipoFem, tipoLemOpts } from "./tipos/panel";
+import { montarTipos, elegir as elegirTipo, tipoFem, tipoLemOpts, ponerParamTipo } from "./tipos/panel";
 
-type Stage = { name: string; fs: number; alcanzada?: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean; u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number };
+type Stage = { name: string; fs: number; alcanzada?: number; uIni?: Float64Array; falla?: { srf: number; sig: Float64Array; epl: Float64Array; eps: Float64Array; plas: Float64Array }; desequilibrio?: { max: number; suma: number; nulo?: boolean }; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; seconds: number; stale?: boolean; u1?: Float64Array; sig1?: Float64Array; eps1?: Float64Array; epl1?: Float64Array; ngp?: number };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const selModel = $<HTMLSelectElement>("model"), selN = $<HTMLSelectElement>("nstages"), btn = $<HTMLButtonElement>("run");
@@ -519,6 +520,11 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
     // fuera del alcance verificado (docs/VALIDACION.md §2): φ = 0 (GEO5 también aborta en R_mob_MohrCoulomb) y FS con sismo kh
     if (def.soils.some((s) => s.phi < 1 && !s.rigido && !(def!.walls ?? []).some((w) => w.soil === s.name))) avisosVal.push("⚠ φ < 1° (no drenado): FS no verificado (GEO5 tampoco lo resuelve); compare con equilibrio límite");
     if (def.stages.some((st) => st.sismo && (st.sismo.kh || st.sismo.kv))) avisosVal.push(AVISO_KH);
+    if (def.inicial === "k0" || def.inicial === "k0nulo") {   // K0 con superficie o capas no horizontales: no está en equilibrio (PLAXIS lo advierte igual)
+      const T = def.interfaces[0] ?? [], incl = T.some((q, i) => i > 0 && Math.abs(q[1] - T[i - 1][1]) > 1e-9) || def.interfaces.slice(1).some((L) => L.some((q, i) => i > 0 && Math.abs(q[1] - L[i - 1][1]) > 1e-9));
+      if (incl) avisosVal.push(`⚠ procedimiento K0 con superficie/capas inclinadas: el estado inicial NO está en equilibrio${def.inicial === "k0" ? " (PLAXIS recomienda carga por gravedad o un paso plástico nulo: «Estado inicial» → K0 + paso nulo)" : "; el paso plástico nulo aplica el desequilibrio"}`);
+    }
+    $<HTMLSelectElement>("inicial").value = def.inicial ?? "gravedad";
     if (avisosVal.length) dStatus.textContent = avisosVal.join(" · ");
     m.MATNAMES = def.soils.map((s) => s.name);
     m.name = `Talud .hgeo`;
@@ -612,23 +618,39 @@ function redraw() {
   }
   const kind = selField.value as FieldKind;
   const stepIdx = parseInt(selStep.value || "-1");
-  const u = stepIdx >= 0 && st.steps[stepIdx] ? st.steps[stepIdx].u : st.u;
-  const srf = stepIdx >= 0 && st.steps[stepIdx] ? st.steps[stepIdx].srf : st.fs;
-  const stress = isStressField(kind) && !!st.sig1;
-  const vals = analitico ? new Float64Array(model.X.length)   // método analítico: talud sin color map, solo el círculo de falla
-    : stress ? stressField(kind, model.ELE, model.X.length, st.ngp!, st.sig1!, st.eps1!, st.epl1!) : nodalField(u, st.uel, model.X.length, kind);
   const tensSt = model.staged && !model.stages[si]?.srm;
+  // ESTADO que se ve (pestañas de resultados): «falla» = último peldaño convergido de la SRM (SRF = FS: mecanismo y zona plástica,
+  // lo que muestra GEO5 tras el análisis de estabilidad) · «servicio» = SRF = 1. Solo en etapas con SRM.
+  const estado = ($<HTMLSelectElement>("estadoRes")?.value || "falla") as "falla" | "servicio";
+  const conSrm = !tensSt && !!st.falla, enFalla = conSrm && estado === "falla" && stepIdx < 0;
+  const servicioU = conSrm && estado === "servicio" && stepIdx < 0 && !!st.u1;
+  const u = stepIdx >= 0 && st.steps[stepIdx] ? st.steps[stepIdx].u : servicioU ? st.u1! : st.uIni ?? st.u;   // fase inicial por gravedad: los u del peso propio
+  const uRef = servicioU ? new Float64Array(st.uel.length) : st.uel;   // en servicio, el desplazamiento total (no u − u_el)
+  const srf = stepIdx >= 0 && st.steps[stepIdx] ? st.steps[stepIdx].srf : servicioU ? 1 : st.falla?.srf ?? st.fs;
+  const stress = isStressField(kind) && !!st.sig1;
+  const SG = enFalla ? st.falla!.sig : st.sig1!, EP = enFalla ? st.falla!.eps : st.eps1!, PL = enFalla ? st.falla!.epl : st.epl1!;
+  const vals = analitico ? new Float64Array(model.X.length)   // método analítico: talud sin color map, solo el círculo de falla
+    : stress ? stressField(kind, model.ELE, model.X.length, st.ngp!, SG, EP, PL) : nodalField(u, uRef, model.X.length, kind);
+  // PUNTOS PLÁSTICOS (PG con el retorno activo) del estado que se ve: marcadores en E_d / E_d,pl
+  let puntos: number[] | undefined, nPlas = -1;
+  if (conSrm && (kind === "Edpl" || kind === "Ed")) {
+    const pl = enFalla ? st.falla!.plas : undefined;
+    puntos = []; nPlas = 0;
+    if (pl) model.ELE.forEach((el, e) => { for (let q = 0; q < 7; q++) if (pl[e * 7 + q]) { const [N] = t6(GP[q][0], GP[q][1]); let x = 0, z = 0; for (let k = 0; k < 6; k++) { x += N[k] * model!.X[el[k]]; z += N[k] * model!.Y[el[k]]; } puntos!.push(x, z); nPlas++; } });
+  }
+  const iniTxt = model.inicial === "k0" ? "procedimiento K0" : model.inicial === "k0nulo" ? "K0 + paso nulo" : "gravedad";
   // campo calculado pero UNIFORME (p. ej. los desplazamientos de la fase inicial, que GEO5 reinicia a 0): se pinta y se explica
   let vmn = Infinity, vmx = -Infinity; for (const v of vals) { if (v < vmn) vmn = v; if (v > vmx) vmx = v; }
   const desp = kind === "dx" || kind === "dz" || kind === "d";
+  const notaIni = tensSt && si === 0 && st.uIni && (kind === "dx" || kind === "dz" || kind === "d") ? "; u del peso propio, a 0 desde la etapa 2 (GEO5)" : "";
   const planoNota = analitico || !(vmx - vmn <= 1e-9) ? undefined
-    : tensSt && si === 0 && desp ? "fase inicial (estado geostático por peso propio): desplazamientos = 0 mm en toda la malla\nGEO5 los reinicia a 0 para las etapas siguientes · los esfuerzos σ sí están: pestaña Esfuerzos"
-    : `${FIELD_LABEL[kind]} = ${(Number.isFinite(vmn) ? vmn : 0).toFixed(2)} ${FIELD_UNIT[kind]} en toda la malla${kind === "u" ? " (sin agua)" : kind === "Edpl" ? " (ningún punto plástico en esta etapa)" : ""}`;
-  const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress && !tensSt ? " · estado de tensión SRF=1" : "");
+    : tensSt && si === 0 && desp ? `fase inicial (${iniTxt}): desplazamientos = 0 mm en toda la malla\n${model.inicial && model.inicial !== "gravedad" ? "el procedimiento K0 no calcula desplazamientos" : "GEO5 los reinicia a 0 para las etapas siguientes"} · los esfuerzos σ sí están: pestaña Esfuerzos`
+    : `${FIELD_LABEL[kind]} = ${(Number.isFinite(vmn) ? vmn : 0).toFixed(2)} ${FIELD_UNIT[kind]} en toda la malla${kind === "u" ? " (sin agua)" : kind === "Edpl" ? (conSrm && !enFalla ? ": 0 puntos plásticos en el estado de SERVICIO (SRF = 1) · la zona plástica aparece en el estado de falla" : " (ningún punto plástico en esta etapa)") : ""}`;
+  const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (conSrm && stepIdx < 0 ? (enFalla ? ` · estado de FALLA (SRF = ${srf.toFixed(4)})` : " · estado de servicio (SRF = 1)") : stress && !tensSt ? " · estado de tensión SRF=1" : "") + (nPlas >= 0 && enFalla ? ` · ${nPlas} puntos plásticos` : "");
   const rango = plot.draw({
     field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, numeros: (document.getElementById("numeros") as HTMLSelectElement | null)?.value as "" | "nudos" | "elementos" | "ambos", gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, isolineas: aguaIsolineas(), surface: selSurf.value as "iso" | "line" | "none",
-    title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${tensSt ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}${st.fs < 1 ? "  (FS < 1: inestable)" : ""}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
-    deformScale: factorDeformada(u, st.uel), u, uel: st.uel, active: model.stages[si]?.active, emat: model.stages[si]?.emat, planoNota,
+    title: `${model.name || "Talud"} · ${st.name}${tensSt && si === 0 ? ` (${iniTxt}${notaIni}${st.desequilibrio ? `, desequilibrio máx ${st.desequilibrio.max.toFixed(1)} kN${st.desequilibrio.nulo ? " → paso nulo" : ""}` : ""})` : ""} - ${lab}  ${tensSt ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}${st.fs < 1 ? "  (FS < 1: inestable)" : ""}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
+    puntos, marcas: marcasAna, deformScale: factorDeformada(u, uRef), u, uel: uRef, active: model.stages[si]?.active, emat: model.stages[si]?.emat, planoNota,
   });
   draw.setMap(plot.mapping());
   (window as unknown as { __geoMap: unknown }).__geoMap = plot.mapping();   // para el arnés puppeteer (clics en coordenadas del mundo)
@@ -674,7 +696,7 @@ function run(idx: number[]) {
       if (def?.param && !model?.staged) { const k = firma(def); const a = fsMemo.get(k) ?? []; a[m.index] = (m.result as Stage).fs; fsMemo.set(k, a); tablaVariante(); }
       calcStage(); tipoFem(m.index, (m.result as Stage).steps.length ? (m.result as Stage).fs : NaN);
       fsTable(); buildStageTabs(); if (m.index === visibleStage()) { fillStepSelect(); redraw(); }
-    } else if (m.type === "done") { busy = false; calcDone(false); fsTable(); appendLog(`(navegador: ${m.seconds.toFixed(1)} s · ${((performance.now() - t0) / 1000).toFixed(1)} s con el render)`); }
+    } else if (m.type === "done") { busy = false; calcDone(false); fsTable(); pintarAnalitico(); appendLog(`(navegador: ${m.seconds.toFixed(1)} s · ${((performance.now() - t0) / 1000).toFixed(1)} s con el render)`); }
     else if (m.type === "error") { busy = false; calcDone(true); fsTable(); appendLog("ERROR: " + m.message); }
   };
   worker.postMessage({ type: "run", model, stageIdx: idx });
@@ -843,7 +865,26 @@ const EJEMPLOS_HGEO: Record<string, string> = { manabi_etapas: MANABI_ETAPAS_HGE
 montarTipos({ abrir: (t) => { mostrarZapata(false); selModel.value = "hgeo"; edText.value = t; applyHgeo(); } });   // lista «Tipo de talud» (plantillas)
 montarZapata(() => { selModel.value = "models/demo04.json"; selModel.dispatchEvent(new Event("change")); });
 montarMuro(() => { selModel.value = "models/demo04.json"; selModel.dispatchEvent(new Event("change")); });
-montarMenus();   // barra de menús (Archivo · Geometría · Suelos · Etapas · Malla · Calcular · Resultados · Ayuda), panel «Datos» plegable y pestañas de resultados
+montarMenus();
+// pestaña «Analítico vs FEM»: se calcula al abrirla (y al llegar resultados con la pestaña abierta)
+let marcasAna: { x: number; z: number; t: string }[] | undefined;
+function pintarAnalitico() {
+  const box = document.getElementById("analitico"); if (!box || box.hidden || !model) return;
+  try {
+    const r = calcAnalitico(def ?? (selModel.value.includes("demo04") ? parseHgeo(DEMO04_HGEO) : null), model, stages, (window as unknown as { __tipo?: { tipo?: string; p?: Record<string, number> } }).__tipo);
+    box.innerHTML = r.html; marcasAna = r.marcas;
+    if (r.lem) draw.lem = { circle: r.lem.circle, slices: r.lem.slices, fs: r.lem.fs, method: r.lem.method, x0: r.lem.x0, x1: r.lem.x1 };
+    redraw(); draw.render();
+  } catch (e) { box.textContent = "✖ " + (e as Error).message; }
+}
+window.addEventListener("analitico", () => setTimeout(pintarAnalitico, 30));
+window.addEventListener("analitico-fuera", () => { if (!marcasAna) return; marcasAna = undefined; if (selMetodo.value === "fem") draw.lem = null; redraw(); draw.render(); });
+$<HTMLSelectElement>("inicial").addEventListener("change", (e) => {   // estado inicial: en un tipo con ese parámetro lo cambia el tipo; si no, la orden `inicial` del .hgeo
+  const v = (e.target as HTMLSelectElement).value;
+  if (ponerParamTipo("ini", v === "k0" ? 1 : v === "k0nulo" ? 2 : 0)) return;
+  const L = edText.value.replace(/\s+$/, "").split("\n").filter((l) => !/^\s*inicial\b/.test(l)), i = L.findIndex((l) => /^\s*etapa\b/.test(l));
+  L.splice(i < 0 ? L.length : i, 0, `inicial ${v === "k0nulo" ? "k0 nulo" : v}`); edText.value = L.join("\n") + "\n"; selModel.value = "hgeo"; applyHgeo();
+});   // barra de menús (Archivo · Geometría · Suelos · Etapas · Malla · Calcular · Resultados · Ayuda), panel «Datos» plegable y pestañas de resultados
 selModel.addEventListener("change", () => {
   // CIMENTACIONES: otro módulo dentro de la misma app (GEO5 Spread Footing); no toca el talud
   if (selModel.value === "zapata_guerra") { mostrarMuro(false); mostrarZapata(true); return; }

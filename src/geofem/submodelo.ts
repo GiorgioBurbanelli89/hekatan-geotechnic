@@ -42,5 +42,7 @@ export function resultadoCompleto(r: StageResult, s: SubModelo, m: GeoModel, si:
   const NG = Math.round((r.ngp ?? 7 * na) / na);
   const gp = (a?: Float64Array) => { if (!a) return a; const o = new Float64Array(ne * NG * 4); let k = 0; for (let e = 0; e < ne; e++) if (act[e]) { o.set(a.subarray(k * NG * 4, (k + 1) * NG * 4), e * NG * 4); k++; } return o; };
   return { ...r, u: aCompleto(r.u, s.nodos, ndof), uel: aCompleto(r.uel, s.nodos, ndof), steps: r.steps.map((q) => ({ srf: q.srf, u: aCompleto(q.u, s.nodos, ndof) })),
-    u1: r.u1 ? aCompleto(r.u1, s.nodos, ndof) : r.u1, sig1: gp(r.sig1), epl1: gp(r.epl1), eps1: gp(r.eps1), ngp: ne * NG };
+    u1: r.u1 ? aCompleto(r.u1, s.nodos, ndof) : r.u1, sig1: gp(r.sig1), epl1: gp(r.epl1), eps1: gp(r.eps1), ngp: ne * NG,
+    // estado de FALLA: también por punto de Gauss del submodelo → del modelo completo (los inactivos, 0)
+    ...(r.falla ? { falla: { srf: r.falla.srf, sig: gp(r.falla.sig)!, epl: gp(r.falla.epl)!, eps: gp(r.falla.eps)!, plas: (() => { const o = new Float64Array(ne * NG); let k = 0; for (let e = 0; e < ne; e++) if (act[e]) { o.set(r.falla!.plas.subarray(k * NG, (k + 1) * NG), e * NG); k++; } return o; })() } } : {}) };
 }

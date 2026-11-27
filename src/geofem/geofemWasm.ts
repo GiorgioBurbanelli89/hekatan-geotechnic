@@ -17,6 +17,7 @@ type Mod = {
   _geofem_band: (h: number) => number; _geofem_nfree: (h: number) => number;
   _geofem_gravity: (h: number) => number; _geofem_nsteps: (h: number) => number;
   _geofem_ngp: (h: number) => number; _geofem_state1: (h: number, sig: number, epl: number, eps: number, u1: number) => void;
+  _geofem_statefs?: (h: number, sig: number, epl: number, eps: number, plas: number) => number;
   _geofem_run_stage: (h: number, F: number, u: number, uel: number, srf: number, stepsU: number, maxSteps: number) => number;
   _geofem_run_staged: (h: number, act: number, F: number, first: number, u: number) => number;
   _geofem_alcanzada: (h: number) => number;
@@ -166,8 +167,15 @@ export class GeoFemWasm {
       const sig1 = Float64Array.from(mod.HEAPF64.subarray(pS >> 3, (pS >> 3) + ngp * 4)), epl1 = Float64Array.from(mod.HEAPF64.subarray(pP >> 3, (pP >> 3) + ngp * 4));
       const eps1 = Float64Array.from(mod.HEAPF64.subarray(pE >> 3, (pE >> 3) + ngp * 4)), u1 = Float64Array.from(mod.HEAPF64.subarray(pU1 >> 3, (pU1 >> 3) + ndof));
       for (const p of [pS, pP, pE, pU1]) mod._geofem_free(p);
+      let falla: StageResult["falla"];   // estado de FALLA (último peldaño convergido): solo si el .wasm lo exporta
+      if (mod._geofem_statefs) {
+        const a = mod._geofem_alloc(ngp * 4), b = mod._geofem_alloc(ngp * 4), c = mod._geofem_alloc(ngp * 4), d = mod._geofem_alloc(ngp);
+        const srf = mod._geofem_statefs(this.h, a, b, c, d);
+        if (srf > 0) falla = { srf, sig: Float64Array.from(mod.HEAPF64.subarray(a >> 3, (a >> 3) + ngp * 4)), epl: Float64Array.from(mod.HEAPF64.subarray(b >> 3, (b >> 3) + ngp * 4)), eps: Float64Array.from(mod.HEAPF64.subarray(c >> 3, (c >> 3) + ngp * 4)), plas: Float64Array.from(mod.HEAPF64.subarray(d >> 3, (d >> 3) + ngp)) };
+        for (const p of [a, b, c, d]) mod._geofem_free(p);
+      }
       this.log(`  ${st.name.padEnd(22)} >>> FS=${f4(fs)}  ${st.geo5 ? `(GEO5=${st.geo5.toFixed(2)})` : "(sin referencia GEO5)"}  [${sec.toFixed(1)} s]`);
-      const res: StageResult = { name: st.name, fs, geo5: st.geo5, u, uel, steps, prog: "", seconds: sec, u1, sig1, epl1, eps1, ngp };
+      const res: StageResult = { name: st.name, fs, geo5: st.geo5, u, uel, steps, prog: "", seconds: sec, u1, sig1, epl1, eps1, ngp, falla };
       results.push(res); onStage?.(res, si);
     }
     for (const p of [pF, pU, pUel, pSrf, pSU]) mod._geofem_free(p);

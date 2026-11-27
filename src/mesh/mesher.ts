@@ -344,7 +344,7 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
   const stages: GeoModel["stages"] = [];
   let acc: string[] = ["Fg"];
   // ---- actividad por etapa (Activity de GEO5): se hereda; `inactiva`/`activa` señalan la región por un punto ----
-  const staged = def.stages.some((st) => st.activa?.length || st.inactiva?.length || st.asigna?.length || st.srm);
+  const staged = !!def.inicial || def.stages.some((st) => st.activa?.length || st.inactiva?.length || st.asigna?.length || st.srm);
   const conMat = def.stages.some((st) => st.asigna?.length);   // cambio de material por etapa (GEO5): EMAT propio de cada etapa
   const regionEn = (p: Pt) => {
     for (let e = 0; e < ELE.length; e++) {
@@ -388,6 +388,7 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     ...(def.poros?.length ? { agua: { gwt: [], poros: def.poros.map((q) => ({ pts: q.pts as [number, number][], u: q.u })), gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : def.gwt?.length ? { agua: { gwt: def.gwt, gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : def.ru !== undefined ? { agua: { gwt: [], ru: def.ru, terreno: spanInterface(def.interfaces[0], def.margins!.xmin, def.margins!.xmax).map((q) => [q[0], q[1]] as [number, number]), gammaSat: def.soils.map((s) => s.gsat ?? s.gamma) } } : {}),
     ...(def.soils.some((s) => s.modelo === "mc") ? { MODEL: def.soils.map((s) => (s.modelo === "mc" ? 1 : 0)) } : {}),   // muro de hormigón: región elástica, la SRM no le reduce c ni φ
     ...(staged ? { staged: true, REGK } : {}),
+    ...(def.inicial && def.inicial !== "gravedad" ? { inicial: def.inicial, K0: def.soils.map((s) => s.k0 ?? NaN) } : {}),
   };
   // estadísticas
   let mn = 180, sumL = 0, nL = 0, ar = 0;

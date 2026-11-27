@@ -37,5 +37,11 @@ for (const [x, z] of [[33, 6], [33, 2], [33, -2]]) {
   console.log(`   (${x}, ${z}) prof ${prof} m: σz ${sz} kPa (γ·z ${a.toFixed(1)}, dif ${(100 * (sz / a - 1)).toFixed(1)} %) · σx ${sx} (K0·σz ${(K0 * a).toFixed(1)}, dif ${(100 * (sx / (K0 * a) - 1)).toFixed(1)} %) · E_d,pl ${ep} %`);
   ok(Math.abs(sz / a - 1) < 0.05, `σz en (${x},${z}) a < 5 % de γ·z`); if (prof >= 6) ok(Math.abs(sx / (K0 * a) - 1) < 0.10, `σx en (${x},${z}) a < 10 % de K0·γ·z`);
 }
+{ await set(0, "dx"); const r = await p.evaluate(() => window.__lastRange); ok(r.vmax - r.vmin > 1e-6, `gravedad: etapa 1 d_x con mapa (peso propio ${r.vmin.toFixed(2)} … ${r.vmax.toFixed(2)} mm)`); console.log(`   gravedad, etapa 1 d_x: ${r.vmin.toFixed(2)} … ${r.vmax.toFixed(2)} mm`); await p.screenshot({ path: `${out}/e1_dx_gravedad.png` }); }
+console.log("\nEstado inicial K0 (selector «Estado inicial»)");
+await p.$eval("#inicial", (e) => { e.value = "k0"; e.dispatchEvent(new Event("change")); }); await wait(800);
+await p.waitForFunction(() => document.getElementById("tipoSrm") && /^1\.\d{3}$/.test(document.getElementById("tipoSrm").textContent.trim()), { timeout: 300000 }); await wait(800);
+for (const f of ["dx", "sx", "sz"]) { await set(0, f); const r = await p.evaluate(() => window.__lastRange), t = await p.evaluate(() => document.getElementById("hgeo").value.includes("inicial k0")); const h = await hover(33, 2); console.log(`   K0 etapa 1 ${f}: ${r.vmin.toFixed(2)} … ${r.vmax.toFixed(2)} ${r.unit}${r.planoNota ? " · " + r.planoNota.slice(0, 50) : ""} · hover(33,2) ${h}`); ok(t, "el .hgeo lleva «inicial k0»"); ok(Number.isFinite(h), `K0 ${f}: hover`); await p.screenshot({ path: `${out}/k0_e1_${f}.png` }); }
+ok(/K0/.test(await p.$eval("#dstatus", (e) => e.textContent)), "aviso de K0 con superficie inclinada visible");
 ok(errs.length === 0, "errores de página: " + errs.join(" · "));
 await b.close(); console.log(bad ? `\n✗ ${bad} fallaron` : "\n✓ 48 combinaciones con mapa o explicación, hover en todas"); process.exit(bad ? 1 : 0);

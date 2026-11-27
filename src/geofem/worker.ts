@@ -12,7 +12,7 @@ export type WorkerOut =
   | { type: "dyndone"; result: DynOut }
   | { type: "log"; line: string }
   | { type: "engine"; engine: "wasm" | "ts" }
-  | { type: "stage"; index: number; result: { name: string; fs: number; alcanzada?: number; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; prog: string; seconds: number } }
+  | { type: "stage"; index: number; result: { name: string; fs: number; alcanzada?: number; uIni?: Float64Array; falla?: { srf: number; sig: Float64Array; epl: Float64Array; eps: Float64Array; plas: Float64Array }; desequilibrio?: { max: number; suma: number; nulo?: boolean }; geo5?: number; u: Float64Array; uel: Float64Array; steps: { srf: number; u: Float64Array }[]; prog: string; seconds: number } }
   | { type: "done"; seconds: number }
   | { type: "error"; message: string };
 
@@ -34,7 +34,7 @@ self.onmessage = async (ev: MessageEvent<WorkerIn>) => {
   try {
     const t0 = performance.now();
     // cambio de material por etapa y SRM dentro de un modelo por etapas: solo en el motor TS (el WASM no los tiene)
-    const soloTs = msg.model.stages.some((st) => st.emat || st.srm);
+    const soloTs = msg.model.stages.some((st) => st.emat || st.srm) || (!!msg.model.inicial && msg.model.inicial !== "gravedad");
     const want = soloTs ? "ts" : msg.engine ?? "wasm";
     // la malla, B, detJ·w y la banda no cambian con los sliders de φ/c/q/ancla: se reutilizan (γ y E sí rehacen)
     const key = want + "|" + JSON.stringify(msg.model.MAT.map((r) => [r[0], r[1], r[4]])) + "|" + msg.model.X.length + "|" + msg.model.ELE.length;
