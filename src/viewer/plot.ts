@@ -17,7 +17,8 @@ export type PlotOptions = {
   deformScale?: number;     // 0 = sin deformada
   u?: Float64Array; uel?: Float64Array;
   active?: ArrayLike<number>;   // construcción por etapas: 1/0 por elemento; los inactivos no se pintan (solo sus aristas)
-  emat?: ArrayLike<number>;     // material de cada elemento EN ESA ETAPA (`etapa … asigna=`: el muro nace de hormigón en su etapa)
+  emat?: ArrayLike<number>;
+  numeros?: "" | "nudos" | "elementos" | "ambos";   // numerar nudos (esquinas) y/o elementos (menú Malla); con muchos se omite     // material de cada elemento EN ESA ETAPA (`etapa … asigna=`: el muro nace de hormigón en su etapa)
 };
 
 type Edge = { a: number; b: number; count: number; mats: Set<number> };
@@ -171,9 +172,32 @@ export class SlopePlot {
     ctx.strokeStyle = "rgba(50,50,50,0.35)"; ctx.lineWidth = 0.5;
     // malla T6, interfaz, contorno
     const line = (a: number, b: number) => { const [p, q] = tf(X[a], Y[a]), [r, s] = tf(X[b], Y[b]); ctx.moveTo(p, q); ctx.lineTo(r, s); };
-    if (o.showMesh) { ctx.beginPath(); ctx.strokeStyle = this.dark ? "rgba(255,255,255,0.35)" : "rgba(60,60,60,0.45)"; ctx.lineWidth = 0.5 * k; for (const e of this.edges) line(e.a, e.b); ctx.stroke(); }
-    ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = 1.6 * k; ctx.setLineDash([6 * k, 4 * k]); for (const e of this.edges) if (e.mats.size === 2) line(e.a, e.b); ctx.stroke(); ctx.setLineDash([]);
-    ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = 1.4 * k; for (const e of this.edges) if (e.count === 1) line(e.a, e.b); ctx.stroke();
+    // CONSTRUCCIÓN POR ETAPAS: las aristas salen SOLO de los elementos activos (lo excavado queda vacío: sin malla ni color);
+    // el hueco se marca con su contorno a trazos finos y el rótulo «EXCAVADO»
+    let edges = this.edges;
+    if (o.active && Array.prototype.some.call(o.active, (v: number) => !v)) {
+      const mapa = new Map<string, Edge>(), ina = new Map<string, number[]>();
+      this.m.ELE.forEach((el, e) => { for (const [a, b] of [[el[0], el[1]], [el[1], el[2]], [el[2], el[0]]]) { const key = a < b ? a + "," + b : b + "," + a;
+        if (o.active![e]) { const ed = mapa.get(key); if (ed) { ed.count++; ed.mats.add(EMAT[e]); } else mapa.set(key, { a, b, count: 1, mats: new Set([EMAT[e]]) }); }
+        else { const q = ina.get(key); if (q) q[2]++; else ina.set(key, [a, b, 1]); } } });
+      edges = Array.from(mapa.values());
+      const fuera = [...ina.values()].filter((q) => q[2] === 1);
+      if (fuera.length) {
+        ctx.save(); ctx.beginPath(); ctx.strokeStyle = this.dark ? "rgba(255,255,255,0.45)" : "rgba(90,90,90,0.6)"; ctx.lineWidth = 1 * k; ctx.setLineDash([4 * k, 3 * k]);
+        for (const [a, b] of fuera) line(a, b); ctx.stroke(); ctx.setLineDash([]);
+        let sx = 0, sy = 0, n = 0; this.m.ELE.forEach((el, e) => { if (!o.active![e]) { sx += X[el[0]] + X[el[1]] + X[el[2]]; sy += Y[el[0]] + Y[el[1]] + Y[el[2]]; n += 3; } });
+        const [p, q] = tf(sx / n, sy / n); ctx.font = `${11 * k}px Segoe UI, Arial`; ctx.fillStyle = this.dark ? "#bbb" : "#777"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("EXCAVADO", p, q); ctx.restore();
+      }
+    }
+    if (o.showMesh) { ctx.beginPath(); ctx.strokeStyle = this.dark ? "rgba(255,255,255,0.35)" : "rgba(60,60,60,0.45)"; ctx.lineWidth = 0.5 * k; for (const e of edges) line(e.a, e.b); ctx.stroke(); }
+    ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = 1.6 * k; ctx.setLineDash([6 * k, 4 * k]); for (const e of edges) if (e.mats.size === 2) line(e.a, e.b); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.strokeStyle = FG; ctx.lineWidth = 1.4 * k; for (const e of edges) if (e.count === 1) line(e.a, e.b); ctx.stroke();
+    if (o.numeros && this.m.ELE.length <= 6000) {   // NUMERACIÓN (1-based, como GEO5): elementos en el centroide, nudos de esquina junto al punto
+      ctx.save(); ctx.font = `${9 * k}px Consolas, monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      if (o.numeros !== "nudos") { ctx.fillStyle = this.dark ? "#9fd0ff" : "#1f3fbf"; this.m.ELE.forEach((el, e) => { if (o.active && !o.active[e]) return; const [p, q] = tf((X[el[0]] + X[el[1]] + X[el[2]]) / 3, (Y[el[0]] + Y[el[1]] + Y[el[2]]) / 3); ctx.fillText(String(e + 1), p, q); }); }
+      if (o.numeros !== "elementos") { ctx.fillStyle = this.dark ? "#ffd27f" : "#a0300a"; const vis = new Set<number>(); for (const el of this.m.ELE) for (let c = 0; c < 3; c++) vis.add(el[c]); for (const i of vis) { const [p, q] = tf(X[i], Y[i]); ctx.fillText(String(i + 1), p + 6 * k, q - 5 * k); } }
+      ctx.restore();
+    }
     if (o.gwt && o.gwt.length > 1) {   // freático: azul a trazos con ▽ en el extremo derecho (como GEO5)
       ctx.beginPath(); ctx.strokeStyle = this.dark ? "#6ab0ff" : "#1f3fff"; ctx.lineWidth = 1.6 * k; ctx.setLineDash([7 * k, 4 * k]);
       o.gwt.forEach((p, i) => { const [a, b] = tf(p[0], p[1]); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
@@ -204,7 +228,7 @@ export class SlopePlot {
         const cnt = new Map<string, [number, number, number]>();
         this.m.ELE.forEach((el, e) => { if ((o.active && !o.active[e]) || !esMuro(EMAT[e])) return; for (const [p0, p1] of [[el[0], el[1]], [el[1], el[2]], [el[2], el[0]]]) { const k = p0 < p1 ? `${p0},${p1}` : `${p1},${p0}`; const c = cnt.get(k); if (c) c[2]++; else cnt.set(k, [p0, p1, 1]); } });
         for (const [p0, p1, c] of cnt.values()) if (c === 1) line(p0, p1);
-      } else for (const e of this.edges) { const M = [...e.mats]; if (M.some(esMuro) && (e.count === 1 || M.some((mm) => !esMuro(mm)))) line(e.a, e.b); }
+      } else for (const e of edges) { const M = [...e.mats]; if (M.some(esMuro) && (e.count === 1 || M.some((mm) => !esMuro(mm)))) line(e.a, e.b); }
       ctx.stroke();
     }
     // deformada (opcional): contorno desplazado
@@ -286,14 +310,16 @@ export class SlopePlot {
     ctx.strokeStyle = FG; ctx.lineWidth = 0.8 * k; ctx.strokeRect(bx, by, bw, bh);
     ctx.font = `${10 * k}px Segoe UI, Arial`; ctx.fillStyle = FG; ctx.textAlign = "left"; ctx.textBaseline = "middle";
     let lastY = -1e9;
+    // decimales según el paso de la escala (antes siempre 1: E_d,pl de 0–0.3 % salía «0.0 0.0 0.1 …»)
+    const paso = Math.abs(lv[nb] - lv[0]) / Math.max(nb, 1), dec = paso > 0 ? Math.min(4, Math.max(1, Math.ceil(-Math.log10(paso)) + 1)) : 1;
     for (let b = 0; b <= nb; b++) {
       const t = (lv[b] - lv[0]) / (lv[nb] - lv[0]); const y = by + t * bh;
       ctx.beginPath(); ctx.moveTo(bx + bw, y); ctx.lineTo(bx + bw + 3 * k, y); ctx.stroke();
       if (Math.abs(y - lastY) < 10 * k && b < nb) continue;                 // rótulos que se pisan: el extremo manda
       if (b === nb && Math.abs(y - lastY) < 10 * k) { ctx.fillStyle = BG; ctx.fillRect(bx + bw + 4 * k, lastY - 6 * k, 40 * k, 12 * k); ctx.fillStyle = FG; }
-      ctx.fillText(lv[b].toFixed(1), bx + bw + 5 * k, y); lastY = y;
+      ctx.fillText(lv[b].toFixed(dec), bx + bw + 5 * k, y); lastY = y;
     }
-    ctx.save(); ctx.translate(bx + bw + 46 * k, by + bh / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.font = `${11 * k}px Segoe UI, Arial`; ctx.fillText(`${FIELD_LABEL[o.field]} [${FIELD_UNIT[o.field]}]`, 0, 0); ctx.restore();
+    ctx.save(); ctx.translate(bx + bw + (34 + 6 * dec) * k, by + bh / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.font = `${11 * k}px Segoe UI, Arial`; ctx.fillText(`${FIELD_LABEL[o.field]} [${FIELD_UNIT[o.field]}]`, 0, 0); ctx.restore();
     return { lv, vmin, vmax };
   }
 }

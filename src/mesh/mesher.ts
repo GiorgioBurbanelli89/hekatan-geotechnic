@@ -104,7 +104,15 @@ export function meshSlope(def: SlopeDef, opts: { topeMs?: number; maxIter?: numb
     }
     return pointInPoly(x, y, poly) ? 0 : d;
   };
-  const hAt = (x: number, y: number) => { let s1 = h; for (const z of zonas) if (z.h < h) s1 = Math.min(s1, z.h + 0.5 * dPoly(x, y, z.poly)); return s1; };
+  // REFINAMIENTO LOCAL pedido por el usuario (`refina …`, menú Malla): rectángulo, punto (radio r) o línea; mismo criterio que el
+  // muro: h propio en la zona y vuelta al h global con pendiente 0.5 m/m. Sin `refina` la malla es la de siempre.
+  const dSeg = (x: number, y: number, a: Pt, b: Pt) => { const L2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2, t = L2 ? Math.max(0, Math.min(1, ((x - a[0]) * (b[0] - a[0]) + (y - a[1]) * (b[1] - a[1])) / L2)) : 0; return Math.hypot(x - a[0] - t * (b[0] - a[0]), y - a[1] - t * (b[1] - a[1])); };
+  const zref: { d: (x: number, y: number) => number; h: number }[] = (def.refinas ?? []).filter((z) => z.h > 0 && z.h < h).map((z) => {
+    if (z.tipo === "rect") { const [a, b] = z.pts, x0 = Math.min(a[0], b[0]), x1 = Math.max(a[0], b[0]), y0 = Math.min(a[1], b[1]), y1 = Math.max(a[1], b[1]); return { h: z.h, d: (x: number, y: number) => Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(y0 - y, 0, y - y1)) }; }
+    if (z.tipo === "punto") { const c = z.pts[0], r = z.r ?? 0; return { h: z.h, d: (x: number, y: number) => Math.max(0, Math.hypot(x - c[0], y - c[1]) - r) }; }
+    return { h: z.h, d: (x: number, y: number) => { let m = Infinity; for (let i = 0; i + 1 < z.pts.length; i++) m = Math.min(m, dSeg(x, y, z.pts[i], z.pts[i + 1])); return m; } };
+  });
+  const hAt = (x: number, y: number) => { let s1 = h; for (const z of zonas) if (z.h < h) s1 = Math.min(s1, z.h + 0.5 * dPoly(x, y, z.poly)); for (const z of zref) s1 = Math.min(s1, z.h + 0.5 * z.d(x, y)); return s1; };
   // región de GEO5 = nº de interfaces por encima del punto (el terreno cuenta): asignación por punto
   const regionOf = (x: number, y: number) => spans.reduce((n, sp) => n + (interfaceY(sp, x) > y + 1e-9 ? 1 : 0), 0);
   const regionSoil = new Map<number, number>();

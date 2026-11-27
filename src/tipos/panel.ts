@@ -2,7 +2,7 @@
 // se escribe el .hgeo del tipo y se abre por el camino de siempre (malla → SRM en el worker); aparte se calculan Bishop y
 // Fellenius (con freático y sobrecarga) y se ponen en una tabla junto al FS de elementos finitos. Mientras hay un tipo activo se
 // ocultan el editor .hgeo y los sliders generales (el botón «ver .hgeo» los devuelve). Elegir otro «Ejemplo» sale del tipo.
-import { PLANTILLAS, plantilla, paramsPorDefecto, hgeoPlantilla, betaDeN, fsInfinito } from "../model/plantillas";
+import { PLANTILLAS, plantilla, paramsPorDefecto, hgeoPlantilla, betaDeN, fsInfinito, muroExcavacion } from "../model/plantillas";
 import { parseHgeo } from "../model/dsl";
 import { criticalCircle, type LemOpts } from "../lem/slices";
 import { Pane } from "tweakpane";
@@ -131,7 +131,10 @@ function tabla() {
   const conQ = p.q > 0, inf = (p.c ?? 1) === 0 && !(p.hw > 0) && !conQ && actual === "corte" ? fsInfinito(p.phi, betaDeN(p.n)) : undefined;
   if (POR_ETAPAS.has(actual)) {   // construcción por etapas: el FS es el de la última etapa (SRM del estado final)
     const nSt = (hgeoPlantilla(actual, p).match(/^etapa /gm) ?? []).length, fin = fem.length === nSt ? fem[nSt - 1] : undefined;
-    r.innerHTML = `<table><tr><th>FS final (SRM, elementos finitos)</th><td id="tipoSrm">${fin === undefined ? "calculando…" : Number.isFinite(fin) ? f3(fin) : "< 1 ✖"}</td></tr></table>` +
+    const g = muroExcavacion(p), recorte = p.dexc > g.dexc + 1e-9;
+    const cotas = `<div id="tipoCotas" style="margin:2px 0 4px">corona de la pantalla z = 0 · fondo excavado z = ${(-g.dexc).toFixed(2)} · techo de la zapata z = ${g.zz.toFixed(2)} · base z = ${g.zb.toFixed(2)}${g.dp > 0.01 ? ` · dentellón hasta z = ${g.zd.toFixed(2)}` : ""} → pantalla vista ${g.dexc.toFixed(2)} m, tierra sobre la puntera ${(g.zz + g.dexc < 0 ? -(g.zz + g.dexc) : 0).toFixed(2)} m` +
+      (recorte ? `<br><span style="color:#e5a04f">⚠ la excavación pedida (${p.dexc} m) llegaba a la zapata: se limita a ${g.dexc.toFixed(2)} m (0.2 m de tierra sobre la puntera); baja la zapata con «altura de la pantalla»</span>` : "") + `</div>`;
+    r.innerHTML = cotas + `<table><tr><th>FS final (SRM, elementos finitos)</th><td id="tipoSrm">${fin === undefined ? "calculando…" : Number.isFinite(fin) ? f3(fin) : "< 1 ✖"}</td></tr></table>` +
       `<div style="opacity:.8">Etapas: talud natural → ${p.muro >= 0.5 ? "muro (la región pasa de suelo a hormigón) → " : ""}excavación (se desactiva) → FS por reducción de resistencia del estado final. Muro unido al suelo (adherencia perfecta: sin interfaz). Bishop/Fellenius no ven la excavación por etapas: no se calculan.</div>`;
     (window as unknown as { __tipo: unknown }).__tipo = { tipo: actual, p: { ...p }, srm: [...fem] };
     return;

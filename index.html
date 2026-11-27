@@ -204,6 +204,7 @@
       <div class="row">
         <div><label>Superficie</label><select id="surf" title="como GEO5: isosuperficie (relleno por bandas) · isolínea (solo líneas de nivel) · no visualizar"><option value="iso">isosuperficie</option><option value="line">isolínea</option><option value="none">(no visualizar)</option></select></div>
         <div><label>Malla</label><select id="meshmode" title="como GEO5: no visualizar · solo bordes (todas las aristas de la malla T6)"><option value="edges">solo bordes (malla T6)</option><option value="none">(no visualizar)</option></select></div>
+        <div><label>Numerar</label><select id="numeros" title="numeración de la malla (1-based, como GEO5)"><option value="">nada</option><option value="nudos">nudos</option><option value="elementos">elementos</option><option value="ambos">nudos y elementos</option></select></div>
       </div>
       <div class="row">
         <div><label>Deformada</label><select id="defmode" title="como GEO5: sin deformar · por magnitud (escala automática, aproximada: el factor exacto de GEO5 no está medido) · por coeficiente (el factor de la casilla)"><option value="none">sin deformar</option><option value="mag">por magnitud</option><option value="coef" selected>por coeficiente</option></select></div>
@@ -367,7 +368,7 @@
       </div>
     </section>
   </main>
-  <footer>Hekatan Engineers · Portoviejo, Ecuador · Todo lo que hay aquí está EXTRAÍDO del solver de GEO5 (FRGeoFEM) o MEDIDO en su course of analysis, nada es de libro. · <span id="ver" style="color:var(--oro)">v2026-11-27a</span></footer>
+  <footer><span id="pieTxt">Hekatan Engineers · Portoviejo, Ecuador · Todo lo que hay aquí está EXTRAÍDO del solver de GEO5 (FRGeoFEM) o MEDIDO en su course of analysis, nada es de libro.</span> · <span id="ver" style="color:var(--oro)">v2026-11-27b</span></footer>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

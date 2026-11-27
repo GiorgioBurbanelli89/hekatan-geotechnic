@@ -26,6 +26,8 @@
 //       del terreno el muro queda EMBEBIDO: por delante se EXCAVA hasta esa cota y la pantalla sostiene
 //       el terreno de arriba (muro a media ladera).
 //   malla 2.3                                tamaño de arista objetivo [m]
+//   refina [rect] x1,y1 x2,y2 h=0.3 · refina punto x,y h=0.3 [r=1] · refina linea x,y x,y … h=0.3
+//                                            malla más FINA en una zona (vuelve al tamaño global con pendiente 0.5 m/m)
 //   etapa NOMBRE [geo5=1.69] [q=35 en x1,y1 -> x2,y2] [F=72 en x,y ang=-17]
 //       cada etapa AÑADE sus cargas a las de la etapa anterior (peso propio siempre está)
 //   etapa NOMBRE kh=-0.336 kv=0 [borde=1]    sismo SEUDOESTÁTICO (GEO5 FEM): fuerza de volumen (kh·γ, −kv·γ) en la región
@@ -59,6 +61,8 @@ export type WallParam = {
   dentp?: number; dentb?: number;
 };
 export type Wall = { soil: string; pm: WallParam };
+/** zona de malla más fina: rectángulo (2 esquinas), punto (centro + radio r) o línea (polilínea); h = tamaño de elemento en la zona */
+export type Refina = { tipo: "rect" | "punto" | "linea"; pts: Pt[]; h: number; r?: number };
 export type Layer = { soil: string; side: "bajo" | "sobre"; poly: Pt[] };
 export type Surcharge = { q: number; a: Pt; b: Pt };
 export type Anchor = { F: number; p: Pt; ang: number };
@@ -81,6 +85,7 @@ export type SlopeDef = {
   ru?: number;                              // GEO5 «Water → Coefficient Ru» (`agua ru=0.3`): u = Ru·γ·h bajo el terreno, peso γsat
   poros?: { pts: Pt[]; u: number }[];       // GEO5 «Water → Pore pressure»: isolíneas (`agua poros 100 x,y x,y …`, una línea por interfaz)
   gwt?: Pt[];                               // GEO5 «Water → GWT»: línea freática (`agua gwt x,y x,y …`); γsat = `gsat=` del suelo (por defecto γ)
+  refinas?: Refina[];                       // refinamiento LOCAL de la malla (`refina …`, menú Malla)
   walls: Wall[];                            // GEO5 «Rigid body»: muros de hormigón (región elástica, la SRM no los reduce)
   comments: string[];
   param?: TaludParam;                       // terreno paramétrico CLÁSICO (sliders); si se dibuja a mano, se pierde
@@ -244,6 +249,13 @@ export function parseHgeo(text: string, opts: { draft?: boolean } = {}): SlopeDe
         const o = kv(toks.slice(2)), H = num(o.h ?? "4"), d = wallDims(H);
         def.walls.push({ soil: toks[1], pm: { x: num(o.x ?? o.xpie ?? "10"), H, ...(o.z ?? o.zpie ? { z: num((o.z ?? o.zpie)!) } : {}), fuste: num(o.fuste ?? String(d.fuste)), zapata: num(o.zapata ?? String(d.zapata)), talon: num(o.talon ?? o["talón"] ?? String(d.talon)), dedo: num(o.dedo ?? String(d.dedo)), emp: num(o.emp ?? String(d.emp)), ...(o.dentp && o.dentb ? { dentp: num(o.dentp), dentb: num(o.dentb) } : {}) } });
       } else if (cmd === "malla") def.h = num(toks[1]);
+      else if (cmd === "refina" || cmd === "refinar") {   // refina [rect] x1,y1 x2,y2 h=0.3 · refina punto x,y h=0.3 [r=1] · refina linea x,y x,y … h=0.3
+        const tipo = /^(punto|linea|línea|rect)$/i.test(toks[1] ?? "") ? toks[1].toLowerCase().replace("í", "i") : "rect";
+        const rest = toks.slice(tipo === "rect" && !/^rect$/i.test(toks[1]) ? 1 : 2), o = kv(rest), P = pts(rest.filter((t) => !t.includes("=")));
+        if (!(num(o.h ?? "0") > 0)) throw new Error("refina: falta h=… (tamaño de elemento en la zona)");
+        if ((tipo === "rect" && P.length !== 2) || (tipo === "punto" && P.length !== 1) || (tipo === "linea" && P.length < 2)) throw new Error(`refina ${tipo}: número de puntos incorrecto`);
+        (def.refinas ??= []).push({ tipo: tipo as Refina["tipo"], pts: P, h: num(o.h), ...(o.r ? { r: num(o.r) } : {}) });
+      }
       else if (cmd === "srm") def.srmGeo5 = /^geo5$/i.test(toks[1] ?? "") ? 115 : num(toks[1] ?? "0") || undefined;          // srm geo5 | srm <bits>
       else if (cmd === "etapa") {
         let i = 1; const nm: string[] = [];
@@ -326,6 +338,7 @@ export function serializeHgeo(def: SlopeDef): string {
   for (const a of def.assign) L.push(`asignar ${a.soil} en ${p(a.p)}`);
   for (const c of def.layers) L.push(`capa ${c.soil} ${c.side} ${c.poly.map(p).join(" ")}`);
   L.push(`malla ${r(def.h)}`);
+  for (const z of def.refinas ?? []) L.push(`refina ${z.tipo} ${z.pts.map(p).join(" ")} h=${r(z.h)}${z.r ? ` r=${r(z.r)}` : ""}`);
   if (def.srmGeo5) L.push(def.srmGeo5 === 115 ? "srm geo5" : `srm ${def.srmGeo5}`);
   for (const st of def.stages) {
     let s = `etapa ${st.name}`;

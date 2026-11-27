@@ -1,0 +1,71 @@
+// Interfaz con MENÚS y menú MALLA (26-nov-2026): node tests/check_menus.mjs [url] [outdir]
+// 1) cada función de antes sigue en el DOM y se llega desde un menú/carpeta  2) teclado: Alt+M abre Malla, flechas, Esc
+// 3) Malla: h global remalla (más fino = más elementos), zona rectángulo dibujada con 2 clics → `refina rect` y más elementos,
+//    numerar, ver/ocultar  4) Demo04 sigue dando 1.6935 / 1.4810 / 1.6935 (malla exacta de GEO5)  5) excavación: hueco vacío
+import { createRequire } from "node:module";
+import { mkdirSync } from "node:fs";
+const require = createRequire((process.env.USERPROFILE ?? "") + "/Documents/Hekatan Calc 1.0.0/hekatan-struct/package.json");
+const puppeteer = require("puppeteer");
+const base = process.argv[2] || "http://localhost:4719/", out = process.argv[3] || "tests/shots/ui"; mkdirSync(out, { recursive: true });
+const b = await puppeteer.launch({ headless: true, executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", args: ["--no-sandbox"] });
+const p = await b.newPage(); await p.setViewport({ width: 1600, height: 1000 });
+const errs = []; p.on("pageerror", (e) => errs.push(e.message)); p.on("console", (m) => { if (m.type() === "error") errs.push(m.text()); });
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+let bad = 0; const ok = (c, t) => { console.log((c ? "  ✓ " : "  ✗ ") + t); if (!c) bad++; };
+const listo = () => p.waitForFunction(() => /TOTAL |navegador:/.test(document.getElementById("log").textContent) && !document.getElementById("fs").textContent.includes("calculando"), { timeout: 300000 });
+await p.goto(base + "?v=" + Date.now(), { waitUntil: "networkidle0" }); await listo(); await wait(800);
+console.log("4) Demo04");
+const fs = await p.evaluate(() => window.__fem().map((r) => r?.fs?.toFixed(4)));
+ok(fs.join(" ") === "1.6935 1.4810 1.6935", `Demo04 FS ${fs.join(" / ")}`);
+console.log("1) funciones de antes");
+const IDS = ["fNuevo", "fAbrir", "fGuardar", "fDxf", "fImpDxf", "fImpG5", "model", "hgeo", "apply", "mats", "tipoTaludSel", "metodo", "modSuelo", "nstages", "gsliders", "sliders", "auto", "run", "fs", "dinwrap", "dRun", "stage", "field", "step", "defscale", "surf", "meshmode", "defmode", "numeros", "undo", "gAyuda", "grid", "snap", "osnap", "ortho", "dsoil", "dq", "dF", "dang", "dstage", "etabs", "plot", "draw", "cmdin", "hover", "log", "ver"];
+const faltan = await p.evaluate((ids) => ids.filter((i) => !document.getElementById(i)), IDS);
+ok(!faltan.length, `${IDS.length} controles de antes siguen en la página${faltan.length ? " (faltan " + faltan.join(",") + ")" : ""}`);
+const menus = await p.evaluate(() => window.__ui.menus);
+console.log("   menús:", menus.map((m) => `${m[0]}(${m[1].length})`).join(" · "));
+ok(menus.length === 8, "8 menús");
+ok(await p.$eval("#datos", (e) => e.classList.contains("cerrado")), "panel Datos cerrado por defecto");
+console.log("2) teclado");
+await p.keyboard.down("Alt"); await p.keyboard.press("m"); await p.keyboard.up("Alt"); await wait(200);
+ok(await p.evaluate(() => document.querySelector("#menubar .mw.open .mb")?.textContent === "Malla"), "Alt+M abre Malla");
+await p.keyboard.press("ArrowRight"); await wait(150);
+ok(await p.evaluate(() => document.querySelector("#menubar .mw.open .mb")?.textContent === "Calcular"), "→ pasa a Calcular");
+await p.keyboard.press("Escape"); await wait(150);
+ok(await p.evaluate(() => !document.querySelector("#menubar .mw.open")), "Esc cierra");
+await p.screenshot({ path: `${out}/menu_cerrado.png` });
+console.log("3) Malla (tipo corte)");
+await p.goto(base + "?tipo=corte&v=" + Date.now(), { waitUntil: "networkidle0" }); await listo(); await wait(800);
+await p.click('#menubar .mb[data-k="m"]'); await wait(150); await p.screenshot({ path: `${out}/menu_malla.png` });
+await p.evaluate(() => [...document.querySelectorAll("#menubar .mw.open .md button")][0].click()); await wait(400);
+ok(await p.$eval("#fMalla", (e) => e.open) && !(await p.$eval("#datos", (e) => e.classList.contains("cerrado"))), "Malla › Tamaño… abre la carpeta Malla del panel");
+const m0 = await p.evaluate(() => ({ ...window.__malla }));
+console.log(`   malla inicial: h ${m0.h}, ${m0.elements} T6, ${m0.nodes} nudos, ángulo mín ${m0.minAngle.toFixed(1)}, zonas ${m0.refinas.length}`);
+ok(m0.h === 1 && m0.refinas.length === 2, "corte: h = H/8 = 1 + 2 zonas (cara y pie)");
+await p.screenshot({ path: `${out}/panel_malla.png` });
+await p.$eval("#mHv", (e) => { e.value = "0.8"; e.dispatchEvent(new Event("change")); }); await wait(500); await listo(); await wait(500);
+const m1 = await p.evaluate(() => ({ ...window.__malla }));
+ok(m1.h === 0.8 && m1.elements > m0.elements, `h 0.8 → ${m1.elements} T6 (más que ${m0.elements})`);
+// zona rectángulo con dos clics bajo la corona
+const px = (x, z) => p.evaluate((x, z) => { const [a, c] = window.__geoMap.tf(x, z); const cv = document.getElementById("draw"); const r = cv.getBoundingClientRect(); return [r.left + a * r.width / cv.width, r.top + c * r.height / cv.height]; }, x, z);
+await p.$eval("#mZh", (e) => { e.value = "0.25"; }); await p.click("#mRect"); await wait(150);
+let [x1, y1] = await px(24, 7), [x2, y2] = await px(28, 3);
+await p.mouse.click(x1, y1); await wait(100); await p.mouse.click(x2, y2); await wait(600); await listo(); await wait(500);
+const m2 = await p.evaluate(() => ({ ...window.__malla })), txt = await p.$eval("#hgeo", (e) => e.value);
+ok(/refina rect 2[34][\d.]*,[67][\d.]* 2[78][\d.]*,[23][\d.]* h=0\.25/.test(txt) && m2.elements > m1.elements, `zona rectángulo dibujada → ${m2.elements} T6, ángulo mín ${m2.minAngle.toFixed(1)}°`);
+await p.$eval("#mNum", (e) => { e.value = "elementos"; e.dispatchEvent(new Event("change")); }); await wait(500);
+await p.screenshot({ path: `${out}/malla_zona_numerada.png` });
+await p.$eval("#mNum", (e) => { e.value = ""; e.dispatchEvent(new Event("change")); });
+const fsZ = await p.evaluate(() => window.__fem().map((r) => r?.fs?.toFixed(4)));
+console.log(`   FS: h 1 + cara/pie (inicial) → h 0.8 → + zona: ${fsZ.join(" ")}`);
+// quitar la zona
+await p.evaluate(() => document.querySelector('#mZonas button[data-i="2"]').click()); await wait(600); await listo();
+ok(!/refina rect/.test(await p.$eval("#hgeo", (e) => e.value)), "✕ quita la zona");
+console.log("5) excavación + muro");
+await p.goto(base + "?tipo=excavacion_muro&v=" + Date.now(), { waitUntil: "networkidle0" });
+await p.waitForFunction(() => document.getElementById("tipoSrm") && /^1\.\d{3}$/.test(document.getElementById("tipoSrm").textContent.trim()), { timeout: 300000 }); await wait(800);
+await p.$eval("#stage", (e) => { e.value = "2"; e.dispatchEvent(new Event("change")); }); await wait(400);
+await p.screenshot({ path: `${out}/excavacion_dx.png` });
+await p.evaluate(() => window.__ui.pestana("plas")); await wait(400); await p.screenshot({ path: `${out}/excavacion_plas.png` });
+await p.evaluate(() => window.__ui.pestana("tabla")); await wait(300); await p.screenshot({ path: `${out}/tabla.png` });
+ok(errs.length === 0, `sin errores de consola${errs.length ? ": " + errs.slice(0, 3).join(" · ") : ""}`);
+await b.close(); console.log(bad ? `\n✗ ${bad} fallaron` : "\n✓ todo bien"); process.exit(bad ? 1 : 0);

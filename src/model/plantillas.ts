@@ -90,7 +90,22 @@ export const betaDeN = (n: number) => (Math.atan(1 / Math.max(n, 1e-6)) * 180) /
 const r = (v: number) => String(Math.round(v * 1000) / 1000);
 const pts = (P: Pt[]) => P.map((p) => `${r(p[0])},${r(p[1])}`).join(" ");
 const suelo = (nom: string, phi: number, c: number, g: number, E = 20000) => `suelo ${nom} E=${E} nu=0.3 phi=${r(phi)} c=${r(c)} gamma=${r(g)} gsat=${r(g + 1.5)}`;
-const malla = (H: number) => `malla ${r(Math.min(Math.max(H / 6, 0.6), 2))}`;
+// 26-nov-2026 (Jorge: «disminuir el espacio de la malla»): H/8 (antes H/6) + refinamiento local en las caras del terreno
+// (0.6·h) y en los pies (0.4·h, radio 1 m), que añade `refinaTerreno`. La mitad pura (H/12) tardaba 14 s en Node (corte H 8).
+const malla = (H: number) => `malla ${r(Math.min(Math.max(H / 8, 0.8), 2))}`;   // tope inferior 0.8: el terraplén (H 6) con 0.75 + 2 caras tardaba > 10 s
+/** líneas `refina` sobre las caras inclinadas del terreno (primera `interfaz`) y en sus pies */
+function refinaTerreno(L: string[]): string[] {
+  const it = L.find((l) => l.startsWith("interfaz ")), mh = L.find((l) => l.startsWith("malla ")); if (!it || !mh) return [];
+  const T = it.slice(9).trim().split(/\s+/).map((q) => q.split(",").map(Number) as Pt), hh = Number(mh.slice(6)), out: string[] = [];
+  const pies = new Map<string, Pt>();
+  for (let i = 0; i + 1 < T.length; i++) {
+    const a = T[i], b = T[i + 1]; if (Math.abs(b[1] - a[1]) < 1e-9) continue;
+    out.push(`refina linea ${pts([a, b])} h=${r(0.6 * hh)}`);
+    const pie = a[1] < b[1] ? a : b; pies.set(`${pie[0]},${pie[1]}`, pie);
+  }
+  for (const q of pies.values()) out.push(`refina punto ${pts([q])} h=${r(0.4 * hh)} r=1`);
+  return out;
+}
 /** etapas: peso propio y, con q > 0, «+sobrecarga» en la corona sobre [x1, x2] */
 const etapas = (q: number, x1: number, x2: number, z: number) => ["etapa peso propio", ...(q > 0 ? [`etapa +sobrecarga q=${r(q)} en ${r(x1)},${r(z)} -> ${r(x2)},${r(z)}`] : [])];
 
@@ -147,7 +162,7 @@ export function hgeoPlantilla(id: string, dados: Record<string, number> = {}): s
     L1.push(`asignar RELLENO en ${r((xcL + xcR) / 2)},${r(H / 2)}`, `asignar FUNDACION en ${r(xmax / 2)},${r(-D / 2)}`);
     if (p.hw > 0) { const zw = Math.min(p.hw, H - 0.3); L1.push(`agua gwt ${pts([[0, 0], [xL, 0], [xL + zw * n, zw], [xR - zw * n, zw], [xR, 0], [xmax, 0]])}`); }
     const qa = xcL + Math.min(1, p.B / 4), qb = xcR - Math.min(1, p.B / 4);
-    L1.push(malla(H), ...etapas(p.q, qa, qb, H));
+    L1.push(`malla ${r(Math.min(Math.max(H / 6, 1), 2))}`, ...etapas(p.q, qa, qb, H));   // terraplén: dominio doble (dos caras): h = H/6 ≥ 1 + refinado de caras y pies (con 0.8 tardaba 17 s)
   } else if (id === "muro") {
     const Hm = p.Hm, Ht = Hm + H, xw = Math.max(Ht * 0.6, 5), xc = xw + Ht * n, xmax = xc + Math.max(2 * Ht, 10), fondo = -Math.max(0.6 * Ht, 4);
     L1.push(`margenes xmin=0 xmax=${r(xmax)} fondo=${r(fondo)}`, `interfaz ${pts([[0, 0], [xw, 0], [xc, Ht], [xmax, Ht]])}`);
@@ -160,6 +175,7 @@ export function hgeoPlantilla(id: string, dados: Record<string, number> = {}): s
     L1.push(suelo("SUELO", p.phi, p.c, p.gamma), `asignar SUELO en ${r(xc + 1)},${r(fondo / 2)}`);
     L1.push(...gwt(xpie, xc, 0, xmax, z0), malla(H), ...etapas(p.q, xc + 1, Math.min(xc + 7, xmax - 1), H));
   }
+  const iM = L1.findIndex((l) => l.startsWith("malla ")); if (iM >= 0) L1.splice(iM + 1, 0, ...refinaTerreno(L1));
   return L1.join("\n") + "\n";
 }
 /** FS del talud INFINITO (analítico, sin agua): FS = c/(γ z sinβ cosβ) + tanφ/tanβ; con c = 0, tanφ/tanβ */

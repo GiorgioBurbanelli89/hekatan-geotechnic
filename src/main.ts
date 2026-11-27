@@ -3,6 +3,8 @@
 // (márgenes + interfaces + asignación por punto, paradigma GEO5) con herramientas de dibujo sobre el
 // lienzo (draw.ts) que reescriben el texto y remallan. Cada etapa es independiente (arranca de cero con
 // su carga total, como GEO5): un slider recalcula solo la etapa visible.
+import { montarMenus } from "./ui/menus";
+import { PLANTILLAS } from "./model/plantillas";
 import type { GeoModel } from "./geofem/solver";
 import type { WorkerOut } from "./geofem/worker";
 import { SlopePlot } from "./viewer/plot";
@@ -520,6 +522,8 @@ function applyDef(d: SlopeDef, fromText: boolean, only?: number[]) {
     if (avisosVal.length) dStatus.textContent = avisosVal.join(" · ");
     m.MATNAMES = def.soils.map((s) => s.name);
     m.name = `Talud .hgeo`;
+    (window as unknown as { __malla: unknown }).__malla = { ...stats, h: def.h, refinas: def.refinas ?? [] };   // menú Malla (calidad, nº de elementos)
+    window.dispatchEvent(new CustomEvent("malla"));
     edMsg.textContent = `malla: ${stats.elements} T6 · ${stats.nodes} nudos · ángulo mín ${stats.minAngle.toFixed(1)}° · arista media ${stats.meanEdge.toFixed(2)} m · área ${stats.area.toFixed(1)} m² · ${((performance.now() - t0) / 1000).toFixed(2)} s`;
     edMsg.style.color = "";
     if (!fromText) edText.value = serializeHgeo(def);   // el dibujo escribe el texto
@@ -603,7 +607,7 @@ function redraw() {
   if (dinActivo()) { dibujarDinamico(); return; }   // resultados del dinámico sobre la gráfica (deslizador de tiempo)
   const si = visibleStage(), st = stages[si];
   if (!st) {   // aún sin resultado (remallado en curso): geometría + malla nueva ya, sin esperar al cálculo
-    plot.draw({ field: "dx", vals: new Float64Array(model.X.length), stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, isolineas: aguaIsolineas(), title: `${model.name || "Talud"} · calculando…`, deformScale: 0, u: new Float64Array(model.X.length * 2), uel: new Float64Array(model.X.length * 2) });
+    plot.draw({ field: "dx", vals: new Float64Array(model.X.length), stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, numeros: (document.getElementById("numeros") as HTMLSelectElement | null)?.value as "" | "nudos" | "elementos" | "ambos", gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, isolineas: aguaIsolineas(), title: `${model.name || "Talud"} · calculando…`, deformScale: 0, u: new Float64Array(model.X.length * 2), uel: new Float64Array(model.X.length * 2) });
     draw.setMap(plot.mapping()); return;
   }
   const kind = selField.value as FieldKind;
@@ -616,7 +620,7 @@ function redraw() {
   const tensSt = model.staged && !model.stages[si]?.srm;
   const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress && !tensSt ? " · estado de tensión SRF=1" : "");
   const rango = plot.draw({
-    field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, isolineas: aguaIsolineas(), surface: selSurf.value as "iso" | "line" | "none",
+    field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, numeros: (document.getElementById("numeros") as HTMLSelectElement | null)?.value as "" | "nudos" | "elementos" | "ambos", gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, isolineas: aguaIsolineas(), surface: selSurf.value as "iso" | "line" | "none",
     title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${tensSt ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}${st.fs < 1 ? "  (FS < 1: inestable)" : ""}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
     deformScale: factorDeformada(u, st.uel), u, uel: st.uel, active: model.stages[si]?.active, emat: model.stages[si]?.emat,
   });
@@ -833,6 +837,7 @@ const EJEMPLOS_HGEO: Record<string, string> = { manabi_etapas: MANABI_ETAPAS_HGE
 montarTipos({ abrir: (t) => { mostrarZapata(false); selModel.value = "hgeo"; edText.value = t; applyHgeo(); } });   // lista «Tipo de talud» (plantillas)
 montarZapata(() => { selModel.value = "models/demo04.json"; selModel.dispatchEvent(new Event("change")); });
 montarMuro(() => { selModel.value = "models/demo04.json"; selModel.dispatchEvent(new Event("change")); });
+montarMenus();   // barra de menús (Archivo · Geometría · Suelos · Etapas · Malla · Calcular · Resultados · Ayuda), panel «Datos» plegable y pestañas de resultados
 selModel.addEventListener("change", () => {
   // CIMENTACIONES: otro módulo dentro de la misma app (GEO5 Spread Footing); no toca el talud
   if (selModel.value === "zapata_guerra") { mostrarMuro(false); mostrarZapata(true); return; }
@@ -856,7 +861,7 @@ $("aguaAplicar").addEventListener("click", () => {
 });
 inpRu.addEventListener("change", () => { for (const st of stages) if (st) st.stale = true; if (chkAuto.checked) run([visibleStage()]); else redraw(); });
 chkAgua.addEventListener("change", () => { for (const st of stages) if (st) st.stale = true; if (chkAuto.checked) run([visibleStage()]); else redraw(); });
-for (const el of [selField, selStep, chkMesh, inpDef, selSurf, selMeshMode, selDefMode]) el.addEventListener("change", redraw);
+for (const el of [selField, selStep, chkMesh, inpDef, selSurf, selMeshMode, selDefMode, $<HTMLSelectElement>("numeros")]) el.addEventListener("change", redraw);
 inpDef.addEventListener("input", redraw);
 engancharMuro(() => actualizarMuro(def, visibleStage()));
 engancharDinamico({ modelo: () => base, def: () => def, plot: () => plot, canvas, redibujarEstatico: () => redraw() });
@@ -865,7 +870,7 @@ setTool("ver");
 // ?ejemplo=manabi_etapas (o cualquier valor de la lista «Ejemplo»): abre ese modelo directamente (enlace para compartir)
 {
   const ej = new URLSearchParams(location.search).get("ejemplo"), tp = new URLSearchParams(location.search).get("tipo");
-  if (tp && ["corte", "terraplen", "berma", "estratos", "muro", "ladera"].includes(tp)) elegirTipo(tp);   // ?tipo=berma: abre ese tipo de talud
+  if (tp && PLANTILLAS.some((t) => t.id === tp)) elegirTipo(tp);   // ?tipo=berma: abre ese tipo de talud
   else if (ej && Array.from(selModel.options).some((o) => o.value === ej)) { selModel.value = ej; selModel.dispatchEvent(new Event("change")); }
   else loadFixture(selModel.value);
 }
