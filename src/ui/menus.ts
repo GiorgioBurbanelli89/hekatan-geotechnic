@@ -60,6 +60,12 @@ export function montarMenus(): void {
   ];
   for (const [nom, k, items] of MENUS) nav.appendChild(menu(nom, k, items));
   header.after(nav);
+  // alto real de la barra de menús (el panel Datos del celular empieza debajo)
+  const mbH = () => document.documentElement.style.setProperty("--mbH", `${Math.ceil(nav.getBoundingClientRect().bottom)}px`);
+  mbH(); new ResizeObserver(mbH).observe(nav); window.addEventListener("resize", mbH); window.addEventListener("scroll", mbH, { passive: true });
+  // celular: el dedo sobre el modelo lee el valor (el toque no genera mousemove) — como geo_movil.js del APK
+  const plotCv = $("plot"), stk = centro.querySelector(".stack");
+  if (plotCv && stk) { const mueve = (ev: Event) => { const t = (ev as TouchEvent).touches?.[0]; if (t) plotCv.dispatchEvent(new MouseEvent("mousemove", { clientX: t.clientX, clientY: t.clientY, bubbles: true })); }; stk.addEventListener("touchstart", mueve, { passive: true }); stk.addEventListener("touchmove", mueve, { passive: true }); }
   // ---- pie: el texto largo va a Ayuda › Acerca de; queda la versión ----
   const pie = $("pieTxt"); if (pie) pie.hidden = true;
   // ---- pestañas de resultados sobre el modelo ----
@@ -71,6 +77,13 @@ export function montarMenus(): void {
   const stack = centro.querySelector(".stack")!; const hover = $("hover")!;
   stack.after(hover); hover.after(bajo); bajo.append($("fs")!, $("log")!);
   pestana("desp", false);
+  // el campo también se elige desde la carpeta Vista (o por código): la pestaña activa lo sigue
+  $<HTMLSelectElement>("field")!.addEventListener("change", (e) => {
+    const v = (e.target as HTMLSelectElement).value, g = Object.keys(GRUPOS).find((k) => GRUPOS[k].some(([f]) => f === v));
+    const act = document.querySelector<HTMLButtonElement>("#rtabs button.on")?.dataset.p;
+    if (g && g !== act && (act === undefined || GRUPOS[act])) pestana(g, false);
+    else if (g) $("rsub")!.querySelectorAll<HTMLButtonElement>("button[data-f]").forEach((b) => b.classList.toggle("on", b.dataset.f === v));
+  });
   // ---- teclado ----
   document.addEventListener("keydown", (e) => {
     if (e.key === "F10") { e.preventDefault(); (nav.querySelector(".mb") as HTMLElement)?.focus(); return; }
@@ -94,6 +107,7 @@ function alerta(tit: string, txt: string) {
 }
 function alternarDatos(abrir?: boolean) {
   const a = $("datos")!, ab = abrir ?? a.classList.contains("cerrado");
+  if (ab) $("menubar")?.classList.remove("abierta");   // celular: el menú hamburguesa no queda encima del panel
   a.classList.toggle("cerrado", !ab); document.body.classList.toggle("conDatos", ab);
   $("datosBtn")?.classList.toggle("on", ab);
 }
@@ -300,11 +314,23 @@ function estilos() {
   footer { padding: 4px 14px !important; font-size: 11px; color: var(--mut); }
   dialog#dlgInfo { background: #1f1f1f; color: var(--txt); border: 1px solid #444; border-radius: 8px; max-width: 560px; white-space: pre-wrap; }
   dialog#dlgInfo button { width: auto; padding: 4px 12px; }
-  @media (max-width: 760px) {
+  /* CELULAR (corrección llevada del APK, geo_movil.css): sin scroll horizontal a 412×915 ni 915×412; el panel Datos fijo BAJO la barra de
+     menús, alto = pantalla − menú, con scroll propio (antes 987 px dentro del grid y tapado por el menú); el lienzo sin min-width de 560 px */
+  html, body { max-width: 100%; overflow-x: hidden; }
+  main > *, .row > *, .panel { min-width: 0; } img, canvas, svg, table, textarea, pre { max-width: 100%; }
+  @media (max-width: 900px) {
     #menubar { flex-wrap: wrap; } #menubar .hamb { display: block; } #menubar .mw { display: none; width: 100%; }
-    #menubar.abierta .mw { display: block; } #menubar .md { position: static; box-shadow: none; }
-    body.conDatos main { grid-template-columns: 1fr !important; } #datos { position: fixed; inset: 40px 0 0 0; z-index: 40; max-height: none; }
-    .stack { min-width: 0 !important; max-width: 100% !important; } header .sub { display: none; }
-  }`;
+    #menubar.abierta .mw { display: block; } #menubar .md { position: static; box-shadow: none; max-width: calc(100vw - 16px); max-height: calc(100dvh - 100px); overflow-y: auto; }
+    main { grid-template-columns: minmax(0, 1fr) !important; padding: 8px !important; gap: 8px; }
+    body.conDatos main { grid-template-columns: minmax(0, 1fr) !important; }
+    #datos { position: fixed !important; top: var(--mbH, 44px) !important; left: 0; right: 0; bottom: 0; height: auto; max-height: calc(100dvh - var(--mbH, 44px)) !important;
+      align-self: stretch !important; z-index: 45; overflow-y: auto; overscroll-behavior: contain; border-radius: 0 !important; padding-bottom: max(10px, env(safe-area-inset-bottom)) !important; }
+    .stack { min-width: 0 !important; max-width: 100% !important; width: 100%; } header .sub { display: none; }
+    .tools { gap: 3px; } .tools .il { flex-wrap: wrap; max-width: 100%; }
+    #etabs { overflow-x: auto; flex-wrap: nowrap !important; } #etabs button { flex: 0 0 auto !important; }
+    dialog { max-width: calc(100vw - 16px) !important; max-height: calc(100dvh - 16px); overflow: auto; }
+    .tp-rotv, .tp-dfwv { max-width: 100% !important; } #log { overflow-x: auto; }
+  }
+  #draw, .stack canvas { touch-action: pan-y; }`;;
   document.head.appendChild(s);
 }

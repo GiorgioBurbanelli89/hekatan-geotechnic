@@ -18,7 +18,10 @@ export type PlotOptions = {
   u?: Float64Array; uel?: Float64Array;
   active?: ArrayLike<number>;   // construcción por etapas: 1/0 por elemento; los inactivos no se pintan (solo sus aristas)
   emat?: ArrayLike<number>;
-  numeros?: "" | "nudos" | "elementos" | "ambos";   // numerar nudos (esquinas) y/o elementos (menú Malla); con muchos se omite     // material de cada elemento EN ESA ETAPA (`etapa … asigna=`: el muro nace de hormigón en su etapa)
+  numeros?: "" | "nudos" | "elementos" | "ambos";
+  /** campo CALCULADO pero uniforme (p. ej. desplazamientos de la fase inicial, que GEO5 pone a 0): en vez de dejar solo la malla,
+   *  se pinta el valor en toda la región activa, la leyenda lleva ese único valor y este rótulo explica por qué */
+  planoNota?: string;   // numerar nudos (esquinas) y/o elementos (menú Malla); con muchos se omite     // material de cada elemento EN ESA ETAPA (`etapa … asigna=`: el muro nace de hormigón en su etapa)
 };
 
 type Edge = { a: number; b: number; count: number; mats: Set<number> };
@@ -124,6 +127,11 @@ export class SlopePlot {
     // relleno por bandas (rejilla → píxeles)
     const [ax0, az0] = tf(grid.xmin, grid.zmax), [ax1, az1] = tf(grid.xmax, grid.zmin);
     const iw = Math.max(1, Math.round(ax1 - ax0)), ih = Math.max(1, Math.round(az1 - az0));
+    if (flat && o.planoNota) {   // campo uniforme calculado: toda la región activa del color del único valor
+      const c0 = geo5Cmap(9)[0]; ctx.beginPath();
+      this.m.ELE.forEach((el, e) => { if ((o.active && !o.active[e]) || esRig(e)) return; const [a0, b0] = tf(X[el[0]], Y[el[0]]); ctx.moveTo(a0, b0); for (let q = 1; q < 3; q++) { const [a1, b1] = tf(X[el[q]], Y[el[q]]); ctx.lineTo(a1, b1); } ctx.closePath(); });
+      ctx.fillStyle = ctx.strokeStyle = `rgb(${c0[0]},${c0[1]},${c0[2]})`; ctx.lineWidth = 0.6 * k; ctx.fill(); ctx.stroke();
+    }
     if (!flat) {
       // relleno por píxel con interpolación BILINEAL de la rejilla (como el contourf: bandas lisas, no
       // escalones de celda); una celda con NaN parcial se interpola con las esquinas válidas.
@@ -300,6 +308,16 @@ export class SlopePlot {
     ctx.save(); ctx.translate(14 * k, y0 + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = "top"; ctx.fillText("z [m]", 0, 0); ctx.restore();
     ctx.font = `bold ${13 * k}px Segoe UI, Arial`; ctx.textBaseline = "bottom"; ctx.fillText(o.title, x0 + pw / 2, mT - 8 * k);
     // barra de color: MÍNIMO ARRIBA y máximo abajo, como la leyenda de la GUI de GEO5 (verificado 8-sep-2026 contra su captura)
+    if (flat && o.planoNota) {   // leyenda de UN valor + rótulo (campo uniforme calculado, no «sin datos»)
+      const bx = x0 + pw + 22 * k, bw = 18 * k, bh = 40 * k, by = y0 + ph / 2 - bh / 2, c0 = geo5Cmap(9)[0];
+      ctx.fillStyle = `rgb(${c0[0]},${c0[1]},${c0[2]})`; ctx.fillRect(bx, by, bw, bh); ctx.strokeStyle = FG; ctx.lineWidth = 0.8 * k; ctx.strokeRect(bx, by, bw, bh);
+      ctx.font = `${10 * k}px Segoe UI, Arial`; ctx.fillStyle = FG; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText((Number.isFinite(vmin) ? vmin : 0).toFixed(2), bx + bw + 5 * k, by + bh / 2);
+      ctx.save(); ctx.translate(bx + bw + 46 * k, y0 + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.font = `${11 * k}px Segoe UI, Arial`; ctx.fillText(`${FIELD_LABEL[o.field]} [${FIELD_UNIT[o.field]}]`, 0, 0); ctx.restore();
+      ctx.font = `${12 * k}px Segoe UI, Arial`; const lines = o.planoNota.split("\n"), wb = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16 * k, hb = lines.length * 16 * k + 8 * k;
+      const cx = x0 + pw / 2, cy = y0 + 18 * k + hb / 2;
+      ctx.fillStyle = this.dark ? "rgba(20,17,10,0.9)" : "rgba(255,255,255,0.92)"; ctx.fillRect(cx - wb / 2, cy - hb / 2, wb, hb); ctx.strokeRect(cx - wb / 2, cy - hb / 2, wb, hb);
+      ctx.fillStyle = FG; ctx.textAlign = "center"; lines.forEach((l, i) => ctx.fillText(l, cx, cy - hb / 2 + (12 + i * 16) * k));
+    }
     if (flat) return { lv, vmin, vmax };
     const bx = x0 + pw + 22 * k, by = y0, bh = ph, bw = 18 * k, nb = lv.length - 1;
     for (let b = 0; b < nb; b++) {

@@ -618,15 +618,21 @@ function redraw() {
   const vals = analitico ? new Float64Array(model.X.length)   // método analítico: talud sin color map, solo el círculo de falla
     : stress ? stressField(kind, model.ELE, model.X.length, st.ngp!, st.sig1!, st.eps1!, st.epl1!) : nodalField(u, st.uel, model.X.length, kind);
   const tensSt = model.staged && !model.stages[si]?.srm;
+  // campo calculado pero UNIFORME (p. ej. los desplazamientos de la fase inicial, que GEO5 reinicia a 0): se pinta y se explica
+  let vmn = Infinity, vmx = -Infinity; for (const v of vals) { if (v < vmn) vmn = v; if (v > vmx) vmx = v; }
+  const desp = kind === "dx" || kind === "dz" || kind === "d";
+  const planoNota = analitico || !(vmx - vmn <= 1e-9) ? undefined
+    : tensSt && si === 0 && desp ? "fase inicial (estado geostático por peso propio): desplazamientos = 0 mm en toda la malla\nGEO5 los reinicia a 0 para las etapas siguientes · los esfuerzos σ sí están: pestaña Esfuerzos"
+    : `${FIELD_LABEL[kind]} = ${(Number.isFinite(vmn) ? vmn : 0).toFixed(2)} ${FIELD_UNIT[kind]} en toda la malla${kind === "u" ? " (sin agua)" : kind === "Edpl" ? " (ningún punto plástico en esta etapa)" : ""}`;
   const lab = `${FIELD_LABEL[kind]} [${FIELD_UNIT[kind]}]` + (stress && !tensSt ? " · estado de tensión SRF=1" : "");
   const rango = plot.draw({
     field: kind, vals, stage: si, Fst: stageLoads(si), showMesh: chkMesh.checked, numeros: (document.getElementById("numeros") as HTMLSelectElement | null)?.value as "" | "nudos" | "elementos" | "ambos", gwt: model.agua && chkAgua.checked ? model.agua.gwt : undefined, isolineas: aguaIsolineas(), surface: selSurf.value as "iso" | "line" | "none",
     title: `${model.name || "Talud"} · ${st.name} - ${lab}  ${tensSt ? `construcción por etapas · etapa ${si + 1} de ${stages.length} · ${(st.alcanzada ?? 1) < 1 ? `NO CONVERGE: carga alcanzada ${(100 * (st.alcanzada ?? 0)).toFixed(1)} %` : "equilibrio"}` : st.steps.length ? `SRF=${srf.toFixed(4)}  FS=${st.fs.toFixed(4)}${st.fs < 1 ? "  (FS < 1: inestable)" : ""}` : "FALLA con los parámetros reales (FS < 1)"}` + (st.geo5 ? `  (GEO5 ${st.geo5.toFixed(2)})` : "") + (st.stale ? "  ⟳ desactualizada" : ""),
-    deformScale: factorDeformada(u, st.uel), u, uel: st.uel, active: model.stages[si]?.active, emat: model.stages[si]?.emat,
+    deformScale: factorDeformada(u, st.uel), u, uel: st.uel, active: model.stages[si]?.active, emat: model.stages[si]?.emat, planoNota,
   });
   draw.setMap(plot.mapping());
   (window as unknown as { __geoMap: unknown }).__geoMap = plot.mapping();   // para el arnés puppeteer (clics en coordenadas del mundo)
-  (window as unknown as { __lastRange: unknown }).__lastRange = { ...rango, field: kind, stage: si, unit: FIELD_UNIT[kind] };   // barra de color (para comprobar campo a campo y etapa a etapa)
+  (window as unknown as { __lastRange: unknown }).__lastRange = { ...rango, field: kind, stage: si, unit: FIELD_UNIT[kind], planoNota: planoNota ?? null };   // barra de color (para comprobar campo a campo y etapa a etapa)
 }
 
 function fillStepSelect() {
